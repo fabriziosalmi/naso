@@ -313,6 +313,63 @@ export default function App() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [editProfileEmailState, setEditProfileEmailState] = useState('f.salmi@naso-engine.io');
 
+  // Graph state for Neural Topology
+  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+
+  const fetchGraphData = () => {
+    // Build force-graph data from identities + leaks already in store
+    const nodes = [];
+    const links = [];
+
+    identities.forEach(id => {
+      nodes.push({
+        id: `identity-${id.id}`,
+        label: id.identifier,
+        type: 'identity',
+        isProtected: id.is_protected,
+        risk: id.risk_score || 0,
+      });
+    });
+
+    leaks.forEach(leak => {
+      nodes.push({
+        id: `leak-${leak.id}`,
+        label: leak.source,
+        type: 'leak',
+        risk: leak.severity_score || 0,
+      });
+      // Link leaks to identities by best-effort match
+      const linkedId = identities.find(id =>
+        leak.source?.toLowerCase().includes(id.identifier?.toLowerCase().split('@')[0])
+      );
+      if (linkedId) {
+        links.push({
+          source: `identity-${linkedId.id}`,
+          target: `leak-${leak.id}`,
+        });
+      } else if (nodes.length > 1) {
+        // Connect to first identity as fallback
+        links.push({
+          source: nodes[0].id,
+          target: `leak-${leak.id}`,
+        });
+      }
+    });
+
+    // If no real data, generate demo nodes
+    if (nodes.length === 0) {
+      const demoIds = ['j.doe@corp.com', 'admin@target.io', 'root@infra.net'];
+      const demoLeaks = ['github:dump', 'telegram:breach', 'darkweb:paste', 'pastebin:cred'];
+      demoIds.forEach((label, i) => nodes.push({ id: `d-id-${i}`, label, type: 'identity', risk: 40 + i * 20 }));
+      demoLeaks.forEach((label, i) => {
+        nodes.push({ id: `d-lk-${i}`, label, type: 'leak', risk: 50 + i * 10 });
+        links.push({ source: `d-id-${i % demoIds.length}`, target: `d-lk-${i}` });
+      });
+    }
+
+    setGraphData({ nodes, links });
+  };
+
   // Mock terminal logs effect
   useEffect(() => {
     const events = [
@@ -342,15 +399,26 @@ export default function App() {
     fetchSystemStatus();
     fetchIdentities();
     if (activeView === 'audit') fetchAuditLogs();
+    if (activeView === 'topology') fetchGraphData();
     
     const interval = setInterval(() => {
       fetchLeaks();
       fetchSystemStatus();
       if (activeView === 'identities') fetchIdentities();
       if (activeView === 'audit') fetchAuditLogs();
+      if (activeView === 'topology') fetchGraphData();
     }, 30000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchLeaks, fetchSystemStatus, fetchIdentities, fetchAuditLogs, activeView]);
+
+  // Re-build graph when identities or leaks change while on topology view
+  useEffect(() => {
+    if (activeView === 'topology') {
+      fetchGraphData();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identities, leaks, activeView]);
 
   const severityData = useMemo(() => [
     { name: 'Critical', value: leaks.filter(l => l.severity_score >= 80).length, color: '#ef4444' },
