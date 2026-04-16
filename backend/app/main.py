@@ -6,7 +6,7 @@ import logging
 from shared.database import engine
 from shared.config import settings
 
-from .api.endpoints import auth, tenants, keywords, leaks, identities, yara, system, users
+from .api.endpoints import auth, tenants, keywords, leaks, identities, yara, system, users, ai
 from shared.utils.backend_tracing import setup_tracing
 from shared.core.exceptions import NasoBaseException, AuthenticationError, AuthorizationError, ResourceNotFoundError
 
@@ -45,3 +45,4 @@ app.include_router(identities.router, prefix="/identities", tags=["identities"])
 app.include_router(yara.router, prefix="/yara", tags=["yara"])
 app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(ai.router, prefix="/ai", tags=["ai"])

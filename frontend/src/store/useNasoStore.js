@@ -14,6 +14,198 @@ const useNasoStore = create((set, get) => ({
   isLoading: false,
   error: null,
 
+  // ── AI Co-Analyst state ──────────────────────────────────────────
+  chatHistory: [],          // { role, content, toolCalls?, toolResults?, id }
+  investigations: [],       // list of InvestigationPlan objects
+  activeInvestigationId: null,
+  isAiStreaming: false,
+  aiStatus: null,           // null | 'online' | 'offline'
+  evidencePanel: [],        // tool results shown in right panel
+
+  // Check if local AI is reachable
+  checkAiHealth: async () => {
+    try {
+      const { token } = get();
+      const res = await axios.get('/ai/health', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ aiStatus: res.data.status });
+      return res.data;
+    } catch {
+      set({ aiStatus: 'offline' });
+      return { status: 'offline' };
+    }
+  },
+
+  // Stream a message to the AI Co-Analyst
+  sendAiMessage: async (content) => {
+    const { token, chatHistory, activeInvestigationId } = get();
+    if (!token || !content.trim()) return;
+
+    const userMsg = { id: Date.now().toString(), role: 'user', content };
+    const history = [...chatHistory, userMsg];
+    set({ chatHistory: history, isAiStreaming: true, error: null });
+
+    const assistantMsgId = (Date.now() + 1).toString();
+    const assistantMsg = { id: assistantMsgId, role: 'assistant', content: '', toolCalls: [], toolResults: [] };
+    set(state => ({ chatHistory: [...state.chatHistory, assistantMsg] }));
+
+    try {
+      const response = await fetch('/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          messages: history.map(m => ({ role: m.role, content: m.content })),
+          investigation_id: activeInvestigationId,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') break;
+
+          try {
+            const event = JSON.parse(raw);
+
+            if (event.type === 'text') {
+              set(state => {
+                const msgs = [...state.chatHistory];
+                const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                if (idx !== -1) msgs[idx] = { ...msgs[idx], content: msgs[idx].content + event.content };
+                return { chatHistory: msgs };
+              });
+            } else if (event.type === 'tool_call') {
+              set(state => {
+                const msgs = [...state.chatHistory];
+                const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                if (idx !== -1) {
+                  msgs[idx] = { ...msgs[idx], toolCalls: [...(msgs[idx].toolCalls || []), event] };
+                }
+                return { chatHistory: msgs };
+              });
+            } else if (event.type === 'tool_result') {
+              set(state => {
+                const msgs = [...state.chatHistory];
+                const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                if (idx !== -1) {
+                  msgs[idx] = { ...msgs[idx], toolResults: [...(msgs[idx].toolResults || []), event] };
+                }
+                return {
+                  chatHistory: msgs,
+                  evidencePanel: [event, ...state.evidencePanel].slice(0, 20),
+                };
+              });
+              // Refresh investigations if a task was created
+              if (event.name === 'create_task') get().fetchInvestigations();
+            } else if (event.type === 'error') {
+              set(state => {
+                const msgs = [...state.chatHistory];
+                const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                if (idx !== -1) msgs[idx] = { ...msgs[idx], content: `⚠️ ${event.message}`, isError: true };
+                return { chatHistory: msgs };
+              });
+            }
+          } catch { /* Skip malformed SSE lines */ }
+        }
+      }
+    } catch (err) {
+      set(state => {
+        const msgs = [...state.chatHistory];
+        const idx = msgs.findIndex(m => m.id === assistantMsgId);
+        if (idx !== -1) msgs[idx] = { ...msgs[idx], content: `⚠️ Connection error: ${err.message}`, isError: true };
+        return { chatHistory: msgs };
+      });
+    } finally {
+      set({ isAiStreaming: false });
+    }
+  },
+
+  clearChatHistory: () => set({ chatHistory: [], evidencePanel: [] }),
+
+  // Investigation Plans
+  fetchInvestigations: async () => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.get('/ai/plans', { headers: { Authorization: `Bearer ${token}` } });
+      set({ investigations: res.data });
+    } catch { /* silent */ }
+  },
+
+  createInvestigation: async (title, description) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.post('/ai/plans', { title, description }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      set(state => ({ investigations: [res.data, ...state.investigations], activeInvestigationId: res.data.id }));
+      return res.data;
+    } catch (err) {
+      set({ error: 'Failed to create investigation plan' });
+    }
+  },
+
+  updateInvestigation: async (planId, updates) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      await axios.patch(`/ai/plans/${planId}`, updates, { headers: { Authorization: `Bearer ${token}` } });
+      get().fetchInvestigations();
+    } catch { /* silent */ }
+  },
+
+  deleteInvestigation: async (planId) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      await axios.delete(`/ai/plans/${planId}`, { headers: { Authorization: `Bearer ${token}` } });
+      set(state => ({
+        investigations: state.investigations.filter(p => p.id !== planId),
+        activeInvestigationId: state.activeInvestigationId === planId ? null : state.activeInvestigationId,
+      }));
+    } catch { /* silent */ }
+  },
+
+  addTaskToInvestigation: async (planId, content) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      await axios.post(`/ai/plans/${planId}/tasks`, { content }, { headers: { Authorization: `Bearer ${token}` } });
+      get().fetchInvestigations();
+    } catch { /* silent */ }
+  },
+
+  updateTask: async (planId, taskId, updates) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      await axios.patch(`/ai/plans/${planId}/tasks/${taskId}`, updates, { headers: { Authorization: `Bearer ${token}` } });
+      get().fetchInvestigations();
+    } catch { /* silent */ }
+  },
+
+  setActiveInvestigation: (id) => set({ activeInvestigationId: id }),
+  clearEvidencePanel: () => set({ evidencePanel: [] }),
+
   fetchSystemStatus: async () => {
     try {
       const response = await axios.get('/system/status');

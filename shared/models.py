@@ -115,6 +115,7 @@ class AuditLog(Base):
     ip_address = Column(String)
 
 
+
 class YaraRule(Base):
     __tablename__ = "yara_rules"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -123,3 +124,34 @@ class YaraRule(Base):
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=True) # Null = Global rule
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)
+
+
+class InvestigationPlan(Base):
+    """AI Co-Analyst: collaborative investigation plan between user and LLM."""
+    __tablename__ = "investigation_plans"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    status = Column(String, default="active", index=True)  # active, completed, archived
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    tasks = relationship("InvestigationTask", back_populates="plan", cascade="all, delete-orphan", order_by="InvestigationTask.created_at")
+
+
+class InvestigationTask(Base):
+    """A single task within an investigation plan, optionally created by the AI."""
+    __tablename__ = "investigation_tasks"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    plan_id = Column(String, ForeignKey("investigation_plans.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    status = Column(String, default="pending")  # pending, in_progress, completed, failed
+    tool_used = Column(String)         # e.g. "search_identities"
+    tool_result = Column(JSON)         # raw result from tool execution
+    created_by = Column(String, default="user")  # "user" | "ai"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    plan = relationship("InvestigationPlan", back_populates="tasks")
+

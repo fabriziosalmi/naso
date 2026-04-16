@@ -49,7 +49,9 @@ import {
   Crosshair,
   ShieldAlert,
   Code2,
-  Radar
+  Radar,
+  Brain,
+  BookOpen
 } from 'lucide-react';
 import {
   PieChart,
@@ -89,6 +91,8 @@ import {
 } from "@/components/ui/sheet";
 import axios from 'axios';
 import NetworkGraphPro from './components/NetworkGraph';
+import AiAssistant from './components/AiAssistant';
+import DocsView from './components/DocsView';
 
 // --- Tactical Components ---
 
@@ -505,6 +509,26 @@ export default function App() {
           >
             <ScrollText size={16} strokeWidth={activeView === 'audit' ? 2 : 1.5} /> <span>Audit Logs</span>
           </Button>
+
+          <div className="pt-2 pb-1">
+            <div className="h-[1px] bg-white/[0.05] mx-1" />
+            <p className="px-3 pt-3 pb-1 text-[11px] font-medium text-zinc-500">Intelligence</p>
+          </div>
+
+          <Button 
+            variant="ghost" 
+            onClick={() => { setActiveView('ai-analyst'); }}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'ai-analyst' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
+          >
+            <Brain size={16} strokeWidth={activeView === 'ai-analyst' ? 2 : 1.5} /> <span>AI Co-Analyst</span>
+          </Button>
+          <Button 
+            variant="ghost" 
+            onClick={() => setActiveView('docs')}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'docs' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
+          >
+            <BookOpen size={16} strokeWidth={activeView === 'docs' ? 2 : 1.5} /> <span>Docs & Help</span>
+          </Button>
         </nav>
 
         <div className="p-4 mt-auto border-t border-white/[0.08] bg-transparent">
@@ -568,6 +592,20 @@ export default function App() {
           </div>
         </header>
 
+        {/* Full-height views — no padding */}
+        {activeView === 'ai-analyst' && (
+          <div className="flex-1 overflow-hidden">
+            <AiAssistant />
+          </div>
+        )}
+        {activeView === 'docs' && (
+          <div className="flex-1 overflow-hidden">
+            <DocsView />
+          </div>
+        )}
+
+        {/* Padded scrollable views */}
+        {!['ai-analyst', 'docs'].includes(activeView) && (
         <div className="flex-1 overflow-y-auto p-8 relative scrollbar-hide">
           <div className="max-w-[1600px] mx-auto space-y-8">
             {activeView === 'dashboard' ? (
@@ -850,6 +888,7 @@ export default function App() {
             )}
           </div>
         </div>
+        )}
       </main>
 
       {/* Side Sheets & Dialogs */}
