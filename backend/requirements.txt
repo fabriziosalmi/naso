@@ -28,3 +28,4 @@ pytest
 pytest-asyncio
 pytest-cov
 -r shared/requirements-shared.txt
+mcp>=1.2.0
