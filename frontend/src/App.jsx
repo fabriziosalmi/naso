@@ -19,6 +19,7 @@ import Topology from './pages/Topology';
 import Identities from './pages/Identities';
 import DarkRecon from './pages/DarkRecon';
 import Audit from './pages/Audit';
+import Login from './pages/Login';
 
 const NotificationItem = ({ alert }) => (
   <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer relative overflow-hidden">
@@ -115,7 +116,8 @@ export default function App() {
     toggleIdentityProtection,
     isLoading, systemStatus, fetchSystemStatus, error, clearError,
     addIdentity, updateProfile,
-    graphData, fetchGraphData
+    graphData, fetchGraphData,
+    token, logout
   } = useNasoStore();
 
   const location = useLocation();
@@ -152,6 +154,11 @@ export default function App() {
   }, [fetchLeaks, fetchSystemStatus, fetchIdentities, fetchAuditLogs, fetchGraphData, location.pathname]);
 
   const isFullHeightView = ['/ai-analyst', '/docs'].includes(location.pathname);
+
+  // Auth gate: show login if no token
+  if (!token) {
+    return <Login />;
+  }
 
   return (
     <div className="flex h-screen bg-black text-zinc-100 overflow-hidden font-sans relative">
