@@ -6,7 +6,7 @@ hero:
   text: "Forensic Intelligence OS"
   tagline: "High-performance data breach monitoring with real-time AI Correlation"
   image:
-    src: /logo.png
+    src: /logo.svg
     alt: NASO Logo
   actions:
     - theme: brand

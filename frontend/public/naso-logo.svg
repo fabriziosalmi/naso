@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="300" height="300">
+  <circle cx="50" cy="50" r="48" fill="#FFFFFF" stroke="#050507" stroke-width="4" />
+  <circle cx="50" cy="50" r="38" fill="#0A0A0C" />
+  <clipPath id="innerCirc">
+    <circle cx="50" cy="50" r="38" />
+  </clipPath>
+  <g clip-path="url(#innerCirc)">
+    <rect x="26" y="0" width="12" height="100" fill="#FFFFFF" />
+    <polygon points="26,0 38,0 74,100 62,100" fill="#FFFFFF" />
+    <rect x="62" y="0" width="12" height="100" fill="#0A84FF" />
+  </g>
+</svg>

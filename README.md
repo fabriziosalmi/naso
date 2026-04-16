@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/logo.png" width="120" alt="NASO Logo" />
+  <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/logo.svg" width="120" alt="NASO Logo" />
   <h1>NASO Forensic Engine</h1>
   <p>
     <strong>Mission-Critical Cyber Threat Intelligence & OSINT Automation Platform</strong><br/>

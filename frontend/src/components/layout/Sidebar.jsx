@@ -41,8 +41,8 @@ export default function Sidebar({ onEditProfile }) {
         <div className="ambient-glow opacity-30"></div>
         <div className="p-6 flex flex-col gap-6">
           <div className="flex items-center gap-3">
-            <div className="bg-[#0A84FF] p-2 rounded-xl shadow-[0_0_15px_rgba(10,132,255,0.4)] animate-pulse-glow">
-              <Radar size={18} className="text-white animate-radar" strokeWidth={2} />
+            <div className="bg-[#0A84FF] p-2 rounded-xl shadow-[0_0_15px_rgba(10,132,255,0.4)] animate-pulse-glow flex items-center justify-center">
+              <img src="/naso-logo.svg" alt="NASO" className="w-[18px] h-[18px] animate-radar" />
             </div>
             <div className="flex flex-col">
               <span className="text-[15px] font-semibold tracking-tight text-white shimmer-text">NASO Engine</span>
