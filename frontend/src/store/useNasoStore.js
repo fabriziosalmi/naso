@@ -287,6 +287,23 @@ const useNasoStore = create((set, get) => ({
     }
   },
 
+  triggerIdentityMerging: async () => {
+    const { token } = get();
+    if (!token) return;
+    set({ isLoading: true });
+    try {
+      await axios.post('/identities/merge', {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      get().fetchIdentities();
+      get().fetchAuditLogs();
+      get().fetchGraphData();
+    } catch (err) {
+      set({ error: 'Auto-merge failed. Check logs.', isLoading: false });
+    }
+  },
+
+
   fetchIdentityInsights: async (identityId) => {
     const { token } = get();
     if (!token) return;

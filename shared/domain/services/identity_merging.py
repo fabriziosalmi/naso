@@ -17,9 +17,11 @@ class IdentityMergingService:
         Scansiona le identità del tenant e unisce quelle che condividono pattern comuni
         (es. lo stesso username in email diverse o metadata collegati).
         """
-        # Recupera tutte le identità non ancora "slave" di un master
+        # Recupera in Lotti (Batch Limit) per prevenire OOM Enterprise (Max 5000)
         result = await db.execute(
-            select(Identity).where(Identity.tenant_id == tenant_id, Identity.master_identity_id == None)
+            select(Identity)
+            .where(Identity.tenant_id == tenant_id, Identity.master_identity_id == None)
+            .limit(5000)
         )
         identities = result.scalars().all()
         

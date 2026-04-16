@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Fingerprint, UserPlus } from 'lucide-react';
+import { Fingerprint, UserPlus, Workflow } from 'lucide-react';
 import useNasoStore from '../store/useNasoStore';
 
 const IdentityRow = ({ identity, onDetails }) => (
@@ -44,7 +44,7 @@ const IdentityRow = ({ identity, onDetails }) => (
 );
 
 export default function Identities({ openAddModal }) {
-  const { identities, fetchIdentityInsights } = useNasoStore();
+  const { identities, fetchIdentityInsights, isLoading, triggerIdentityMerging } = useNasoStore();
 
   return (
     <div className="space-y-6">
@@ -53,9 +53,14 @@ export default function Identities({ openAddModal }) {
           <h1 className="text-[22px] font-semibold tracking-tight text-white">Master Identities</h1>
           <p className="text-[13px] text-zinc-500 mt-0.5">Deep forensic reconnaissance & target profiling</p>
         </div>
-        <Button onClick={openAddModal} className="h-9 px-5 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
-          <UserPlus size={15} className="mr-2" strokeWidth={2} /> Add Identity
-        </Button>
+        <div className="flex gap-3">
+          <Button onClick={() => triggerIdentityMerging()} variant="outline" className="h-9 px-4 text-[13px] font-medium border-white/10 text-zinc-300 hover:text-white hover:bg-white/10 bg-transparent rounded-full shadow-sm">
+            <Workflow size={15} className="mr-2 text-[#0A84FF]" strokeWidth={2} /> Auto Merge
+          </Button>
+          <Button onClick={openAddModal} className="h-9 px-5 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
+            <UserPlus size={15} className="mr-2" strokeWidth={2} /> Add Identity
+          </Button>
+        </div>
       </div>
 
       <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] overflow-hidden rounded-2xl shadow-sm">
@@ -72,7 +77,16 @@ export default function Identities({ openAddModal }) {
             {identities.map((id) => (
               <IdentityRow key={id.id} identity={id} onDetails={() => fetchIdentityInsights(id.id)} />
             ))}
-            {identities.length === 0 && (
+            {isLoading ? (
+                <TableRow>
+                    <TableCell colSpan={4} className="h-40 text-center text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">
+                       <div className="flex items-center justify-center gap-3">
+                         <div className="w-2 h-2 bg-[#0A84FF] rounded-full animate-ping"></div>
+                         Syncing Identities...
+                       </div>
+                    </TableCell>
+                </TableRow>
+            ) : identities.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={4} className="h-40 text-center text-zinc-600 text-[13px]">
                         No identities registered yet.
