@@ -230,7 +230,7 @@ const useNasoStore = create((set, get) => ({
       localStorage.setItem('naso_token', access_token);
       set({ token: access_token, isLoading: false });
     } catch (err) {
-      set({ error: 'Autenticazione fallita', isLoading: false });
+      set({ error: 'Authentication failed', isLoading: false });
     }
   },
 
@@ -251,7 +251,7 @@ const useNasoStore = create((set, get) => ({
       });
       set({ leaks: response.data, isLoading: false });
     } catch (err) {
-      set({ error: 'Errore nel recupero dei leak', isLoading: false });
+      set({ error: 'Failed to retrieve intelligence data', isLoading: false });
     }
   },
 
@@ -268,7 +268,7 @@ const useNasoStore = create((set, get) => ({
       get().fetchAuditLogs();
       set({ isLoading: false });
     } catch (err) {
-      set({ error: 'Errore aggiunta identità', isLoading: false });
+      set({ error: 'Failed to register identity', isLoading: false });
     }
   },
   
@@ -283,7 +283,7 @@ const useNasoStore = create((set, get) => ({
       });
       set({ identities: response.data, isLoading: false });
     } catch (err) {
-      set({ error: 'Errore nel caricamento delle identità', isLoading: false });
+      set({ error: 'Failed to load identities', isLoading: false });
     }
   },
 
@@ -314,7 +314,7 @@ const useNasoStore = create((set, get) => ({
       });
       set({ selectedIdentityInsights: response.data, isLoading: false });
     } catch (err) {
-      set({ error: 'Errore nel caricamento dei dettagli identità', isLoading: false });
+      set({ error: 'Failed to load identity details', isLoading: false });
     }
   },
 
@@ -332,7 +332,7 @@ const useNasoStore = create((set, get) => ({
         get().fetchIdentityInsights(identityId);
       }
     } catch (err) {
-      set({ error: 'Errore nella protezione identità' });
+      set({ error: 'Failed to update identity protection' });
     }
   },
 
@@ -371,7 +371,7 @@ const useNasoStore = create((set, get) => ({
       link.click();
       get().fetchAuditLogs();
     } catch (err) {
-      set({ error: 'Esportazione dossier fallita' });
+      set({ error: 'Dossier export failed' });
     }
   },
 
@@ -387,7 +387,7 @@ const useNasoStore = create((set, get) => ({
       get().fetchAuditLogs();
       set({ isLoading: false });
     } catch (err) {
-      set({ error: 'Errore aggiornamento profilo', isLoading: false });
+      set({ error: 'Profile update failed', isLoading: false });
     }
   },
 

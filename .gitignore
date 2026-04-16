@@ -3,9 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
+venv/
 env/
 .env
 .pytest_cache/
+.ruff_cache/
 
 # JS/React/Vitepress
 node_modules/
@@ -23,6 +25,10 @@ docs/.vitepress/cache/
 data/
 *.db
 *.log
+frontend_startup.log
+
+# Build caches
+.cache/
 
 # Infrastructure
 infrastructure/tor/data/

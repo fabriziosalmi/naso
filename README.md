@@ -1,6 +1,6 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/logo.svg" width="120" alt="NASO Logo" />
-  <h1>NASO Forensic Engine</h1>
+  <h1>NASO</h1>
   <p>
     <strong>Mission-Critical Cyber Threat Intelligence & OSINT Automation Platform</strong><br/>
     <em>High-performance data breach monitoring, AI correlation, and sovereign data lakes.</em>
@@ -85,8 +85,8 @@ Navigate to `http://localhost:5173`. Contains real-time Neural Topology Maps, Da
 
 ## Technical Documentation
 Explore the full developer and agent orchestration specs in the `docs/` VitePress suite:
-* [MCP Server Integration](/docs/guide/mcp-integration)
-* [SOAR Architectures & CTI Setup](/docs/guide/soar-and-cti)
+* [MCP Server Integration](https://fabriziosalmi.github.io/naso/guide/mcp-integration)
+* [SOAR Architectures & CTI Setup](https://fabriziosalmi.github.io/naso/guide/soar-and-cti)
 
 To run the docs locally:
 ```bash

@@ -14,7 +14,7 @@ export default function Header({ systemStatus, onOpenNotifications }) {
       case '/audit': return 'Audit & Compliance';
       case '/ai-analyst': return 'AI Co-Analyst';
       case '/docs': return 'Docs & Help';
-      default: return 'NASO Engine';
+      default: return 'NASO';
     }
   };
 

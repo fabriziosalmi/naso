@@ -45,7 +45,7 @@ export default function Sidebar({ onEditProfile }) {
               <img src="/naso-logo.svg" alt="NASO" className="w-[18px] h-[18px] animate-radar" />
             </div>
             <div className="flex flex-col">
-              <span className="text-[15px] font-semibold tracking-tight text-white shimmer-text">NASO Engine</span>
+              <span className="text-[15px] font-semibold tracking-tight text-white shimmer-text">NASO</span>
               <span className="text-[11px] text-zinc-400 font-medium">Forensic OS v0.1</span>
             </div>
           </div>
