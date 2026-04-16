@@ -35,10 +35,12 @@ class Settings(BaseSettings):
     MAX_SEVERITY_SCORE: int = 100
     CRITICAL_SCORE_THRESHOLD: int = 80
     
-    # Local AI - Gemma 4 Elite
-    AI_ENDPOINT: str = "http://host.docker.internal:1234/v1"
-    AI_MODEL: str = "google/gemma-4-E2B-it"
-    AI_ENABLE_THINKING: bool = True
+    # Local AI — LM Studio / Ollama (OpenAI-compatible)
+    # When running backend in Docker, use host.docker.internal:1234
+    # When running locally, use localhost:1234
+    AI_ENDPOINT: str = "http://localhost:1234/v1"
+    AI_MODEL: str = "gemma-4-e2b-it"
+    AI_ENABLE_THINKING: bool = False
 
     # SMTP / Notifications (#9)
     SMTP_HOST: str = "smtp.naso.local"
