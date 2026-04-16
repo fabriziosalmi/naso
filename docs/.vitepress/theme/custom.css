@@ -1,0 +1,139 @@
+/* docs/.vitepress/theme/custom.css */
+
+/* Core Typography - Apple Native Stack */
+:root {
+  --vp-font-family-base: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  --vp-font-family-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  
+  /* Apple Color Palette Core */
+  --vp-c-brand-1: #0A84FF;
+  --vp-c-brand-2: #007AFF;
+  --vp-c-brand-3: #5AC8FA;
+  
+  /* Micro-animation timing function (Apple iOS/macOS standard) */
+  --vp-custom-bezier: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --vp-custom-transition: all 0.3s var(--vp-custom-bezier);
+}
+
+/* Dark Mode Overrides - Pitch Black & Glassmorphism */
+html.dark {
+  /* Enforce True Black */
+  --vp-c-bg: #000000;
+  --vp-c-bg-alt: #111111;
+  --vp-c-bg-elv: #1C1C1E;
+  
+  /* Clean Grays */
+  --vp-c-text-1: #F5F5F7;
+  --vp-c-text-2: #A1A1A6;
+  --vp-c-text-3: #ECECEC;
+  
+  /* Border subtleties */
+  --vp-c-divider: rgba(255, 255, 255, 0.08);
+  --vp-c-gutter: rgba(255, 255, 255, 0.08);
+  --vp-c-border: rgba(255, 255, 255, 0.12);
+  
+  /* Navbar Glassmorphism */
+  --vp-nav-bg-color: rgba(0, 0, 0, 0.65);
+}
+
+/* Glassmorphism NavBar & Blends */
+.VPNav {
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background-color: var(--vp-nav-bg-color) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Clean up hero section aesthetics */
+.VPHero.has-image .container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.VPHero .name, .VPHero .text {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+.VPHero .tagline {
+  color: var(--vp-c-text-2) !important;
+  font-size: 20px;
+  max-width: 650px;
+  margin: 0 auto;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+/* Hero Button Transitions */
+.VPButton.brand {
+  background-color: var(--vp-c-brand-1) !important;
+  border-color: var(--vp-c-brand-1) !important;
+  border-radius: 9999px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: var(--vp-custom-transition) !important;
+}
+
+.VPButton.brand:hover {
+  background-color: var(--vp-c-brand-2) !important;
+  transform: scale(1.02);
+  box-shadow: 0 8px 16px rgba(10, 132, 255, 0.3);
+}
+
+.VPButton.alt {
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  font-weight: 500;
+  transition: var(--vp-custom-transition) !important;
+}
+
+.VPButton.alt:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  transform: scale(1.02);
+}
+
+/* Feature Cards Apple-Style */
+.VPFeatures .item {
+  transition: var(--vp-custom-transition);
+}
+
+.VPFeature {
+  background-color: var(--vp-c-bg-elv) !important;
+  border: 1px solid var(--vp-c-border) !important;
+  border-radius: 16px !important;
+  transition: var(--vp-custom-transition) !important;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.VPFeature .title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Doc Content Polish */
+.vp-doc h1, .vp-doc h2, .vp-doc h3, .vp-doc h4 {
+  letter-spacing: -0.02em;
+}
+
+.vp-doc a {
+  color: var(--vp-c-brand-1);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  transition: var(--vp-custom-transition);
+}
+
+.vp-doc a:hover {
+  color: var(--vp-c-brand-3);
+}
+
+.vp-doc p {
+  line-height: 1.6;
+  color: var(--vp-c-text-1);
+}
