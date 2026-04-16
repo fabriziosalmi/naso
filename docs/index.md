@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: "NASO Engine"
+  name: "NASO"
   text: "The Forensic Intelligence Standard."
   tagline: "Unify external intelligence, dark web reconnaissance, and AI-driven identity correlation in a single, high-performance platform."
   image:

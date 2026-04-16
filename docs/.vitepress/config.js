@@ -1,7 +1,7 @@
 export default {
   base: "/naso/",
-  title: "NASO ENGINE",
-  titleTemplate: ":title - Documentation",
+  title: "NASO",
+  titleTemplate: ":title - NASO Documentation",
   description: "Advanced Forensic & Intelligence Framework.",
   cleanUrls: true,
   appearance: 'dark', // Native dark mode standard
