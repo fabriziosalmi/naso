@@ -60,11 +60,6 @@ app.add_middleware(
 
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api", "*"] # Allowing * temporarily if behind lb, but keeping it strict as requested:
-)
-app.user_middleware.pop()
-app.add_middleware(
-    TrustedHostMiddleware, 
     allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api"]
 )
 app.include_router(auth.router, prefix="/auth", tags=["auth"])

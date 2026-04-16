@@ -5,9 +5,11 @@ from shared.utils.worker_tracing import setup_worker_tracing
 # Inizializza Tracing prima della creazione dell'app Celery
 setup_worker_tracing()
 
-RABBITMQ_USER = os.getenv("RABBIT_USER", "naso_broker_admin")
-RABBITMQ_PASS = os.getenv("RABBIT_PASSWORD", "rigorous_admin_password_2026")
+RABBITMQ_USER = os.getenv("RABBIT_USER")
+RABBITMQ_PASS = os.getenv("RABBIT_PASSWORD")
 RABBITMQ_HOST = os.getenv("RABBIT_HOST", "rabbitmq")
+if not RABBITMQ_USER or not RABBITMQ_PASS:
+    raise ValueError("CRITICAL: RABBITMQ credentials missing!")
 
 celery_app = Celery(
     "naso_workers",

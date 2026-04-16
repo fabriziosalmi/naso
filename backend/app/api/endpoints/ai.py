@@ -350,8 +350,6 @@ async def ai_chat(
         messages.append(msg)
 
     async def generate() -> AsyncGenerator[str, None]:
-        nonlocal messages
-
         async with httpx.AsyncClient(timeout=120.0) as client:
             # ─── Phase 1: Non-streaming call to detect tool calls ───
             try:

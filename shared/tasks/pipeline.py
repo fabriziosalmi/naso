@@ -13,13 +13,17 @@ import io
 
 # Setup asincrono per ES
 ES_HOST = os.getenv("ES_HOST", "elasticsearch")
-ES_PASSWORD = os.getenv("ELASTIC_PASSWORD", "change_me_rigorously")
+ES_PASSWORD = os.getenv("ELASTIC_PASSWORD")
+if not ES_PASSWORD:
+    raise ValueError("CRITICAL: ELASTIC_PASSWORD environment variable is missing!")
 es = AsyncElasticsearch(f"https://elastic:{ES_PASSWORD}@{ES_HOST}:9200", verify_certs=False)
 
 # Setup MinIO
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "naso_storage_admin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "change_me_rigorously")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+if not MINIO_ACCESS_KEY or not MINIO_SECRET_KEY:
+    raise ValueError("CRITICAL: MINIO credentials missing!")
 minio_client = Minio(
     MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
@@ -42,7 +46,9 @@ from shared.domain.services.cti_adapters import CTIAdapters
 logger = logging.getLogger("naso-pipeline")
 
 # Engine per i worker (Command Side)
-DB_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://naso_admin:rigorous_admin_password_2026@db:5432/naso_db")
+DB_URL = os.getenv("DATABASE_URL")
+if not DB_URL:
+    raise ValueError("CRITICAL: DATABASE_URL environment variable is missing!")
 engine = create_async_engine(
     DB_URL,
     pool_size=int(os.getenv("WORKER_DB_POOL_SIZE", 20)),
