@@ -1,4 +1,5 @@
 export default {
+  base: "/naso/",
   title: "NASO Documentation",
   description: "Advanced Forensic & Intelligence Framework",
   themeConfig: {
