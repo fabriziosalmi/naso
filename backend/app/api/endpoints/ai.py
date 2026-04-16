@@ -156,6 +156,21 @@ NASO_TOOLS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "toggle_identity_vip",
+            "description": "Protect an identity by marking it as VIP (is_protected = true/false). Use this when an analyst requests to protect an identity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "identity_id": {"type": "string", "description": "UUID of the identity"},
+                    "is_protected": {"type": "boolean", "description": "True to protect, False to unprotect"},
+                },
+                "required": ["identity_id", "is_protected"]
+            }
+        }
+    },
 ]
 
 SYSTEM_PROMPT = """You are NASO Co-Analyst, an expert AI forensic intelligence analyst embedded in the NASO Forensic Engine — a professional threat intelligence and breach investigation platform.
@@ -171,6 +186,7 @@ You can call the following tools to fetch real-time NASO data:
 - get_identity_insights — deep analysis of a specific identity (breach history, aliases)
 - create_task — add a task or finding to the active investigation plan
 - flag_critical — triage / update status of a specific breach record
+- toggle_identity_vip — directly set an identity as VIP Protected (is_protected) in the backend.
 
 ## Investigation Protocol
 When starting an investigation:
@@ -317,6 +333,24 @@ async def execute_tool(
             )
             await db.commit()
             return {"tool": "flag_critical", "leak_id": leak_id, "old_status": old_status, "new_status": new_status}
+
+        elif tool_name == "toggle_identity_vip":
+            identity_id = tool_args.get("identity_id", "")
+            is_protected = tool_args.get("is_protected", True)
+            result = await db.execute(select(Identity).where(Identity.id == identity_id))
+            identity = result.scalar_one_or_none()
+            if not identity:
+                return {"tool": "toggle_identity_vip", "error": f"Identity {identity_id} not found"}
+            
+            old_state = identity.is_protected
+            identity.is_protected = is_protected
+            await AuditLogger.log(
+                db, user_id=current_user.id, tenant_id=current_user.tenant_id,
+                action="AI_TOGGLE_VIP", resource_type="identity", resource_id=identity_id,
+                details={"old": old_state, "new": is_protected}
+            )
+            await db.commit()
+            return {"tool": "toggle_identity_vip", "identity_id": identity_id, "is_protected": is_protected, "status": "success"}
 
         else:
             return {"error": f"Unknown tool: {tool_name}"}

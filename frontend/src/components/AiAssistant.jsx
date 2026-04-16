@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import useNasoStore from '../store/useNasoStore';
 import {
   Brain, Plus, Trash2, CheckCircle2, Circle, Clock, ChevronRight,
@@ -112,9 +113,13 @@ function ChatBubble({ msg }) {
               ? 'bg-[#0A84FF] text-white rounded-tr-sm'
               : msg.isError
                 ? 'bg-[#FF453A]/10 border border-[#FF453A]/20 text-[#FF453A] rounded-tl-sm'
-                : 'bg-[#2C2C2E] text-zinc-200 rounded-tl-sm border border-white/[0.05]'
+                : 'bg-[#2C2C2E] text-zinc-200 rounded-tl-sm border border-white/[0.05] prose prose-invert prose-p:leading-relaxed prose-pre:bg-black/30 prose-pre:border prose-pre:border-white/10 max-w-none'
           }`}>
-            {msg.content}
+            {isUser || msg.isError ? (
+                msg.content
+            ) : (
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+            )}
             {msg.role === 'assistant' && !msg.content && !hasCalls && (
               <span className="inline-flex gap-0.5 ml-1">
                 <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
