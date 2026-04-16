@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from sqlalchemy.future import select
 from typing import List
 from shared.database import get_db
 from shared.models import AuditLog
 from ..deps import get_current_user
+import time
 
 router = APIRouter()
 
@@ -36,5 +38,11 @@ async def get_audit_logs(
     ]
 
 @router.get("/status")
-async def get_status():
-    return {"status": "operational", "latency_ms": {"total": 0.45}}
+async def get_status(db: AsyncSession = Depends(get_db)):
+    try:
+        start_time = time.perf_counter()
+        await db.execute(text("SELECT 1"))
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        return {"status": "operational", "latency_ms": {"total": round(elapsed_ms, 2)}}
+    except Exception as e:
+        return {"status": "degraded", "latency_ms": {"total": -1}, "error": str(e)}

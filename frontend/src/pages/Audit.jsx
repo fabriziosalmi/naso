@@ -46,7 +46,7 @@ const AuditLogRow = ({ log }) => (
 );
 
 export default function Audit() {
-  const { auditLogs, fetchAuditLogs } = useNasoStore();
+  const { auditLogs, exportAuditCsv, isLoading } = useNasoStore();
 
   return (
     <div className="space-y-6">
@@ -55,7 +55,7 @@ export default function Audit() {
           <h1 className="text-[22px] font-semibold tracking-tight text-white">Audit & Compliance</h1>
           <p className="text-[13px] text-zinc-500 mt-0.5">Immutable forensic accountability — every operation hashed and logged</p>
         </div>
-        <Button onClick={() => fetchAuditLogs()} variant="outline" className="h-9 px-5 text-[13px] font-medium border-white/10 bg-transparent text-zinc-300 hover:text-white hover:bg-white/10 rounded-full">
+        <Button onClick={exportAuditCsv} disabled={auditLogs.length === 0} variant="outline" className="h-9 px-5 text-[13px] font-medium border-white/10 bg-transparent text-zinc-300 hover:text-white hover:bg-white/10 rounded-full">
           <Download size={14} className="mr-2" strokeWidth={1.5} /> Export CSV
         </Button>
       </div>
@@ -74,7 +74,16 @@ export default function Audit() {
             {auditLogs.map((log) => (
               <AuditLogRow key={log.id} log={log} />
             ))}
-            {auditLogs.length === 0 && (
+            {isLoading ? (
+                <TableRow>
+                    <TableCell colSpan={4} className="h-40 text-center text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">
+                       <div className="flex items-center justify-center gap-3">
+                         <div className="w-2 h-2 bg-[#0A84FF] rounded-full animate-ping"></div>
+                         Syncing Chain of Custody...
+                       </div>
+                    </TableCell>
+                </TableRow>
+            ) : auditLogs.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={4} className="h-40 text-center text-zinc-600 text-[13px]">
                         No audit entries logged yet.

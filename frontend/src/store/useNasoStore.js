@@ -394,16 +394,44 @@ const useNasoStore = create((set, get) => ({
   fetchAuditLogs: async () => {
     const { token } = get();
     if (!token) return;
+    set({ isLoading: true });
     try {
       const response = await axios.get('/system/audit', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      set({ auditLogs: response.data });
+      set({ auditLogs: response.data, isLoading: false });
     } catch (err) {
-      set({ error: "Audit log fetch failed" });
+      set({ error: "Audit log fetch failed", isLoading: false });
       console.error("Audit log fetch failed", err);
     }
   },
+
+  exportAuditCsv: () => {
+    const { auditLogs } = get();
+    if (!auditLogs || auditLogs.length === 0) return;
+    
+    const headers = ['Timestamp', 'Operator', 'Action', 'Asset Vector', 'Details'];
+    const rows = auditLogs.map(log => [
+      log.timestamp,
+      log.user_id,
+      log.action,
+      log.resource_type || '',
+      log.details ? JSON.stringify(log.details).replace(/"/g, '""') : ''
+    ]);
+    
+    const csvContent = headers.join(',') + '\n' + 
+      rows.map(e => e.map(cell => `"${cell}"`).join(',')).join('\n');
+      
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'NASO-AUDIT-LOG.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
+
 
   fetchGraphData: async () => {
     const { token } = get();
