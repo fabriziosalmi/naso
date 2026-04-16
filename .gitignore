@@ -7,10 +7,12 @@ env/
 .env
 .pytest_cache/
 
-# JS/React
+# JS/React/Vitepress
 node_modules/
 dist/
 .eslintcache
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 
 # System/IDE
 .DS_Store
