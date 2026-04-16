@@ -13,8 +13,8 @@ rule generic_api_key {
     meta:
         description = "Rileva potenziali API Key generiche"
     strings:
-        $api_key = /api[_-]key[ ]*[:=][ ]*['"][A-Za-z0-9]{20,60}['"]/ i
-        $auth_token = /auth[_-]token[ ]*[:=][ ]*['"][A-Za-z0-9]{20,60}['"]/ i
+        $api_key = /api[_-]key[ ]*[:=][ ]*['"][A-Za-z0-9]{20,60}['"]/
+        $auth_token = /auth[_-]token[ ]*[:=][ ]*['"][A-Za-z0-9]{20,60}['"]/
     condition:
         any of them
 }
@@ -23,7 +23,7 @@ rule google_api_key {
     meta:
         description = "Rileva Google API Keys"
     strings:
-        $key = /AIza[0-9A-Za-z\\-_]{35}/
+        $key = /AIza[0-9A-Za-z\-_]{35}/
     condition:
         $key
 }

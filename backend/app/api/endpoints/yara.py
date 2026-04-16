@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
-from ...shared.database import get_db
-from ...shared.models import YaraRule
-from ...shared.schemas import YaraRule as YaraRuleSchema, YaraRuleCreate
+from shared.database import get_db
+from shared.models import YaraRule
+from shared.schemas import YaraRule as YaraRuleSchema, YaraRuleCreate
 from ..deps import get_current_user
 
-from ...shared.utils.audit import AuditLogger
+from shared.utils.audit import AuditLogger
 
 router = APIRouter()
 

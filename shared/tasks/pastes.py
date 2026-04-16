@@ -1,5 +1,5 @@
 import requests
-from ..celery_app import celery_app
+from shared.celery_app import celery_app
 import os
 
 PASTEBIN_API_KEY = os.getenv("PASTEBIN_API_KEY")

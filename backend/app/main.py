@@ -3,11 +3,12 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-from .shared.database import engine
-from .shared.config import settings
+from shared.database import engine
+from shared.config import settings
+
 from .api.endpoints import auth, tenants, keywords, leaks, identities, yara, system
-from .core.tracing import setup_tracing
-from .core.exceptions import NasoBaseException, AuthenticationError, AuthorizationError, ResourceNotFoundError
+from shared.utils.backend_tracing import setup_tracing
+from shared.core.exceptions import NasoBaseException, AuthenticationError, AuthorizationError, ResourceNotFoundError
 
 # Configurazione Logging Professionale
 logging.basicConfig(

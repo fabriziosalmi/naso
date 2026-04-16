@@ -1,18 +1,18 @@
 from celery import Celery
 import os
-from .utils.tracing import setup_worker_tracing
+from shared.utils.worker_tracing import setup_worker_tracing
 
 # Inizializza Tracing prima della creazione dell'app Celery
 setup_worker_tracing()
 
 RABBITMQ_USER = os.getenv("RABBIT_USER", "naso_broker_admin")
-RABBITMQ_PASS = os.getenv("RABBIT_PASSWORD", "change_me_rigorously")
+RABBITMQ_PASS = os.getenv("RABBIT_PASSWORD", "rigorous_admin_password_2026")
 RABBITMQ_HOST = os.getenv("RABBIT_HOST", "rabbitmq")
 
 celery_app = Celery(
     "naso_workers",
     broker=f"pyamqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}//",
-    include=["tasks.github", "tasks.pastes", "tasks.telegram", "tasks.pipeline", "tasks.maintenance"]
+    include=["shared.tasks.github", "shared.tasks.pastes", "shared.tasks.telegram", "shared.tasks.pipeline", "shared.tasks.maintenance"]
 )
 
 celery_app.conf.update(

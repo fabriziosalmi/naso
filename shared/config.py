@@ -3,7 +3,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Naso Forensic"
-    DATABASE_URL: str = "postgresql+asyncpg://naso_admin:change_me_rigorously@db:5432/naso_db"
+    DATABASE_URL: str = "postgresql+asyncpg://naso_admin:rigorous_admin_password_2026@db:5432/naso_db"
     SECRET_KEY: str = "PROD_SECRET_KEY_REQUIRED_FOR_SECURITY"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -12,18 +12,18 @@ class Settings(BaseSettings):
     ES_HOST: str = "elasticsearch"
     ES_PORT: int = 9200
     ES_USER: Optional[str] = None
-    ES_PASSWORD: Optional[str] = "change_me_rigorously"
+    ES_PASSWORD: Optional[str] = "rigorous_admin_password_2026"
     
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
     MINIO_ACCESS_KEY: str = "naso_storage_admin"
-    MINIO_SECRET_KEY: str = "change_me_rigorously"
+    MINIO_SECRET_KEY: str = "rigorous_admin_password_2026"
     MINIO_SECURE: bool = False
     
     # RabbitMQ
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_USER: str = "naso_broker_admin"
-    RABBITMQ_PASS: str = "change_me_rigorously"
+    RABBITMQ_PASS: str = "rigorous_admin_password_2026"
     
     # System Performance Constants
     DB_POOL_SIZE: int = 20
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "smtp.naso.local"
     SMTP_PORT: int = 587
     SMTP_USER: str = "notifications@naso.local"
-    SMTP_PASSWORD: str = "change_me_rigorously"
+    SMTP_PASSWORD: str = "rigorous_admin_password_2026"
     SMTP_FROM: str = "naso-engine@naso.local"
     ENABLE_NOTIFICATIONS: bool = True
 

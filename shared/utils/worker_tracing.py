@@ -9,28 +9,14 @@ from opentelemetry.instrumentation.elasticsearch import ElasticsearchInstrumento
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
 def setup_worker_tracing(engine=None):
-    """
-    Inizializza OpenTelemetry per i Worker (#27).
-    """
-    otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://jaeger:4318/v1/traces")
-    
-    resource = Resource(attributes={
-        SERVICE_NAME: "naso-worker"
-    })
-    
+    otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://host.docker.internal:4318/v1/traces")
+    resource = Resource(attributes={SERVICE_NAME: "naso-worker"})
     provider = TracerProvider(resource=resource)
-    processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
+    processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint))
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
-
-    # Instrumentazione Celery
     CeleryInstrumentor().instrument()
-    
-    # Instrumentazione Elasticsearch
     ElasticsearchInstrumentor().instrument()
-    
-    # Instrumentazione SQLAlchemy (se fornito l'engine)
     if engine:
         SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
-    
     print("[NASO TRACING] Worker instrumentation complete.")

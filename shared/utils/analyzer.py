@@ -2,7 +2,7 @@ import yara
 import os
 
 class NasoAnalyzer:
-    def __init__(self, rules_path="rules/"):
+    def __init__(self, rules_path="shared/rules/"):
         self.rules_path = rules_path
         self.static_rules = self._load_static_rules(rules_path)
         self.dynamic_rules = {} # Rules from DB

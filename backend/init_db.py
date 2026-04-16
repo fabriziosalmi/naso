@@ -1,7 +1,7 @@
 import asyncio
-from app.database import AsyncSessionLocal, engine
-from app.models import Tenant, User, Base, MitreTechnique
-from app.core.security import get_password_hash
+from shared.database import AsyncSessionLocal, engine
+from shared.models import Tenant, User, Base, MitreTechnique
+from shared.core.security import get_password_hash
 from sqlalchemy.future import select
 
 async def init():

@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
 from typing import Optional, List
-from ...shared.database import get_db
-from ...shared.models import Identity, LeakHit
-from ...shared.schemas import Identity as IdentitySchema, IdentityUpdate, IdentityInsights
+from shared.database import get_db
+from shared.models import Identity, LeakHit
+from shared.schemas import Identity as IdentitySchema, IdentityUpdate, IdentityInsights
 from ..deps import get_current_user
 from sqlalchemy.orm import selectinload
-from ...shared.utils.audit import AuditLogger
-from ...shared.domain.services.identity_merging import IdentityMergingService
+from shared.utils.audit import AuditLogger
+from shared.domain.services.identity_merging import IdentityMergingService
 
 router = APIRouter()
 

@@ -7,9 +7,8 @@ import {
   Users, 
   Activity, 
   FileText,
-  Github,
-  MessageSquare,
   Globe,
+  MessageSquare,
   Loader2,
   TrendingUp,
   PieChart as PieChartIcon,
@@ -46,9 +45,9 @@ import {
   Flame,
   Share2,
   Target,
-  Radar,
   Crosshair,
-  ShieldAlert
+  ShieldAlert,
+  Chrome
 } from 'lucide-react';
 import {
   PieChart,

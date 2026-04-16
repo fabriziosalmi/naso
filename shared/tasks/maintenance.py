@@ -3,14 +3,14 @@ import asyncio
 import os
 import logging
 import json
-from ..sharedcelery_app import celery_app
+from shared.celery_app import celery_app
 from elasticsearch import AsyncElasticsearch
 from minio import Minio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import delete
-from ..sharedtasks.pipeline import ES_HOST, ES_PASSWORD, MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY
-from ..sharedmodels import Tenant, User, Keyword, LeakHit, Identity, AuditLog, identity_leaks
+from shared.tasks.pipeline import ES_HOST, ES_PASSWORD, MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY
+from shared.models import Tenant, User, Keyword, LeakHit, Identity, AuditLog, identity_leaks
 
 logger = logging.getLogger("naso-maintenance")
 
@@ -18,7 +18,7 @@ logger = logging.getLogger("naso-maintenance")
 DB_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://naso_admin:rigorous_admin_password_2026@db:5432/naso_db")
 engine = create_async_engine(DB_URL)
 
-from ..sharedutils.tracing import setup_worker_tracing
+from shared.utils.worker_tracing import setup_worker_tracing
 setup_worker_tracing(engine)
 
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -111,7 +111,7 @@ async def delete_from_db(tenant_id: str):
             await session.execute(delete(AuditLog).where(AuditLog.tenant_id == tenant_id))
             
             # Deletion of tenant-specific webhooks and YARA rules
-            from ..sharedmodels import Webhook, YaraRule
+            from shared.models import Webhook, YaraRule
             await session.execute(delete(Webhook).where(Webhook.tenant_id == tenant_id))
             await session.execute(delete(YaraRule).where(YaraRule.tenant_id == tenant_id))
             

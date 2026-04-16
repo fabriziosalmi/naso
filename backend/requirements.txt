@@ -27,3 +27,4 @@ tenacity==8.2.3
 pytest
 pytest-asyncio
 pytest-cov
+-r shared/requirements-shared.txt

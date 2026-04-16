@@ -3,15 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from typing import Optional
-from ...shared.database import get_db
-from ...shared.models import LeakHit
+from shared.database import get_db
+from shared.models import LeakHit
 from ..deps import get_current_user
-from ...shared.utils.reporting import ForensicReportGenerator
-from ...shared.core.exceptions import ResourceNotFoundError, AuthorizationError
+from shared.utils.reporting import ForensicReportGenerator
+from shared.core.exceptions import ResourceNotFoundError, AuthorizationError
 
-from ...shared.utils.audit import AuditLogger
+from shared.utils.audit import AuditLogger
 
-from ...shared.domain.services.darkweb_search import DarkWebSearchService
+from shared.domain.services.darkweb_search import DarkWebSearchService
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ async def export_massive_dossier(
     Genera il Dossier Forense Massivo (BB) per il tenant.
     """
     # 1. Recupera tutti i leak del tenant con join al tenant stesso
-    from ...shared.models import Tenant
+    from shared.models import Tenant
     query = (
         select(LeakHit)
         .options(joinedload(LeakHit.tenant))

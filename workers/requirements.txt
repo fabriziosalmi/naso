@@ -19,3 +19,6 @@ opentelemetry-instrumentation-sqlalchemy
 opentelemetry-exporter-otlp
 telethon
 
+httpx
+tenacity
+-r shared/requirements-shared.txt

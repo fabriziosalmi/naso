@@ -1,8 +1,8 @@
 # ruff: noqa: E402
-from ..sharedcelery_app import celery_app
-from ..sharedutils.analyzer import analyzer
-from ..sharedutils.ai_triage import analyze_leak_with_gemma_thinking
-from ..sharedmodels import YaraRule
+from shared.celery_app import celery_app
+from shared.utils.analyzer import analyzer
+from shared.utils.ai_triage import analyze_leak_with_gemma_thinking
+from shared.models import YaraRule
 from sqlalchemy import select
 import asyncio
 import os
@@ -27,14 +27,14 @@ minio_client = Minio(
     secure=False
 )
 
-from ..sharedutils.circuit_breaker import es_breaker, minio_breaker
+from shared.utils.circuit_breaker import es_breaker, minio_breaker
 import hashlib
 import json
 import logging
-from ..shareddomain.services.correlation import IdentityCorrelationService
+from shared.domain.services.correlation import IdentityCorrelationService
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from ..sharedutils.tracing import setup_worker_tracing
+from shared.utils.worker_tracing import setup_worker_tracing
 
 # Logger Strutturato (#28)
 logger = logging.getLogger("naso-pipeline")
