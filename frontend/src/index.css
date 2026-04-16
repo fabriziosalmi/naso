@@ -32,7 +32,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-[#000000] text-zinc-100 antialiased;
+    @apply bg-naso-dark text-zinc-100 antialiased;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -46,6 +46,26 @@
       linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
     background-size: 40px 40px;
+  }
+  
+  .glass-panel {
+    @apply bg-naso-panel/60 backdrop-blur-xl border border-white/5 shadow-2xl;
+  }
+
+  .ambient-glow {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(0,0,0,0) 70%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  
+  .shimmer-text {
+    @apply animate-shimmer bg-[linear-gradient(110deg,#e2e8f0,45%,#ffffff,55%,#e2e8f0)] bg-[length:200%_100%] bg-clip-text text-transparent;
   }
 }
 

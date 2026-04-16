@@ -19,12 +19,13 @@ export default function Header({ systemStatus, onOpenNotifications }) {
   };
 
   return (
-    <header className="h-16 border-b border-white/[0.08] bg-[#1C1C1E]/50 backdrop-blur-xl flex items-center justify-between px-6 z-30 shrink-0">
+    <header className="h-16 glass-panel border-b border-t-0 border-l-0 border-r-0 flex items-center justify-between px-6 z-30 shrink-0 sticky top-0 w-full overflow-hidden">
+          <div className="ambient-glow opacity-20"></div>
           <div className="flex items-center gap-8">
             <div className="flex flex-col">
               <h2 className="text-[14px] font-semibold text-white tracking-tight flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-blue-500 flex items-center justify-center shadow-md">
-                    <Crosshair size={12} className="text-white" strokeWidth={2.5} />
+                <div className="w-6 h-6 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shadow-[0_0_10px_rgba(59,130,246,0.3)]">
+                    <Crosshair size={12} className="text-blue-400" strokeWidth={2.5} />
                 </div>
                 {getPageTitle()}
               </h2>
@@ -43,7 +44,7 @@ export default function Header({ systemStatus, onOpenNotifications }) {
               <div className="w-[1px] h-3 bg-zinc-800"></div>
               <div className="flex items-center gap-1.5 px-1 py-0.5 rounded-full bg-[#32D74B]/10">
                 <div className="w-1.5 h-1.5 bg-[#32D74B] rounded-full"></div>
-                <span className="text-[10px] font-semibold text-[#32D74B]">Operational</span>
+                <span className="text-[10px] font-semibold text-[#32D74B] animate-pulse">Operational</span>
               </div>
             </div>
           </div>

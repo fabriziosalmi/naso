@@ -60,6 +60,25 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        radar: {
+          '0%': { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' },
+        },
+        pulseGlow: {
+          '0%, 100%': { opacity: 1, boxShadow: '0 0 15px rgba(239, 68, 68, 0.2)' },
+          '50%': { opacity: .7, boxShadow: '0 0 35px rgba(239, 68, 68, 0.6)' },
+        }
+      },
+      animation: {
+        'radar': 'radar 4s linear infinite',
+        'shimmer': 'shimmer 2.5s linear infinite',
+        'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

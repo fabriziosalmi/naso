@@ -37,14 +37,15 @@ export default function Sidebar({ onEditProfile }) {
     `flex items-center gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium w-full ${isActive ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`;
 
   return (
-    <aside className="w-[260px] bg-[#1C1C1E]/60 backdrop-blur-3xl border-r border-white/[0.08] flex flex-col z-20 shrink-0">
+    <aside className="w-[260px] glass-panel border-r flex flex-col z-20 shrink-0 relative overflow-hidden">
+        <div className="ambient-glow opacity-30"></div>
         <div className="p-6 flex flex-col gap-6">
           <div className="flex items-center gap-3">
-            <div className="bg-[#0A84FF] p-2 rounded-xl shadow-sm">
-              <Radar size={18} className="text-white" strokeWidth={2} />
+            <div className="bg-[#0A84FF] p-2 rounded-xl shadow-[0_0_15px_rgba(10,132,255,0.4)] animate-pulse-glow">
+              <Radar size={18} className="text-white animate-radar" strokeWidth={2} />
             </div>
             <div className="flex flex-col">
-              <span className="text-[15px] font-semibold tracking-tight text-white">NASO Engine</span>
+              <span className="text-[15px] font-semibold tracking-tight text-white shimmer-text">NASO Engine</span>
               <span className="text-[11px] text-zinc-400 font-medium">Forensic OS v0.1</span>
             </div>
           </div>
