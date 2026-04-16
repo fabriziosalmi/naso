@@ -234,7 +234,7 @@ export default function Dashboard({ setViewingScreenshotId }) {
                 }} 
               />
             ))}
-            {isLoading ? (
+            {isLoading && (
                 <TableRow>
                     <TableCell colSpan={5} className="h-40 text-center text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">
                        <div className="flex items-center justify-center gap-3">
