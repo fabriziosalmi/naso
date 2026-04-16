@@ -126,6 +126,7 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     container_name: naso-worker-pipeline
+    command: celery -A shared.celery_app worker -Q default,osint --concurrency=4 --loglevel=info
     restart: always
     env_file: .env
     environment:
@@ -144,6 +145,42 @@ services:
         limits:
           cpus: '1.5'
           memory: 2G
+    volumes:
+      - ./shared:/app/shared
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    networks:
+      - naso-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker-massive:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: naso-worker-massive
+    command: celery -A shared.celery_app worker -Q massive --concurrency=1 --loglevel=info
+    restart: always
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONDONTWRITEBYTECODE=1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/pwuser/.cache
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
     volumes:
       - ./shared:/app/shared
     depends_on:

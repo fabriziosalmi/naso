@@ -12,7 +12,16 @@ RABBITMQ_HOST = os.getenv("RABBIT_HOST", "rabbitmq")
 celery_app = Celery(
     "naso_workers",
     broker=f"pyamqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}//",
-    include=["shared.tasks.github", "shared.tasks.pastes", "shared.tasks.telegram", "shared.tasks.pipeline", "shared.tasks.maintenance"]
+    include=[
+        "shared.tasks.github", 
+        "shared.tasks.pastes", 
+        "shared.tasks.telegram", 
+        "shared.tasks.pipeline", 
+        "shared.tasks.maintenance",
+        "shared.tasks.darkweb",
+        "shared.tasks.infrastructure",
+        "shared.tasks.massive"
+    ]
 )
 
 celery_app.conf.update(
@@ -27,4 +36,10 @@ celery_app.conf.update(
     task_acks_late=True, # Ack solo a task completato
     worker_concurrency=4, # Numero di processi paralleli (ottimizzato per core Mac)
     task_time_limit=300, # Hard limit 5 min
+    task_routes={
+        'tasks.massive.*': {'queue': 'massive'},
+        'tasks.infrastructure.*': {'queue': 'osint'},
+        'tasks.darkweb.*': {'queue': 'osint'},
+        '*': {'queue': 'default'}
+    }
 )
