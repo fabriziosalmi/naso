@@ -23,6 +23,7 @@ export default defineConfig({
       '/yara': 'http://localhost:8000',
       '/system': 'http://localhost:8000',
       '/users': 'http://localhost:8000',
+      '/ai': 'http://localhost:8000',
     }
   }
 })
