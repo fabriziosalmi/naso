@@ -65,7 +65,8 @@
   }
   
   .shimmer-text {
-    @apply animate-shimmer bg-[linear-gradient(110deg,#e2e8f0,45%,#ffffff,55%,#e2e8f0)] bg-[length:200%_100%] bg-clip-text text-transparent;
+    @apply bg-[linear-gradient(110deg,#e2e8f0,45%,#ffffff,55%,#e2e8f0)] bg-[length:200%_100%] bg-clip-text text-transparent;
+    animation: shimmer 2.5s linear infinite;
   }
 }
 
