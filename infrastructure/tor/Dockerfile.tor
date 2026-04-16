@@ -1,0 +1,19 @@
+FROM alpine:latest
+
+# Use http mirror to avoid TLS issues during build in some environments
+RUN sed -i 's/https/http/g' /etc/apk/repositories && \
+    apk add --no-cache tor curl
+
+# Configurazione Tor Hardened
+RUN echo "SocksPort 0.0.0.0:9050" > /etc/tor/torrc && \
+    echo "DataDirectory /var/lib/tor" >> /etc/tor/torrc && \
+    echo "ControlPort 9051" >> /etc/tor/torrc && \
+    echo "CookieAuthentication 0" >> /etc/tor/torrc && \
+    echo "DnsPort 5353" >> /etc/tor/torrc && \
+    echo "AutomapHostsOnResolve 1" >> /etc/tor/torrc && \
+    echo "StrictNodes 0" >> /etc/tor/torrc && \
+    echo "ExcludeExitNodes {ua},{ru},{by},{ir},{cn}" >> /etc/tor/torrc
+
+EXPOSE 9050 9051
+
+CMD ["tor"]

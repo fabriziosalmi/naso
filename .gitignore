@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+.env
+.pytest_cache/
+
+# JS/React
+node_modules/
+dist/
+.eslintcache
+
+# System/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Database/Storage (Local Data)
+data/
+*.db
+*.log
+
+# Infrastructure
+infrastructure/tor/data/

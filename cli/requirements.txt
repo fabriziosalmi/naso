@@ -1,0 +1,7 @@
+rich
+textual
+click
+art
+psutil
+httpx
+pyfiglet

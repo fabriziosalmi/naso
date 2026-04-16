@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: naso-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - naso-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: naso-cache
+    restart: always
+    networks:
+      - naso-net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: naso-search
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - ./data/elasticsearch:/usr/share/elasticsearch/data
+    networks:
+      - naso-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    image: quay.io/minio/minio
+    container_name: naso-storage
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: naso_storage_admin
+      MINIO_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./data/minio:/data
+    networks:
+      - naso-net
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: naso-broker
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
+    networks:
+      - naso-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: naso-jaeger
+    restart: always
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    networks:
+      - naso-net
+
+  backend:
+    build: ./backend
+    container_name: naso-api
+    restart: always
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      - naso-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker-pipeline:
+    build: ./workers
+    container_name: naso-worker-pipeline
+    restart: always
+    env_file: .env
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    networks:
+      - naso-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # --- TOR CLUSTER ---
+  naso-tor-1:
+    build:
+      context: ./infrastructure/tor
+      dockerfile: Dockerfile.tor
+    restart: always
+    networks:
+      - naso-net
+
+  naso-tor-2:
+    build:
+      context: ./infrastructure/tor
+      dockerfile: Dockerfile.tor
+    restart: always
+    networks:
+      - naso-net
+
+  naso-tor-3:
+    build:
+      context: ./infrastructure/tor
+      dockerfile: Dockerfile.tor
+    restart: always
+    networks:
+      - naso-net
+
+  naso-tor-4:
+    build:
+      context: ./infrastructure/tor
+      dockerfile: Dockerfile.tor
+    restart: always
+    networks:
+      - naso-net
+
+  naso-tor-5:
+    build:
+      context: ./infrastructure/tor
+      dockerfile: Dockerfile.tor
+    restart: always
+    networks:
+      - naso-net
+
+  naso-tor-lb:
+    image: haproxy:alpine
+    container_name: naso-tor-cluster
+    restart: always
+    volumes:
+      - ./infrastructure/tor/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - naso-net
+
+  # ... (altri nodi tor qui per brevità)
+
+networks:
+  naso-net:
+    driver: bridge
