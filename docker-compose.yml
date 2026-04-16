@@ -98,18 +98,27 @@ services:
         condition: service_started
       elasticsearch:
         condition: service_healthy
+    volumes:
+      - ./shared:/app/shared
     ports:
       - "8000:8000"
     networks:
       - naso-net
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   worker-pipeline:
     build: ./workers
     container_name: naso-worker-pipeline
     restart: always
     env_file: .env
+    volumes:
+      - ./shared:/app/shared
     depends_on:
       - db
       - redis

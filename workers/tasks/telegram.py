@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-from ..celery_app import celery_app
+from ..sharedcelery_app import celery_app
 from .pipeline import process_potential_leak
 from telethon import TelegramClient
 

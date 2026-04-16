@@ -3,11 +3,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from datetime import timedelta
-from ...database import get_db
-from ...models import User
-from ...core.security import verify_password, create_access_token
-from ...schemas import Token
-from ...config import settings
+from ...shared.database import get_db
+from ...shared.models import User
+from ...shared.core.security import verify_password, create_access_token
+from ...shared.schemas import Token
+from ...shared.config import settings
 
 router = APIRouter()
 

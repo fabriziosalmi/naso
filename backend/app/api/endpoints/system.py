@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
-from ...database import get_db
-from ...models import AuditLog
+from ...shared.database import get_db
+from ...shared.models import AuditLog
 from ..deps import get_current_user
 
 router = APIRouter()

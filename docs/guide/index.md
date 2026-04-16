@@ -1,19 +1,48 @@
-# Introduction
+# Architecture Specification
 
-NASO is an elite forensic framework designed for cybersecurity analysts who require real-time visibility into data breaches and digital exposures.
+NASO (Network Analysis and Security Operations) is engineered for high-fidelity intelligence operations. This document specifies the technical implementation of the core engine.
 
-## Core Mission
+## Asynchronous Core
 
-The framework is built to bridge the gap between simple leak detection and complex threat intelligence by providing:
+The backend is built on an event-driven architecture using **FastAPI**. All database interactions are non-blocking, utilizing the `SQLAlchemy` 2.0 asynchronous API and the `asyncpg` driver.
 
-1.  **Automated Data Ingestion**: Scraping high-risk sectors (Dark Web, Telegram).
-2.  **Contextual Analysis**: Using local AI to understand *intent* and *impact*.
-3.  **Identity Attribution**: Building unified profiles from scattered identifiers.
-4.  **Forensic Integrity**: Ensuring every piece of evidence is immutable and signed.
+### Database Connection Management
+```python
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_size=50,
+    max_overflow=100,
+    pool_pre_ping=True
+)
+```
 
-## Why NASO?
+## Distributed Intelligence Pipeline
 
-Unlike generic monitoring tools, NASO follows a "Draconian Engineering" philosophy:
-- **Zero Simulation**: No stubs, real cryptographic signatures.
-- **Fail-Safe Design**: Circuit breakers and bulkheads protect the core engine.
-- **Privacy-First**: Multi-tenant isolation and strict audit logging.
+The ingestion engine is decoupled from the API layer to ensure horizontal scalability and fault tolerance.
+
+### Task Orchestration
+*   **Broker**: RabbitMQ.
+*   **Workers**: Celery nodes configured with specific concurrency limits to optimize I/O performance during Tor crawling.
+*   **Idempotency**: All processed artifacts are hashed (SHA256) to prevent duplicate analysis and storage.
+
+## Forensic Artifact Management
+
+### Storage Logic
+*   **MinIO**: Stores raw content and full-page screenshots.
+*   **Elasticsearch**: Indexes metadata and extracted snippets for sub-millisecond retrieval.
+
+### Deletion Saga
+The deletion of a tenant triggers a distributed transaction that ensures data consistency across all storage engines:
+1.  Query and delete indices from Elasticsearch.
+2.  Recursive bucket removal from MinIO.
+3.  Relational record pruning in PostgreSQL.
+
+## AI Triage Implementation
+
+NASO utilizes local Large Language Models (LLMs) to perform automated triage.
+
+### Forensic Analysis Logic
+The model evaluates artifacts based on:
+*   **PII Density**: Count and sensitivity of Personally Identifiable Information.
+*   **Credential Validity**: Verification of email:password patterns.
+*   **Vector Classification**: Categorization into Financial, Source Code, or PII sectors.

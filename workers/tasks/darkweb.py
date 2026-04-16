@@ -3,8 +3,8 @@ import asyncio
 import os
 import json
 import logging
-from ..celery_app import celery_app
-from ..utils.stealth_browser import NasoStealthBrowser
+from ..sharedcelery_app import celery_app
+from ..sharedutils.stealth_browser import NasoStealthBrowser
 from .pipeline import process_potential_leak
 
 logger = logging.getLogger("naso-darkweb")

@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..models import AuditLog
+from ..shared.models import AuditLog
 import json
 
 class AuditLogger:

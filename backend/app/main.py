@@ -3,8 +3,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-from .database import engine
-from .config import settings
+from .shared.database import engine
+from .shared.config import settings
 from .api.endpoints import auth, tenants, keywords, leaks, identities, yara, system
 from .core.tracing import setup_tracing
 from .core.exceptions import NasoBaseException, AuthenticationError, AuthorizationError, ResourceNotFoundError
@@ -26,7 +26,15 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
     logger.info("System safely shut down. Async resources released.")
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description="NASO Forensic Engine API - High-performance intelligence framework for real-time threat intelligence and identity correlation.",
+    version="1.1.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
+)
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
