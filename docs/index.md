@@ -2,24 +2,30 @@
 layout: home
 
 hero:
-  name: NASO
-  text: Forensic Intelligence Engine
-  tagline: High-fidelity leak detection, identity correlation framework, and reactive AI co-analyst.
+  name: "NASO ENGINE"
+  text: "Forensic Intelligence OS"
+  tagline: "High-performance data breach monitoring with real-time AI Correlation"
+  image:
+    src: /logo.png
+    alt: NASO Logo
   actions:
     - theme: brand
-      text: Technical Specification
+      text: Get Started
       link: /guide/
     - theme: alt
-      text: GitHub Repository
-      link: https://github.com/fabriziosalmi/naso
+      text: API Reference
+      link: /api/
+    - theme: alt
+      text: SOAR Webhooks
+      link: /guide/soar-and-cti
 
 features:
-  - title: Asynchronous Engine
-    details: Built with FastAPI and SQLAlchemy 2.0 for high-concurrency forensic operations.
-  - title: NASO Co-Analyst
-    details: Native real-time AI assistant capable of streaming response logic and executing back-end forensic tools (search, leaks, dark web probes).
-  - title: Local AI Isolation
-    details: Deep artifact analysis via local LLMs (e.g. Gemma 4) with zero data leakage to external cloud providers.
-  - title: Distributed Sagas
-    details: Ensures eventual consistency during multi-tenant data decommissioning and artifact isolation.
+  - title: Massive Data Scalability
+    details: Async Celery worker-partitioning with OOM-safe streaming algorithms. Crush 100GB datasets seamlessly.
+  - title: Model Context Protocol
+    details: Native MCP capabilities to bind Claude Desktop directly to the PostgreSQL intelligence lake.
+  - title: Babel NLP & Entities
+    details: Extracts Emails, IP, and Cryptowallets while translating Deep Web forums automatically.
+  - title: SOAR Integration
+    details: Fail-fast webhooks to dispatch structured JSON STIX profiles to your SIEM instantly.
 ---

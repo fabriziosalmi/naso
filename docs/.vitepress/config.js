@@ -21,6 +21,8 @@ export default {
         items: [
           { text: "Identity Hub", link: "/guide/identity-hub" },
           { text: "Dark Web Recon", link: "/guide/dark-recon" },
+          { text: "MCP & GenAI", link: "/guide/mcp-integration" },
+          { text: "SOAR & CTI Adapters", link: "/guide/soar-and-cti" },
           { text: "Reporting", link: "/guide/reporting" }
         ]
       }
