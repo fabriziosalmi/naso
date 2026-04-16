@@ -1,7 +1,7 @@
 import asyncio
 from playwright.async_api import async_playwright
 from playwright_stealth import stealth_async
-import random
+import secrets
 
 class NasoStealthBrowser:
     def __init__(self, proxy=None):
@@ -26,7 +26,7 @@ class NasoStealthBrowser:
             
             try:
                 await page.goto(url, wait_until="networkidle", timeout=60000)
-                await asyncio.sleep(random.uniform(2, 4)) # Attesa rendering dinamico
+                await asyncio.sleep(2 + secrets.SystemRandom().random() * 2) # Attesa rendering dinamico
                 
                 content = await page.content()
                 

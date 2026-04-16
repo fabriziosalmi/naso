@@ -1,4 +1,5 @@
-import random
+import secrets
+import tempfile
 import asyncio
 import os
 import json
@@ -34,7 +35,7 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
             
             import time
             screenshot_filename = f"deep_leak_{tenant_id}_{int(time.time())}.png"
-            screenshot_path = f"/tmp/{screenshot_filename}"
+            screenshot_path = os.path.join(tempfile.gettempdir(), screenshot_filename)
             
             content = asyncio.run(stealth_browser.get_content_with_screenshot(url, screenshot_path))
             visited.add(url)
@@ -79,7 +80,7 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
         # Percorso temporaneo per lo screenshot (W)
         import time
         screenshot_filename = f"leak_{tenant_id}_{int(time.time())}.png"
-        screenshot_path = f"/tmp/{screenshot_filename}"
+        screenshot_path = os.path.join(tempfile.gettempdir(), screenshot_filename)
         
         content = asyncio.run(stealth_browser.get_content_with_screenshot(onion_url, screenshot_path))
         
@@ -111,7 +112,7 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
             raise Exception("Empty content or browser failure")
             
     except Exception as e:
-        retry_delay = random.randint(300, 900) # Retry più frequente in dev
+        retry_delay = 300 + secrets.randbelow(601) # Retry più frequente in dev
         logger.warning(json.dumps({
             "event": "darkweb_crawl_retry",
             "url": onion_url,

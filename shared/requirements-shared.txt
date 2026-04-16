@@ -2,7 +2,7 @@ sqlalchemy[asyncio]==2.0.25
 asyncpg==0.29.0
 pydantic[email]==2.5.3
 pydantic-settings==2.1.0
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]>=3.4.0
 passlib[pbkdf2_sha256]==1.7.4
 minio==7.2.3
 elasticsearch[async]==8.12.0
