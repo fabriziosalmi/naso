@@ -383,7 +383,8 @@ const useNasoStore = create((set, get) => ({
       });
       set({ auditLogs: response.data });
     } catch (err) {
-      console.error("Audit log fetch failed");
+      set({ error: "Audit log fetch failed" });
+      console.error("Audit log fetch failed", err);
     }
   },
 
@@ -396,7 +397,8 @@ const useNasoStore = create((set, get) => ({
       });
       set({ graphData: response.data });
     } catch (err) {
-      console.error("Graph fetch failed");
+      set({ error: "Graph fetch failed" });
+      console.error("Graph fetch failed", err);
     }
   },
 
@@ -410,7 +412,8 @@ const useNasoStore = create((set, get) => ({
       });
       return URL.createObjectURL(response.data);
     } catch (err) {
-      console.error("Screenshot fetch failed");
+      set({ error: "Screenshot fetch failed" });
+      console.error("Screenshot fetch failed", err);
       return null;
     }
   },
