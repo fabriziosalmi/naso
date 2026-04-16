@@ -22,9 +22,11 @@ NASO is a high-performance intelligence framework for real-time data breach moni
 *   **Recursive Tor Crawling**: Deep-portal exploration using Playwright Stealth and rotating proxies.
 *   **GitHub/Pastebin Scraping**: Pattern-based scanning for secrets and credentials.
 
-### 2. AI-Driven Triage
-*   **Local LLM Integration**: Triage executed via Gemma-4-E2B-it (local endpoint).
-*   **Forensic Prompting**: Structured analysis of intent, probability, and artifact classification.
+### 2. NASO AI Co-Analyst
+*   **Real-time AI Assistant**: Built-in reactive AI agent utilizing SSE (Server-Sent Events) for high-speed streaming interactions.
+*   **Autonomous Tool Dispatch**: The AI dynamically invokes NASO backend tools (`search_identities`, `dark_web_probe`, `get_leaks`) based on context.
+*   **Investigation Plans**: AI builds and tracks complex threat investigations, managing structured tasks in the database.
+*   **Local LLM Integration**: Triage and chat executed via Local AI (e.g., LM Studio with `gemma-4-e2b-it`) eliminating external data leakage.
 
 ### 3. Identity Correlation
 *   **Master Profile Unification**: Automated merging of fragmented identifiers (emails, usernames, hashes) into unified risk-scored profiles.
@@ -34,21 +36,27 @@ NASO is a high-performance intelligence framework for real-time data breach moni
 
 ### Prerequisites
 *   Docker 24.x+ and Docker Compose v2.x+
-*   Local AI endpoint (LM Studio or similar) listening on port 1234.
+*   Local AI endpoint (LM Studio, Ollama, etc.) listening on port 1234.
 
 ### Execution
 1.  Initialize environment:
     ```bash
     cp .env.example .env
     ```
+    > **Note on AI Networking:** By default, NASO runs in Docker. To reach a local LM Studio instance running on your host machine, the `AI_ENDPOINT` in your `.env` must be explicitly set to `http://host.docker.internal:1234/v1`.
+
 2.  Start the stack:
     ```bash
     docker-compose up -d --build
     ```
-3.  Bootstrap the database:
+3.  Bootstrap the database to create system tenants, admin accounts, and required tables:
     ```bash
     docker exec naso-api python init_db.py
     ```
+
+### Troubleshooting
+*   **Database Tables Missing**: If you encounter errors relating to `investigation_plans` or similar tables not existing, ensure you have successfully executed `python init_db.py` inside the container.
+*   **Vite Dev Server (Frontend)**: If modifying the frontend locally and you encounter a `__HMR_CONFIG_NAME__ is not defined` error, execute a hard refresh in your browser. If it persists, remove the `.vite` cache directory inside `frontend/node_modules/` or downgrade Vite to `6.2.7`.
 
 ## Documentation
 Technical specifications and API references are available in the `/docs` directory, published via VitePress.

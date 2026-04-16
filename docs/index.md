@@ -4,7 +4,7 @@ layout: home
 hero:
   name: NASO
   text: Forensic Intelligence Engine
-  tagline: High-fidelity leak detection and identity correlation framework.
+  tagline: High-fidelity leak detection, identity correlation framework, and reactive AI co-analyst.
   actions:
     - theme: brand
       text: Technical Specification
@@ -16,8 +16,10 @@ hero:
 features:
   - title: Asynchronous Engine
     details: Built with FastAPI and SQLAlchemy 2.0 for high-concurrency forensic operations.
+  - title: NASO Co-Analyst
+    details: Native real-time AI assistant capable of streaming response logic and executing back-end forensic tools (search, leaks, dark web probes).
+  - title: Local AI Isolation
+    details: Deep artifact analysis via local LLMs (e.g. Gemma 4) with zero data leakage to external cloud providers.
   - title: Distributed Sagas
-    details: Ensures eventual consistency during multi-tenant data decommissioning.
-  - title: Local AI Triage
-    details: Deep artifact analysis using Gemma 4 models with zero data leakage to external providers.
+    details: Ensures eventual consistency during multi-tenant data decommissioning and artifact isolation.
 ---
