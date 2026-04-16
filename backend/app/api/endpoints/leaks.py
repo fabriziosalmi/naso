@@ -52,7 +52,10 @@ async def export_massive_dossier(
     result = await db.execute(query)
     leaks = result.scalars().all()
     
-    tenant_name = leaks[0].tenant.name if leaks else "Unknown Tenant"
+    if not leaks:
+        raise HTTPException(status_code=404, detail="Nessun artefatto leak indicizzato per l'esportazione.")
+
+    tenant_name = leaks[0].tenant.name if leaks[0].tenant else "Unknown Tenant"
     
     # 2. Generazione PDF Massiva
     pdf_bytes = ForensicReportGenerator.generate_bulk_pdf(tenant_name, leaks)
@@ -268,8 +271,11 @@ async def get_leak_screenshot(
     import io
     
     MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "naso_storage_admin")
-    MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "change_me_rigorously")
+    MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+    MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+    
+    if not MINIO_ACCESS_KEY or not MINIO_SECRET_KEY:
+        raise HTTPException(status_code=500, detail="Configurazione MinIO mancante. Ambiente corrotto o compromesso.")
     
     minio_client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
     

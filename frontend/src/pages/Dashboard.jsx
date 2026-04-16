@@ -60,7 +60,7 @@ export default function Dashboard({ setViewingScreenshotId }) {
     { name: 'Medium', value: leaks.filter(l => l.severity_score < 50).length, color: '#3b82f6' },
   ].filter(d => d.value > 0), [leaks]);
 
-  const timelineData = useMemo(() => leaks
+  const timelineData = useMemo(() => [...leaks]
     .sort((a, b) => new Date(a.discovered_at) - new Date(b.discovered_at))
     .reduce((acc, l) => {
       const date = new Date(l.discovered_at).toLocaleDateString();
@@ -175,10 +175,19 @@ export default function Dashboard({ setViewingScreenshotId }) {
                 }} 
               />
             ))}
-            {leaks.length === 0 && (
+            {isLoading ? (
+                <TableRow>
+                    <TableCell colSpan={5} className="h-40 text-center text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">
+                       <div className="flex items-center justify-center gap-3">
+                         <div className="w-2 h-2 bg-[#0A84FF] rounded-full animate-ping"></div>
+                         Syncing Intelligence Matrix...
+                       </div>
+                    </TableCell>
+                </TableRow>
+            ) : leaks.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={5} className="h-40 text-center text-zinc-600 font-mono italic text-xs uppercase tracking-[0.3em]">
-                       --- Scrutinizing Data Streams... No Artifacts Detected ---
+                       --- No artifacts detected ---
                     </TableCell>
                 </TableRow>
             )}
