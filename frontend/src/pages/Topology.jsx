@@ -5,7 +5,7 @@ import NetworkGraphPro from '../components/NetworkGraph';
 import useNasoStore from '../store/useNasoStore';
 
 export default function Topology() {
-  const { graphData, fetchGraphData } = useNasoStore();
+  const { graphData, fetchGraphData, isLoading } = useNasoStore();
 
   return (
     <div className="h-[calc(100vh-110px)] flex flex-col gap-5">
@@ -19,7 +19,7 @@ export default function Topology() {
         </Button>
       </div>
       <div className="flex-1 rounded-2xl border border-white/[0.08] bg-[#1C1C1E]/40 overflow-hidden">
-          <NetworkGraphPro data={graphData} />
+          <NetworkGraphPro data={graphData} isLoading={isLoading} />
       </div>
     </div>
   );

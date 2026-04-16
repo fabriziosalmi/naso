@@ -22,22 +22,31 @@ async def get_identity_graph(db: AsyncSession = Depends(get_db), current_user = 
     Query Side (CQRS #5): Visualizzazione ultra-veloce del grafo potenziata (DD).
     """
     # 1. Recupera Nodi Identità
-    identities_query = text("""
-        SELECT id, identifier, risk_score, type, is_protected 
-        FROM identities 
-        WHERE tenant_id = :tenant_id
-    """)
-    ident_result = await db.execute(identities_query, {"tenant_id": current_user.tenant_id})
+    if current_user.role == "admin":
+        identities_query = text("SELECT id, identifier, risk_score, type, is_protected FROM identities")
+        ident_result = await db.execute(identities_query)
+        
+        # 2. Recupera Archi (Connessioni)
+        edges_query = text("SELECT identity_id as source, leak_id as target FROM identity_leaks")
+        edge_result = await db.execute(edges_query)
+    else:
+        identities_query = text("""
+            SELECT id, identifier, risk_score, type, is_protected 
+            FROM identities 
+            WHERE tenant_id = :tenant_id
+        """)
+        ident_result = await db.execute(identities_query, {"tenant_id": current_user.tenant_id})
+        
+        # 2. Recupera Archi (Connessioni)
+        edges_query = text("""
+            SELECT il.identity_id as source, il.leak_id as target
+            FROM identity_leaks il
+            JOIN identities i ON il.identity_id = i.id
+            WHERE i.tenant_id = :tenant_id
+        """)
+        edge_result = await db.execute(edges_query, {"tenant_id": current_user.tenant_id})
+        
     identities = ident_result.mappings().all()
-    
-    # 2. Recupera Archi (Connessioni)
-    edges_query = text("""
-        SELECT il.identity_id as source, il.leak_id as target
-        FROM identity_leaks il
-        JOIN identities i ON il.identity_id = i.id
-        WHERE i.tenant_id = :tenant_id
-    """)
-    edge_result = await db.execute(edges_query, {"tenant_id": current_user.tenant_id})
     edges = edge_result.mappings().all()
     
     # 3. Recupera Metadata Leak per i nodi del grafo

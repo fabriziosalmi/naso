@@ -3,7 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 
 const EMPTY_GRAPH = { nodes: [], links: [] };
 
-const NetworkGraphPro = ({ data }) => {
+const NetworkGraphPro = ({ data, isLoading }) => {
   const fgRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -29,9 +29,11 @@ const NetworkGraphPro = ({ data }) => {
 
   // Zoom to fit when data or dimensions change
   useEffect(() => {
+    let t;
     if (fgRef.current && graphData.nodes.length > 0) {
-      setTimeout(() => fgRef.current?.zoomToFit(400, 60), 300);
+      t = setTimeout(() => fgRef.current?.zoomToFit(400, 60), 300);
     }
+    return () => { if (t) clearTimeout(t); };
   }, [data, dimensions]);
 
   const graphData = (data?.nodes?.length > 0) ? data : EMPTY_GRAPH;
@@ -88,8 +90,13 @@ const NetworkGraphPro = ({ data }) => {
         </div>
       )}
 
-      {/* Empty state */}
-      {isEmpty ? (
+      {/* State Machine */}
+      {isLoading ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-[#0A84FF]">
+          <div className="w-8 h-8 rounded-full border-2 border-transparent border-t-[#0A84FF] border-r-[#0A84FF] animate-spin shadow-[0_0_15px_rgba(10,132,255,0.4)]"></div>
+          <p className="text-[12px] font-bold tracking-[0.2em] uppercase">Mapping Topology...</p>
+        </div>
+      ) : isEmpty ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-zinc-600">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="opacity-30">
             <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
