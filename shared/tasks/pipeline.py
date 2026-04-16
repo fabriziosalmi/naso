@@ -35,6 +35,8 @@ from shared.domain.services.correlation import IdentityCorrelationService
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from shared.utils.worker_tracing import setup_worker_tracing
+from shared.utils.babel_node import babel_node
+from shared.domain.services.cti_adapters import CTIAdapters
 
 # Logger Strutturato (#28)
 logger = logging.getLogger("naso-pipeline")
@@ -81,6 +83,30 @@ def process_potential_leak(self, hit_data, raw_content):
     except Exception as e:
         logger.error(f"Failed to refresh YARA rules: {e}")
 
+    # 1. Babel Node Pre-Processing (NLP & NER)
+    try:
+        babel_result = babel_node.process_leak(raw_content)
+        if "metadata_json" not in hit_data:
+            hit_data["metadata_json"] = {}
+        hit_data["metadata_json"]["babel"] = babel_result
+        
+        # CTI Enrichment on Bitcoin wallets
+        btc_wallets = babel_result.get("extracted_entities", {}).get("btc_wallets", [])
+        if btc_wallets:
+            btc_enrichment = asyncio.run(CTIAdapters.fetch_btc_balance(btc_wallets[0])) # Limit to top hit for speed
+            if btc_enrichment:
+                hit_data["metadata_json"]["cti_btc"] = btc_enrichment
+                
+        # ThreatFox CTI Enrichment on IP
+        ips = babel_result.get("extracted_entities", {}).get("ips", [])
+        if ips:
+            tf_enrichment = asyncio.run(CTIAdapters.fetch_threatfox_ioc(ips[0]))
+            if tf_enrichment:
+                hit_data["metadata_json"]["cti_threatfox"] = tf_enrichment
+                
+    except Exception as e:
+        logger.error(f"[PIPELINE] Babel/CTI pass failed: {e}")
+
     # 1. Analisi YARA
     yara_matches, yara_score = analyzer.analyze_text(raw_content)
     if "metadata_json" not in hit_data:
@@ -106,9 +132,23 @@ def process_potential_leak(self, hit_data, raw_content):
         "event": "leak_processed",
         "tenant_id": hit_data["tenant_id"],
         "source": hit_data["source"],
-        "severity": hit_data["severity_score"],
+        "severity": hit_data.get("severity_score", 0),
         "idempotency_key": idempotency_key
     }))
+    
+    # 4. SOAR Integration & Automated Response (SIEM)
+    if hit_data.get("severity_score", 0) >= 90:
+        try:
+            webhook_url = os.getenv("SOAR_WEBHOOK_URL", "http://soar-mock-url/api/v1/alerts")
+            if webhook_url and webhook_url != "http://soar-mock-url/api/v1/alerts":
+                import requests
+                stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
+                requests.post(webhook_url, json=stix_payload, timeout=3)
+                logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
+            else:
+                logger.info("[SOAR] Simulated Webhook Fire (CRITICAL SEVERITY DETECTED)")
+        except Exception as e:
+            logger.error(f"[SOAR] Webhook dispatch failed: {e}")
 
     # 4. Storage & Indexing with Circuit Breaker
     try:
