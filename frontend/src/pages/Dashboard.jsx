@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Shield, AlertTriangle, Users, Cpu, Activity, PieChart as PieChartIcon, Target, Download, History, Code2, MessageSquare, Globe, Image as ImageIcon } from 'lucide-react';
+import { Shield, AlertTriangle, Users, Cpu, Activity, PieChart as PieChartIcon, Target, Download, History, Code2, MessageSquare, Globe, Image as ImageIcon, Database } from 'lucide-react';
 import useNasoStore from '../store/useNasoStore';
 import { StatCard } from '../components/ui/StatCard';
 import { useNavigate } from 'react-router-dom';
