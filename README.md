@@ -7,10 +7,9 @@
   </p>
 
   <p>
-    <a href="https://github.com/fabriziosalmi/naso/actions"><img src="https://img.shields.io/github/actions/workflow/status/fabriziosalmi/naso/build.yml?style=for-the-badge" alt="Build Status"></a>
-    <a href="https://github.com/fabriziosalmi/naso/network/members"><img src="https://img.shields.io/github/forks/fabriziosalmi/naso?style=for-the-badge" alt="Forks"></a>
-    <a href="https://github.com/fabriziosalmi/naso/stargazers"><img src="https://img.shields.io/github/stars/fabriziosalmi/naso?style=for-the-badge" alt="Stars"></a>
-    <a href="https://github.com/fabriziosalmi/naso/blob/main/LICENSE"><img src="https://img.shields.io/github/license/fabriziosalmi/naso?style=for-the-badge" alt="License"></a>
+    <a href="https://github.com/fabriziosalmi/naso/actions"><img src="https://img.shields.io/github/actions/workflow/status/fabriziosalmi/naso/build.yml?style=flat-square" alt="Build Status"></a>
+    <a href="https://github.com/fabriziosalmi/naso/network/members"><img src="https://img.shields.io/github/forks/fabriziosalmi/naso?style=flat-square" alt="Forks"></a>
+    <a href="https://github.com/fabriziosalmi/naso/blob/main/LICENSE"><img src="https://img.shields.io/github/license/fabriziosalmi/naso?style=flat-square" alt="License"></a>
   </p>
 </div>
 
@@ -18,7 +17,7 @@
 
 NASO is a **Data-Sovereign, High-Performance Intelligence Engine** designed exclusively for enterprise SecOps and Red Teams. It integrates async processing, strict Zero-Trust paradigms, and Local AI (Model Context Protocol) to seamlessly analyze massive dark-web data leaks without exposing PII to external vendors.
 
-## 🌌 Core Architecture
+## Core Architecture
 NASO leverages a partitioned, horizontally scalable backend via Celery Workers separated by task weight (Recon vs Streaming).
 
 ```mermaid
@@ -51,7 +50,7 @@ graph TD
     H[MCP Local Agent]:::intel -->|Direct Access| B
 ```
 
-## 🔥 Flagship Features
+## Flagship Features
 
 | Capability | Description |
 |---|---|
@@ -62,7 +61,7 @@ graph TD
 | **OPSEC Fingerprinting** | Defensive crawling with headless Playwright. Spoofer engine bypasses DDoS-Guard and WAFs with generative canvases. |
 | **Fail-Fast Security** | Brutal zero-fallback configuration. No hardcoded credentials to ensure compliance with military deployment schemas. |
 
-## 🚀 Quick Deployment
+## Quick Deployment
 
 NASO relies strictly on `.env` bindings. Before launching, adapt `docker-compose.yml` specs or just run the fast local environment.
 
@@ -78,13 +77,13 @@ docker-compose up -d --build
 docker exec naso-api python init_db.py
 ```
 
-## 🧠 Glassmorphism UI
+## Glassmorphism UI
 Run the ultra-responsive, GPU-accelerated frontend crafted for CTI analysts.
 Navigate to `http://localhost:5173`. Contains real-time Neural Topology Maps, Dark Recon Dashboards, and full SSE streaming for the Co-Analyst.
 
 > **Local AI Note**: If linking an internal AI model like Ollama or LM Studio, verify your `.env` lists `AI_ENDPOINT=http://host.docker.internal:1234/v1` for Docker internal routing.
 
-## 📚 Technical Documentation
+## Technical Documentation
 Explore the full developer and agent orchestration specs in the `docs/` VitePress suite:
 * [MCP Server Integration](/docs/guide/mcp-integration)
 * [SOAR Architectures & CTI Setup](/docs/guide/soar-and-cti)
