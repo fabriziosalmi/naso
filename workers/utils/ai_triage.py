@@ -6,11 +6,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential_jitter, retry_i
 
 logger = logging.getLogger("naso-ai")
 
-AI_URL = os.getenv("AI_ENDPOINT", "http://192.168.100.7:1234/v1")
+AI_URL = os.getenv("AI_ENDPOINT", "http://host.docker.internal:1234/v1")
 MODEL = os.getenv("AI_MODEL", "google/gemma-4-E2B-it")
 
 # Global HTTP client for persistent connection pooling (Mission Critical Performance)
-ai_client = httpx.AsyncClient(timeout=60.0, limits=httpx.Limits(max_keepalive_connections=20, max_connections=50))
+ai_client = httpx.AsyncClient(timeout=90.0, limits=httpx.Limits(max_keepalive_connections=20, max_connections=50))
 
 class AIServiceError(Exception):
     """Eccezione specifica per fallimenti del servizio AI."""
@@ -28,7 +28,26 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
     Implementa Graceful Degradation (#15): se l'AI fallisce dopo i retry, 
     il sistema declassa il leak ma non blocca la pipeline.
     """
-    prompt = f"Analizza questo leak forense. Pensa prima di rispondere. Contiene dati sensibili reali? \n\n {content_snippet[:2000]}"
+    prompt = f"""
+    ANALISI FORENSE NASO v1.0
+    Ruolo: Esperto Threat Intelligence & Data Breach Analyst
+    Task: Valuta se il contenuto seguente è un leak di dati sensibili REALI.
+    
+    CRITERI DI VALIDAZIONE:
+    - Presenza di credenziali (email:password)
+    - Dati finanziari (CC, IBAN)
+    - Dati PII (Documenti, Indirizzi, Telefoni)
+    - Codice sorgente proprietario o segreti (API Keys)
+    
+    Rispondi in questo formato:
+    VALIDO: [SI/NO]
+    SEVERITA: [0-100]
+    CATEGORIA: [CREDENTIALS/FINANCIAL/PII/SOURCE/OTHER]
+    MOTIVAZIONE: Breve spiegazione tecnica.
+    
+    CONTENUTO:
+    {content_snippet[:2500]}
+    """
     messages = [{"role": "user", "content": prompt}]
     
     try:

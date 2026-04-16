@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     CRITICAL_SCORE_THRESHOLD: int = 80
     
     # Local AI - Gemma 4 Elite
-    AI_ENDPOINT: str = "http://192.168.100.7:1234/v1"
+    AI_ENDPOINT: str = "http://host.docker.internal:1234/v1"
     AI_MODEL: str = "google/gemma-4-E2B-it"
     AI_ENABLE_THINKING: bool = True
 
