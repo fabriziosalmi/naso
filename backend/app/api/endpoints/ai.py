@@ -201,7 +201,9 @@ async def execute_tool(
     """Execute a tool call and return structured result."""
     try:
         if tool_name == "search_identities":
-            q = select(Identity).where(Identity.tenant_id == current_user.tenant_id)
+            q = select(Identity)
+            if current_user.role != "admin":
+                q = q.where(Identity.tenant_id == current_user.tenant_id)
             if tool_args.get("identifier"):
                 q = q.where(Identity.identifier.ilike(f"%{tool_args['identifier']}%"))
             if tool_args.get("min_risk") is not None:

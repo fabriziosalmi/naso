@@ -484,13 +484,17 @@ export default function AiAssistant() {
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+              }}
               onKeyDown={handleKeyDown}
               placeholder={`Ask NASO Co-Analyst... ${activePlan ? `(Investigation: ${activePlan.title})` : '(no investigation selected)'}`}
               rows={1}
               disabled={isAiStreaming}
-              className="flex-1 bg-transparent text-[13px] text-white placeholder-zinc-600 focus:outline-none resize-none leading-relaxed min-h-[22px] max-h-[120px] overflow-y-auto disabled:opacity-50"
-              style={{ scrollbarWidth: 'none' }}
+              className="flex-1 bg-transparent text-[13px] text-white placeholder-zinc-600 focus:outline-none resize-none leading-relaxed min-h-[22px] max-h-[160px] py-1 disabled:opacity-50"
+              style={{ overflowY: 'auto' }}
             />
             <button
               onClick={handleSend}
