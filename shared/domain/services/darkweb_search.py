@@ -41,4 +41,4 @@ class DarkWebSearchService:
                 return results
         except Exception as e:
             logger.error(f"[DARK SEARCH] Error during Ahmia search: {e}")
-            return []
+            raise ValueError(f"Dark Web node unreachable: {str(e)}")

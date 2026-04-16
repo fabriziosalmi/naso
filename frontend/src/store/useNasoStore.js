@@ -341,7 +341,7 @@ const useNasoStore = create((set, get) => ({
     const { token } = get();
     if (!token) return set({ error: 'Authentication required' });
     if (!query || !query.trim()) return set({ error: 'Enter a search query before launching probe' });
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, darkWebResults: [] });
     try {
       const response = await axios.get('/leaks/recon/darkweb', {
         params: { q: query.trim() },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +6,13 @@ import { Radar, ShieldAlert, ExternalLink, Loader2 } from 'lucide-react';
 import useNasoStore from '../store/useNasoStore';
 
 export default function DarkRecon({ reconQuery, setReconQuery }) {
-  const { darkWebResults, searchDarkWeb, isLoading } = useNasoStore();
+  const { darkWebResults, searchDarkWeb, isLoading, error } = useNasoStore();
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const handleSearch = () => {
+    setHasSearched(true);
+    searchDarkWeb(reconQuery);
+  };
 
   return (
     <div className="space-y-8">
@@ -33,13 +39,13 @@ export default function DarkRecon({ reconQuery, setReconQuery }) {
                     onChange={(e) => setReconQuery(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && reconQuery && !isLoading) {
-                        searchDarkWeb(reconQuery);
+                        handleSearch();
                       }
                     }}
                     disabled={isLoading}
                     className="flex-1 bg-transparent text-[14px] text-white placeholder:text-zinc-600 outline-none"
                 />
-                <Button disabled={isLoading || !reconQuery} onClick={() => searchDarkWeb(reconQuery)} className="bg-[#0A84FF] hover:bg-[#007AFF] text-white font-medium text-[13px] px-6 rounded-full h-10 shadow-sm">
+                <Button disabled={isLoading || !reconQuery} onClick={handleSearch} className="bg-[#0A84FF] hover:bg-[#007AFF] text-white font-medium text-[13px] px-6 rounded-full h-10 shadow-sm">
                     {isLoading ? <Loader2 size={15} className="animate-spin" /> : 'Launch Probe'}
                 </Button>
             </div>
@@ -51,6 +57,26 @@ export default function DarkRecon({ reconQuery, setReconQuery }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="p-4 rounded-xl border border-[#FF453A]/30 bg-[#FF453A]/10 text-[#FF453A] flex items-center gap-3">
+          <ShieldAlert size={20} />
+          <div>
+            <p className="font-semibold text-[13px] uppercase tracking-wider">Node Offline</p>
+            <p className="text-[12px]">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && hasSearched && darkWebResults.length === 0 && !error && (
+          <div className="p-10 border border-white/[0.05] bg-black/20 rounded-2xl flex flex-col items-center justify-center text-zinc-500">
+             <Radar size={40} className="opacity-30 mb-4" strokeWidth={1.5} />
+             <p className="text-[14px] font-medium tracking-wide uppercase text-white">No Intel Found</p>
+             <p className="text-[12px] mt-2">The target probe yielded no dark web artifacts for this signature.</p>
+          </div>
+      )}
 
       {darkWebResults.length > 0 && (
           <div className="space-y-4">
