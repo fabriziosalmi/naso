@@ -64,6 +64,22 @@ const useNasoStore = create((set, get) => ({
   },
 
   // Identity Actions (Q)
+  addIdentity: async (identifier, type) => {
+    const { token } = get();
+    if (!token) return set({ error: 'Auth token missing' });
+    set({ isLoading: true });
+    try {
+      await axios.post('/identities/', { identifier, type }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      get().fetchIdentities();
+      get().fetchAuditLogs();
+      set({ isLoading: false });
+    } catch (err) {
+      set({ error: 'Errore aggiunta identità', isLoading: false });
+    }
+  },
+  
   fetchIdentities: async (params = {}) => {
     const { token } = get();
     if (!token) return;
@@ -102,6 +118,7 @@ const useNasoStore = create((set, get) => ({
         { headers: { Authorization: `Bearer ${token}` } }
       );
       get().fetchIdentities();
+      get().fetchAuditLogs();
       if (get().selectedIdentityInsights?.identity.id === identityId) {
         get().fetchIdentityInsights(identityId);
       }
@@ -121,6 +138,7 @@ const useNasoStore = create((set, get) => ({
         headers: { Authorization: `Bearer ${token}` }
       });
       set({ darkWebResults: response.data, isLoading: false });
+      get().fetchAuditLogs();
     } catch (err) {
       set({ error: 'Ricerca Dark Web fallita', isLoading: false });
     }
@@ -141,12 +159,28 @@ const useNasoStore = create((set, get) => ({
       link.setAttribute('download', 'NASO-FULL-DOSSIER.pdf');
       document.body.appendChild(link);
       link.click();
+      get().fetchAuditLogs();
     } catch (err) {
       set({ error: 'Esportazione dossier fallita' });
     }
   },
 
   // System & Compliance Actions (#10)
+  updateProfile: async (email) => {
+    const { token } = get();
+    if (!token) return set({ error: 'Auth token missing' });
+    set({ isLoading: true });
+    try {
+      await axios.put('/users/me', { email }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      get().fetchAuditLogs();
+      set({ isLoading: false });
+    } catch (err) {
+      set({ error: 'Errore aggiornamento profilo', isLoading: false });
+    }
+  },
+
   fetchAuditLogs: async () => {
     const { token } = get();
     if (!token) return;
@@ -188,7 +222,8 @@ const useNasoStore = create((set, get) => ({
     }
   },
 
-  clearSelectedIdentity: () => set({ selectedIdentityInsights: null })
+  clearSelectedIdentity: () => set({ selectedIdentityInsights: null }),
+  clearError: () => set({ error: null })
 }));
 
 export default useNasoStore;

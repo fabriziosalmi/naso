@@ -32,8 +32,10 @@
     @apply border-border;
   }
   body {
-    @apply bg-[#020203] text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-[#000000] text-zinc-100 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
   }
 }
@@ -44,59 +46,6 @@
       linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
     background-size: 40px 40px;
-  }
-  
-  .text-naso-accent {
-    color: #3b82f6;
-    text-shadow: 0 0 15px rgba(59,130,246,0.5);
-  }
-  
-  .bg-naso-accent {
-    background-color: #3b82f6;
-  }
-  
-  .border-naso-accent {
-    border-color: #3b82f6;
-  }
-  
-  .shadow-naso-glow {
-    box-shadow: 0 0 30px rgba(59,130,246,0.2);
-  }
-
-  .naso-glass {
-    @apply bg-white/[0.02] backdrop-blur-xl border border-white/5;
-  }
-
-  /* Scanline Animation */
-  .scanline {
-    width: 100%;
-    height: 100px;
-    z-index: 10;
-    background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(59, 130, 246, 0.05) 50%, rgba(0, 0, 0, 0) 100%);
-    opacity: 0.1;
-    position: absolute;
-    bottom: 100%;
-    animation: scanline 10s linear infinite;
-  }
-
-  @keyframes scanline {
-    0% { bottom: 100%; }
-    100% { bottom: -100px; }
-  }
-
-  /* Glitch Text Effect */
-  .glitch {
-    position: relative;
-  }
-  
-  .glitch::before,
-  .glitch::after {
-    content: attr(data-text);
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
   }
 }
 

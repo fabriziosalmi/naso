@@ -10,6 +10,7 @@ import {
   Globe,
   MessageSquare,
   Loader2,
+  TrendingDown,
   TrendingUp,
   PieChart as PieChartIcon,
   ChevronRight,
@@ -47,7 +48,8 @@ import {
   Target,
   Crosshair,
   ShieldAlert,
-  Chrome
+  Code2,
+  Radar
 } from 'lucide-react';
 import {
   PieChart,
@@ -90,34 +92,8 @@ import NetworkGraphPro from './components/NetworkGraph';
 
 // --- Tactical Components ---
 
-const TacticalOverlay = () => (
-  <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
-    <div className="absolute top-0 left-0 w-full h-1 bg-naso-accent/20"></div>
-    <div className="absolute bottom-0 left-0 w-full h-1 bg-naso-accent/20"></div>
-    <div className="absolute top-0 left-0 w-1 h-full bg-naso-accent/20"></div>
-    <div className="absolute top-0 right-0 w-1 h-full bg-naso-accent/20"></div>
-    
-    {/* Corner Brackets */}
-    <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-naso-accent/40"></div>
-    <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-naso-accent/40"></div>
-    <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-naso-accent/40"></div>
-    <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-naso-accent/40"></div>
-    
-    <div className="scanline"></div>
-    
-    {/* Tactical Readouts */}
-    <div className="absolute top-24 left-8 space-y-4 opacity-40">
-        <div className="flex flex-col gap-1">
-            <span className="text-[8px] font-black tracking-[0.3em] text-naso-accent uppercase">Grid Status</span>
-            <span className="text-[10px] font-mono text-white">SECURED_NODE_ALFA_7</span>
-        </div>
-        <div className="flex flex-col gap-1">
-            <span className="text-[8px] font-black tracking-[0.3em] text-naso-accent uppercase">Encryption</span>
-            <span className="text-[10px] font-mono text-white">AES-256-GCM / PBKDF2</span>
-        </div>
-    </div>
-  </div>
-);
+// Removed TacticalOverlay completely to provide clean SaaS look
+const TacticalOverlay = () => null;
 
 const TerminalLog = ({ logs }) => {
   const scrollRef = useRef();
@@ -126,28 +102,23 @@ const TerminalLog = ({ logs }) => {
   }, [logs]);
 
   return (
-    <div className="bg-black/60 border border-white/5 rounded-xl p-4 font-mono text-[10px] h-48 flex flex-col overflow-hidden naso-glass">
-      <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/5">
+    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 font-mono text-xs h-48 flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800/60">
         <div className="flex items-center gap-2">
-            <TerminalIcon size={12} className="text-naso-accent" />
-            <span className="font-black uppercase tracking-widest text-zinc-500">Live Operations Feed</span>
-        </div>
-        <div className="flex gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-500/50"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-yellow-500/50"></div>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></div>
+            <TerminalIcon size={14} className="text-zinc-500" />
+            <span className="font-semibold text-zinc-400">System Logs</span>
         </div>
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-1 scrollbar-hide">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-1.5 scrollbar-hide text-[11px]">
         {logs.map((log, i) => (
-          <div key={i} className="flex gap-3 opacity-80 hover:opacity-100 transition-opacity">
-            <span className="text-naso-accent font-bold">[{log.time}]</span>
-            <span className={log.type === 'error' ? 'text-red-400' : log.type === 'warn' ? 'text-yellow-400' : 'text-emerald-400'}>
+          <div key={i} className="flex gap-3 text-zinc-400 hover:text-zinc-300 transition-colors">
+            <span className="text-zinc-600">[{log.time}]</span>
+            <span className={log.type === 'error' ? 'text-red-400' : log.type === 'warn' ? 'text-amber-400' : 'text-zinc-300'}>
                 {log.msg}
             </span>
           </div>
         ))}
-        {logs.length === 0 && <div className="text-zinc-700 italic">Awaiting telemetry...</div>}
+        {logs.length === 0 && <div className="text-zinc-600">Awaiting telemetry...</div>}
       </div>
     </div>
   );
@@ -228,51 +199,47 @@ const ScreenshotLightbox = ({ leakId, onClose }) => {
 };
 
 const NotificationItem = ({ alert }) => (
-  <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-naso-accent/30 transition-all group cursor-pointer relative overflow-hidden naso-glass">
-    <div className={`absolute left-0 top-0 w-1.5 h-full ${alert.severity_score >= 80 ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-naso-accent'}`}></div>
+  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer relative overflow-hidden">
     <div className="flex gap-4">
-      <div className={`p-3 rounded-xl ${alert.severity_score >= 80 ? 'bg-red-500/10 text-red-500' : 'bg-naso-accent/10 text-naso-accent'}`}>
-        {alert.severity_score >= 80 ? <AlertOctagon size={20} /> : <Zap size={20} />}
+      <div className={`p-2 rounded-lg ${alert.severity_score >= 80 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}`}>
+        {alert.severity_score >= 80 ? <AlertOctagon size={16} /> : <Zap size={16} />}
       </div>
-      <div className="flex-1 space-y-2">
+      <div className="flex-1 space-y-1">
         <div className="flex justify-between items-start">
-          <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${alert.severity_score >= 80 ? 'text-red-500' : 'text-naso-accent'}`}>
+          <p className={`text-xs font-semibold ${alert.severity_score >= 80 ? 'text-red-400' : 'text-blue-400'}`}>
             {alert.severity_score >= 80 ? 'Critical Breach' : 'Intelligence Match'}
           </p>
-          <span className="text-[9px] font-mono text-zinc-500">{new Date(alert.discovered_at).toLocaleTimeString()}</span>
+          <span className="text-[10px] text-zinc-500">{new Date(alert.discovered_at).toLocaleTimeString()}</span>
         </div>
-        <p className="text-xs text-zinc-300 font-medium leading-relaxed">
-          Artifact identified from <span className="text-white font-black italic">{alert.source}</span>. AI Confidence: 99.4%.
+        <p className="text-xs text-zinc-400">
+          Artifact identified from <span className="text-zinc-200 font-medium">{alert.source}</span>.
         </p>
       </div>
     </div>
   </div>
 );
 
-const StatCard = ({ title, value, icon: Icon, description, trend, trendValue, color = 'naso-accent' }) => (
-  <Card className="relative group overflow-hidden bg-card/40 backdrop-blur-2xl border-white/5 transition-all duration-500 hover:border-naso-accent/40 shadow-2xl naso-glass">
-    <div className={`absolute -right-4 -bottom-4 p-8 opacity-[0.02] group-hover:opacity-[0.06] transition-opacity duration-700 pointer-events-none text-${color}`}>
-      <Icon size={120} strokeWidth={1} />
-    </div>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 flex items-center gap-2">
-        <div className={`w-1.5 h-1.5 bg-${color} rounded-full animate-pulse`}></div>
+const StatCard = ({ title, value, icon: Icon, description, trend, trendValue, color = 'blue-500' }) => (
+  <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] shadow-sm relative overflow-hidden rounded-2xl transition-all duration-300 hover:bg-[#1C1C1E]/80">
+    <CardHeader className="flex flex-row items-center justify-between pb-2">
+      <CardTitle className="text-[13px] font-medium text-zinc-400">
         {title}
       </CardTitle>
-      <div className={`p-2.5 rounded-xl bg-white/5 group-hover:bg-${color}/10 transition-all duration-500`}>
-        <Icon className={`h-4 w-4 text-${color}`} />
+      <div className="p-1.5 rounded-full bg-white/[0.04]">
+        <Icon className={`h-4 w-4 text-zinc-300`} strokeWidth={1.5} />
       </div>
     </CardHeader>
     <CardContent>
-      <div className="flex items-baseline gap-3">
-        <div className="text-5xl font-black tracking-tighter drop-shadow-2xl text-white">{value}</div>
+      <div className="flex items-baseline gap-2">
+        <div className="text-3xl font-semibold tracking-tight text-white mb-1">{value}</div>
         {trend && (
-          <Badge variant="outline" className={`text-[10px] font-black py-0 px-2 ${trend === 'up' ? 'text-red-500 border-red-500/20 bg-red-500/5' : 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5'}`}>
-            {trend === 'up' ? '▲' : '▼'} {trendValue}%
-          </Badge>
+          <span className={`flex items-center text-[12px] font-medium px-1.5 py-0.5 rounded-md ${trend === 'up' ? 'text-[#FF453A] bg-[#FF453A]/10' : 'text-[#32D74B] bg-[#32D74B]/10'}`}>
+            {trend === 'up' ? <TrendingUp size={12} className="mr-1" strokeWidth={2.5}/> : <TrendingDown size={12} className="mr-1" strokeWidth={2.5}/>} 
+            {trendValue}%
+          </span>
         )}
       </div>
-      <p className="text-[9px] text-zinc-500 mt-4 font-black uppercase tracking-[0.2em] opacity-80">
+      <p className="text-[11px] text-zinc-500">
         {description}
       </p>
     </CardContent>
@@ -280,55 +247,40 @@ const StatCard = ({ title, value, icon: Icon, description, trend, trendValue, co
 );
 
 const LeakRow = ({ leak, onInspect }) => (
-  <TableRow className="group border-white/[0.02] hover:bg-white/[0.03] transition-colors h-20">
-    <TableCell className="pl-8">
+  <TableRow className="border-b border-white/[0.05] hover:bg-white/[0.03] transition-colors">
+    <TableCell className="font-mono text-[11px] text-zinc-400">
+      {leak.id.slice(0,12).toUpperCase()}
+    </TableCell>
+    <TableCell>
       <div className="flex items-center gap-3">
-        <div className="w-1.5 h-1.5 rounded-full bg-naso-accent animate-pulse"></div>
-        <div className="font-mono text-[10px] bg-white/5 text-zinc-400 px-3 py-1.5 rounded-lg border border-white/5 group-hover:border-naso-accent/30 group-hover:text-white transition-all">
-          {leak.id.slice(0,12).toUpperCase()}
+        <div className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.08]">
+          {leak.source.toLowerCase().includes('github') && <Code2 size={13} className="text-zinc-300" strokeWidth={1.5} />}
+          {leak.source.toLowerCase().includes('telegram') && <MessageSquare size={13} className="text-[#0A84FF]" strokeWidth={1.5} />}
+          {leak.source.toLowerCase().includes('darkweb') && <Shield size={13} className="text-purple-400" strokeWidth={1.5} />}
+          {!['github', 'telegram', 'darkweb'].some(s => leak.source.toLowerCase().includes(s)) && <Globe size={13} className="text-zinc-300" strokeWidth={1.5} />}
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[13px] font-medium text-white tracking-tight">{leak.source.split(':')[0]}</span>
         </div>
       </div>
     </TableCell>
     <TableCell>
-      <div className="flex items-center gap-4">
-        <div className="p-2.5 rounded-xl bg-zinc-900 border border-white/5 shadow-inner">
-          {leak.source.toLowerCase().includes('github') && <Github size={18} className="text-zinc-400" />}
-          {leak.source.toLowerCase().includes('telegram') && <MessageSquare size={18} className="text-blue-400" />}
-          {leak.source.toLowerCase().includes('darkweb') && <Shield size={18} className="text-purple-400" />}
-          {!['github', 'telegram', 'darkweb'].some(s => leak.source.toLowerCase().includes(s)) && <Globe size={18} className="text-naso-accent" />}
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-black text-white uppercase tracking-tight">{leak.source.split(':')[0]}</span>
-          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">{leak.source.split(':')[1] || 'Primary Stream'}</span>
-        </div>
-      </div>
+      <Badge variant="outline" className={`text-[10px] font-medium border-white/10 ${leak.severity_score >= 80 ? 'text-[#FF453A] bg-[#FF453A]/10' : leak.severity_score >= 50 ? 'text-orange-400 bg-orange-400/10' : 'text-[#32D74B] bg-[#32D74B]/10'}`}>
+        Score: {leak.severity_score}
+      </Badge>
     </TableCell>
-    <TableCell>
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center w-32">
-          <span className="text-[8px] font-black text-zinc-500 tracking-tighter uppercase">Threat Probability</span>
-          <span className={`text-[10px] font-mono font-black ${leak.severity_score >= 80 ? 'text-red-500' : 'text-naso-accent'}`}>{leak.severity_score}%</span>
-        </div>
-        <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden p-[1px]">
-          <div 
-            className={`h-full rounded-full transition-all duration-1000 ${leak.severity_score >= 80 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : leak.severity_score >= 50 ? 'bg-orange-500' : 'bg-naso-accent'}`}
-            style={{ width: `${leak.severity_score}%` }}
-          ></div>
-        </div>
-      </div>
+    <TableCell className="max-w-[200px] truncate text-[12px] text-zinc-400">
+      {leak.content_snippet ? leak.content_snippet : 'Encrypted Blob'}
     </TableCell>
-    <TableCell className="max-w-[300px] truncate text-[11px] text-zinc-400 font-mono italic">
-      {leak.content_snippet ? `"${leak.content_snippet}"` : '<encrypted_forensic_blob>'}
-    </TableCell>
-    <TableCell className="text-right pr-8">
-      <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+    <TableCell className="text-right">
+      <div className="flex items-center justify-end gap-2">
         {leak.screenshot_path && (
-          <Button onClick={() => onInspect(leak.id, true)} variant="ghost" size="icon" className="h-10 w-10 text-naso-accent hover:bg-naso-accent/10 rounded-xl border border-transparent hover:border-naso-accent/20">
-            <ImageIcon size={18} />
+          <Button onClick={() => onInspect(leak.id, true)} variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full">
+            <ImageIcon size={14} strokeWidth={1.5} />
           </Button>
         )}
-        <Button onClick={() => onInspect(leak.id)} className="h-10 px-6 text-[10px] font-black uppercase tracking-[0.2em] bg-naso-accent hover:bg-naso-accent/80 text-white shadow-lg shadow-naso-accent/30 rounded-xl">
-          Initiate Recon
+        <Button onClick={() => onInspect(leak.id)} variant="outline" size="sm" className="h-7 text-[11px] font-medium border-white/10 text-zinc-300 hover:text-white hover:bg-white/10 bg-transparent rounded-full px-3">
+          Inspect
         </Button>
       </div>
     </TableCell>
@@ -343,7 +295,8 @@ export default function App() {
     exportMassiveDossier,
     selectedIdentityInsights, fetchIdentityInsights, clearSelectedIdentity,
     toggleIdentityProtection,
-    isLoading, systemStatus, fetchSystemStatus, error 
+    isLoading, systemStatus, fetchSystemStatus, error, clearError,
+    addIdentity, updateProfile
   } = useNasoStore();
 
   const [activeView, setActiveView] = useState('dashboard');
@@ -351,6 +304,14 @@ export default function App() {
   const [viewingScreenshotId, setViewingScreenshotId] = useState(null);
   const [reconQuery, setReconQuery] = useState('');
   const [terminalLogs, setTerminalLogs] = useState([]);
+
+  // UI state for modals
+  const [isAddIdentityOpen, setIsAddIdentityOpen] = useState(false);
+  const [newIdentityIdentifier, setNewIdentityIdentifier] = useState('');
+  const [newIdentityType, setNewIdentityType] = useState('person');
+
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editProfileEmailState, setEditProfileEmailState] = useState('f.salmi@naso-engine.io');
 
   // Mock terminal logs effect
   useEffect(() => {
@@ -410,149 +371,146 @@ export default function App() {
     <div className="flex h-screen bg-[#020203] text-zinc-100 overflow-hidden font-sans selection:bg-naso-accent/30 selection:text-white relative">
       <TacticalOverlay />
       
-      <aside className="w-72 bg-black/60 backdrop-blur-3xl border-r border-white/5 flex flex-col relative z-20">
-        <div className="p-10 flex flex-col gap-8">
-          <div className="flex items-center gap-5">
-            <div className="bg-naso-accent p-3 rounded-2xl shadow-[0_0_40px_rgba(59,130,246,0.4)] border border-white/10">
-              <Radar size={28} className="text-white animate-pulse" />
+      <aside className="w-[260px] bg-[#1C1C1E]/60 backdrop-blur-3xl border-r border-white/[0.08] flex flex-col z-20">
+        <div className="p-6 flex flex-col gap-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#0A84FF] p-2 rounded-xl shadow-sm">
+              <Radar size={18} className="text-white" strokeWidth={2} />
             </div>
             <div className="flex flex-col">
-              <span className="text-3xl font-black tracking-tighter leading-none italic">NASO</span>
-              <span className="text-[9px] font-black tracking-[0.5em] text-naso-accent opacity-90 uppercase mt-1.5">Forensic OS v0.1</span>
+              <span className="text-[15px] font-semibold tracking-tight text-white">NASO Engine</span>
+              <span className="text-[11px] text-zinc-400 font-medium">Forensic OS v0.1</span>
             </div>
           </div>
           
-          <div className="naso-glass p-4 rounded-xl space-y-2 border-naso-accent/20">
-            <div className="flex justify-between items-center">
-                <span className="text-[8px] font-black uppercase text-zinc-500">Operator Class</span>
-                <Badge className="bg-naso-accent/10 text-naso-accent text-[8px] font-black h-4 uppercase">Root / Level 5</Badge>
+          <div className="bg-white/[0.03] p-3 rounded-xl border border-white/[0.05] space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] font-medium text-zinc-400">Class</span>
+                <Badge variant="outline" className="text-[10px] h-5 border-white/[0.1] bg-white/[0.02]">Root / Lvl 5</Badge>
             </div>
             <div className="flex justify-between items-center">
-                <span className="text-[8px] font-black uppercase text-zinc-500">Secure Vault</span>
-                <span className="text-[9px] font-mono text-emerald-500 animate-pulse uppercase">Active</span>
+                <span className="text-[11px] font-medium text-zinc-400">Vault</span>
+                <span className="text-[11px] text-[#32D74B] font-medium flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#32D74B]"></div> Active</span>
             </div>
           </div>
         </div>
         
-        <nav className="flex-1 px-6 space-y-2">
-          <p className="px-4 py-4 text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em]">Command Sectors</p>
+        <nav className="flex-1 px-3 space-y-0.5">
+          <p className="px-3 py-2 text-[11px] font-medium text-zinc-500 mb-1">Navigation</p>
           <Button 
             variant="ghost" 
             onClick={() => setActiveView('dashboard')}
-            className={`w-full justify-start gap-4 h-14 px-5 rounded-2xl transition-all duration-500 ${activeView === 'dashboard' ? 'bg-naso-accent text-white shadow-naso-glow border-white/10' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'dashboard' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
           >
-            <LayoutDashboard size={20} /> <span className="text-[11px] font-black uppercase tracking-widest">Global Intelligence Feed</span>
+            <LayoutDashboard size={16} strokeWidth={activeView === 'dashboard' ? 2 : 1.5} /> <span>Dashboard</span>
           </Button>
           <Button 
             variant="ghost" 
             onClick={() => setActiveView('topology')}
-            className={`w-full justify-start gap-4 h-14 px-5 rounded-2xl transition-all duration-500 ${activeView === 'topology' ? 'bg-naso-accent text-white shadow-naso-glow border-white/10' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'topology' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
           >
-            <Share2 size={20} /> <span className="text-[11px] font-black uppercase tracking-widest">Neural Topology Map</span>
+            <Share2 size={16} strokeWidth={activeView === 'topology' ? 2 : 1.5} /> <span>Neural Topology</span>
           </Button>
           <Button 
             variant="ghost" 
             onClick={() => setActiveView('identities')}
-            className={`w-full justify-start gap-4 h-14 px-5 rounded-2xl transition-all duration-500 ${activeView === 'identities' ? 'bg-naso-accent text-white shadow-naso-glow border-white/10' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'identities' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
           >
-            <Fingerprint size={20} /> <span className="text-[11px] font-black uppercase tracking-widest">Master Identity Hub</span>
+            <Fingerprint size={16} strokeWidth={activeView === 'identities' ? 2 : 1.5} /> <span>Master Identities</span>
           </Button>
           <Button 
             variant="ghost" 
             onClick={() => setActiveView('dark-search')}
-            className={`w-full justify-start gap-4 h-14 px-5 rounded-2xl transition-all duration-500 ${activeView === 'dark-search' ? 'bg-naso-accent text-white shadow-naso-glow border-white/10' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'dark-search' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
           >
-            <Flame size={20} /> <span className="text-[11px] font-black uppercase tracking-widest">Deep Web Recon Hub</span>
+            <Flame size={16} strokeWidth={activeView === 'dark-search' ? 2 : 1.5} /> <span>Dark Recon Probe</span>
           </Button>
           <Button 
             variant="ghost" 
             onClick={() => setActiveView('audit')}
-            className={`w-full justify-start gap-4 h-14 px-5 rounded-2xl transition-all duration-500 ${activeView === 'audit' ? 'bg-naso-accent text-white shadow-naso-glow border-white/10' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
+            className={`w-full justify-start gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium ${activeView === 'audit' ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`}
           >
-            <ScrollText size={20} /> <span className="text-[11px] font-black uppercase tracking-widest">Compliance Audit Log</span>
+            <ScrollText size={16} strokeWidth={activeView === 'audit' ? 2 : 1.5} /> <span>Audit Logs</span>
           </Button>
         </nav>
 
-        <div className="p-8 mt-auto border-t border-white/5 bg-black/40">
+        <div className="p-4 mt-auto border-t border-white/[0.08] bg-transparent">
           <TerminalLog logs={terminalLogs} />
-          <div className="flex items-center gap-4 mt-8 p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-naso-accent via-blue-700 to-black border border-white/20 shadow-xl"></div>
-            <div className="flex flex-col">
-              <span className="text-xs font-black text-white uppercase tracking-tight">Fabrizio Salmi</span>
-              <span className="text-[9px] font-black text-naso-accent uppercase tracking-widest">System Architect</span>
+          <div className="flex items-center gap-3 mt-4 p-2 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition-all cursor-pointer">
+            <div className="w-8 h-8 rounded-lg bg-[#0A84FF] shadow-sm flex items-center justify-center">
+              <span className="text-white font-bold text-xs">FS</span>
             </div>
-            <Button variant="ghost" size="icon" className="ml-auto h-8 w-8 rounded-full text-zinc-500 hover:text-white"><Settings size={16} /></Button>
+            <div className="flex flex-col">
+              <span className="text-[13px] font-medium text-white tracking-tight">Fabrizio Salmi</span>
+              <span className="text-[10px] text-zinc-400">System Architect</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setIsEditProfileOpen(true)} className="ml-auto h-7 w-7 rounded-full text-zinc-400 hover:text-white hover:bg-white/10"><Settings size={14} /></Button>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col relative overflow-hidden z-10">
-        <header className="h-24 border-b border-white/5 bg-black/40 backdrop-blur-3xl flex items-center justify-between px-12 relative z-30">
-          <div className="flex items-center gap-14">
-            <div className="flex flex-col gap-1.5">
-              <h2 className="text-sm font-black uppercase tracking-[0.4em] text-white flex items-center gap-3">
-                <div className="w-2 h-2 bg-naso-accent rounded-full animate-pulse shadow-[0_0_10px_rgba(59,130,246,1)]"></div>
-                Command Sector: <span className="text-naso-accent italic">{activeView.toUpperCase()}</span>
+      <main className="flex-1 flex flex-col relative overflow-hidden bg-black">
+        <header className="h-16 border-b border-white/[0.08] bg-[#1C1C1E]/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
+          <div className="flex items-center gap-8">
+            <div className="flex flex-col">
+              <h2 className="text-[14px] font-semibold text-white tracking-tight flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-blue-500 flex items-center justify-center shadow-md">
+                    <Crosshair size={12} className="text-white" strokeWidth={2.5} />
+                </div>
+                {activeView.charAt(0).toUpperCase() + activeView.slice(1).replace('-', ' ')}
               </h2>
-              <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                <Crosshair size={12} className="text-zinc-700" /> System Ready • Core Operational • Telemetry Active
-              </p>
             </div>
             
-            <div className="hidden xl:flex items-center gap-10 px-8 py-3 bg-white/[0.03] rounded-2xl border border-white/5 naso-glass">
-              <div className="flex flex-col gap-1">
-                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest text-center">Engine Latency</span>
-                <span className="text-xs font-black text-emerald-400 font-mono">{systemStatus?.latency_ms?.total || '0.42'}ms</span>
+            <div className="hidden lg:flex items-center gap-5 px-3 py-1 bg-black/40 rounded-full border border-white/5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-zinc-500">Latency</span>
+                <span className="text-[11px] font-medium text-zinc-300">{systemStatus?.latency_ms?.total || '0.42'}ms</span>
               </div>
-              <div className="w-[1px] h-8 bg-white/5"></div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest text-center">Threat Cluster</span>
-                <span className="text-xs font-black text-naso-accent font-mono uppercase">Node-Alfa-7</span>
+              <div className="w-[1px] h-3 bg-zinc-800"></div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-zinc-500">Cluster</span>
+                <span className="text-[11px] font-medium text-[#0A84FF]">#Alfa-7</span>
               </div>
-              <div className="w-[1px] h-8 bg-white/5"></div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest text-center">Global Pulse</span>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                    <span className="text-xs font-black text-emerald-500 uppercase">Operational</span>
-                </div>
+              <div className="w-[1px] h-3 bg-zinc-800"></div>
+              <div className="flex items-center gap-1.5 px-1 py-0.5 rounded-full bg-[#32D74B]/10">
+                <div className="w-1.5 h-1.5 bg-[#32D74B] rounded-full"></div>
+                <span className="text-[10px] font-semibold text-[#32D74B]">Operational</span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="relative group">
-              <div className="absolute -inset-1.5 bg-naso-accent/30 blur opacity-0 group-hover:opacity-100 transition duration-700 rounded-full"></div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setIsNotificationsOpen(true)}
-                className="relative bg-white/5 hover:bg-white/10 border border-white/10 rounded-full h-12 w-12 transition-all shadow-2xl"
-              >
-                <Bell size={22} className="text-zinc-200" />
-                <span className="absolute top-3.5 right-3.5 w-3 h-3 bg-red-500 rounded-full border-2 border-black animate-pulse"></span>
-              </Button>
-            </div>
-            <Button className="bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black text-[10px] uppercase tracking-[0.2em] h-12 px-8 rounded-2xl">Deploy Countermeasure</Button>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={() => setIsNotificationsOpen(true)}
+              className="h-8 w-8 relative border-transparent bg-white/5 text-zinc-300 hover:text-white hover:bg-white/10 rounded-full transition-all"
+            >
+              <Bell size={14} strokeWidth={2} />
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#0A84FF] rounded-full"></span>
+            </Button>
+            <Button className="h-8 px-4 text-[12px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
+                Deploy Unit
+            </Button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-12 relative scrollbar-hide">
-          <div className="max-w-[1600px] mx-auto space-y-12">
+        <div className="flex-1 overflow-y-auto p-8 relative scrollbar-hide">
+          <div className="max-w-[1600px] mx-auto space-y-8">
             {activeView === 'dashboard' ? (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                  <StatCard title="Intelligence Stream" value={leaks.length} icon={AlertTriangle} description="Detected Artifacts" trend="up" trendValue="24" color="naso-accent" />
-                  <StatCard title="Critical Breaches" value={leaks.filter(l => l.severity_score >= 80).length} icon={Target} description="High-Impact Recon" trend="up" trendValue="18" color="red-500" />
-                  <StatCard title="Active Targets" value={identities.length} icon={Users} description="Monitored Assets" trend="down" trendValue="4" color="emerald-500" />
-                  <StatCard title="Infrastructure Load" value="18.4%" icon={Cpu} description="Worker Cluster Utilization" trend="down" trendValue="2" color="yellow-500" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <StatCard title="Intelligence Stream" value={leaks.length} icon={AlertTriangle} description="Detected Artifacts"  trend="up" trendValue="24" />
+                  <StatCard title="Critical Breaches" value={leaks.filter(l => l.severity_score >= 80).length} icon={Target} description="High-Impact Recon" trend="up" trendValue="18"  />
+                  <StatCard title="Active Targets" value={identities.length} icon={Users} description="Monitored Assets" trend="down" trendValue="4" />
+                  <StatCard title="Infrastructure Load" value="18.4%" icon={Cpu} description="Worker Cluster Utilization" trend="down" trendValue="2" />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                  <Card className="bg-card/30 backdrop-blur-3xl border-white/5 overflow-hidden naso-glass">
-                    <CardHeader className="pb-4 border-b border-white/5 bg-white/[0.02]">
-                      <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] flex items-center gap-3 text-zinc-400">
-                        <PieChartIcon size={16} className="text-naso-accent" /> Intelligence Distribution
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <Card className="bg-zinc-950 border-zinc-800 overflow-hidden">
+                    <CardHeader className="pb-4 border-b border-zinc-800/50 bg-zinc-900/10">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2 text-zinc-300">
+                        <PieChartIcon size={16} className="text-zinc-500" /> Intelligence Distribution
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="h-80 pt-8">
@@ -579,9 +537,9 @@ export default function App() {
                     </CardContent>
                   </Card>
 
-                  <Card className="lg:col-span-2 bg-card/30 backdrop-blur-3xl border-white/5 overflow-hidden naso-glass">
-                    <CardHeader className="border-b border-white/5 bg-white/[0.02] py-6">
-                      <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] flex items-center gap-3 text-zinc-400">
+                  <Card className="lg:col-span-2 bg-zinc-950 border-zinc-800 overflow-hidden">
+                    <CardHeader className="border-b border-zinc-800/50 bg-zinc-900/10 py-4">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2 text-zinc-300">
                         <Activity size={16} className="text-emerald-500" /> Forensic Timeline Telemetry
                       </CardTitle>
                     </CardHeader>
@@ -590,13 +548,13 @@ export default function App() {
                         <AreaChart data={timelineData}>
                           <defs>
                             <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
                               <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                          <XAxis dataKey="date" stroke="#3f3f46" fontSize={9} axisLine={false} tickLine={false} tickMargin={20} tick={{ fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }} />
-                          <YAxis stroke="#3f3f46" fontSize={9} axisLine={false} tickLine={false} tick={{ fontWeight: 900 }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                          <XAxis dataKey="date" stroke="#71717a" fontSize={12} axisLine={false} tickLine={false} tickMargin={10} />
+                          <YAxis stroke="#71717a" fontSize={12} axisLine={false} tickLine={false} />
                           <Area type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorCount)" />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -604,35 +562,35 @@ export default function App() {
                   </Card>
                 </div>
 
-                <Card className="bg-card/20 backdrop-blur-3xl border-white/5 overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] relative naso-glass border-t-naso-accent/20">
-                  <CardHeader className="flex flex-row items-center justify-between p-10 border-b border-white/5 bg-white/[0.01]">
-                    <div className="flex items-center gap-6">
-                      <div className="p-4 rounded-2xl bg-naso-accent/10 border border-naso-accent/20 shadow-naso-glow">
-                        <Database size={24} className="text-naso-accent" />
+                <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] overflow-hidden shadow-sm relative rounded-2xl">
+                  <CardHeader className="flex flex-row items-center justify-between p-6 border-b border-white/[0.05]">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08]">
+                        <Database size={18} className="text-[#0A84FF]" strokeWidth={1.5} />
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <CardTitle className="text-2xl font-black tracking-tight text-white uppercase italic">Live Intelligence Stream</CardTitle>
-                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Real-time Artifact Ingestion & Analysis</p>
+                      <div className="flex flex-col">
+                        <CardTitle className="text-[17px] tracking-tight font-semibold text-white">Live Intelligence Stream</CardTitle>
+                        <p className="text-[13px] text-zinc-500">Real-time Artifact Ingestion & Analysis</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <Button onClick={() => exportMassiveDossier()} variant="outline" className="border-naso-accent/40 text-naso-accent hover:bg-naso-accent/10 font-black text-[10px] uppercase tracking-widest h-12 px-8 rounded-2xl transition-all">
-                            <Download size={16} className="mr-3" /> Massive Forensic Dossier
+                    <div className="flex items-center gap-3">
+                        <Button onClick={() => exportMassiveDossier()} variant="outline" className="border-white/10 text-zinc-300 hover:bg-white/10 hover:text-white text-[12px] h-8 px-4 rounded-full transition-all bg-transparent">
+                            <Download size={14} className="mr-2" strokeWidth={1.5} /> Export Dossier
                         </Button>
-                        <Button onClick={() => fetchLeaks()} variant="secondary" className="h-12 px-8 text-[10px] font-black uppercase tracking-widest bg-white/5 border border-white/10 hover:bg-white/10 rounded-2xl">
-                        {isLoading ? <Loader2 size={16} className="animate-spin mr-3" /> : <History size={16} className="mr-3" />}
+                        <Button onClick={() => fetchLeaks()} variant="secondary" className="h-8 px-4 text-[12px] bg-white text-black hover:bg-zinc-200 rounded-full font-medium">
+                        {isLoading ? <Loader2 size={14} className="animate-spin mr-2" /> : <History size={14} className="mr-2" strokeWidth={1.5} />}
                         Sync Intelligence
                         </Button>
                     </div>
                   </CardHeader>
                   <Table>
-                    <TableHeader className="bg-white/[0.02]">
-                      <TableRow className="border-white/5 h-16">
-                        <TableHead className="pl-8 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Artifact Signature</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Vector Origin</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Threat Risk</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Forensic Metadata</TableHead>
-                        <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Operational Actions</TableHead>
+                    <TableHeader className="bg-black/20">
+                      <TableRow className="border-b border-white/[0.05] h-11">
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Artifact Signature</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Vector Origin</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Threat Risk</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Forensic Metadata</TableHead>
+                        <TableHead className="text-right text-[12px] font-medium text-zinc-500">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -662,41 +620,40 @@ export default function App() {
                 <ScreenshotLightbox leakId={viewingScreenshotId} onClose={() => setViewingScreenshotId(null)} />
               </>
             ) : activeView === 'topology' ? (
-              <div className="h-[calc(100vh-250px)] space-y-8 animate-in fade-in zoom-in-95 duration-1000">
-                <div className="flex justify-between items-end">
-                  <div className="space-y-3">
-                    <h1 className="text-6xl font-black tracking-tighter text-white italic">Intelligence Topology</h1>
-                    <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px]">Mapping Relationship Matrices across Cross-Tenant Artifacts</p>
+              <div className="h-[calc(100vh-110px)] flex flex-col gap-5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h1 className="text-[22px] font-semibold tracking-tight text-white">Intelligence Topology</h1>
+                    <p className="text-[13px] text-zinc-500 mt-0.5">Relationship map across cross-tenant artifacts</p>
                   </div>
-                  <Button variant="outline" onClick={() => fetchGraphData()} className="border-naso-accent/40 text-naso-accent h-14 px-10 font-black uppercase text-[10px] tracking-widest rounded-2xl hover:bg-naso-accent/5 transition-all">
-                    <Radar size={18} className="mr-3" /> Re-Scan Network Topology
+                  <Button onClick={() => fetchGraphData()} className="h-9 px-5 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
+                    <Radar size={15} className="mr-2" strokeWidth={2} /> Re-Scan
                   </Button>
                 </div>
-                <div className="flex-1 h-full rounded-3xl border-2 border-white/5 shadow-inner bg-black/40 backdrop-blur-3xl overflow-hidden relative group">
-                    <div className="absolute inset-0 bg-naso-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none"></div>
+                <div className="flex-1 rounded-2xl border border-white/[0.08] bg-[#1C1C1E]/40 overflow-hidden">
                     <NetworkGraphPro data={graphData} />
                 </div>
               </div>
             ) : activeView === 'identities' ? (
-              <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <div className="flex justify-between items-end">
-                  <div className="space-y-3">
-                    <h1 className="text-6xl font-black tracking-tighter text-white italic">Master Identity Hub</h1>
-                    <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px] max-w-2xl leading-loose">Deep Forensic Reconnaissance & Target Profiling for High-Value Monitor Assets.</p>
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h1 className="text-[22px] font-semibold tracking-tight text-white">Master Identities</h1>
+                    <p className="text-[13px] text-zinc-500 mt-0.5">Deep forensic reconnaissance & target profiling</p>
                   </div>
-                  <Button className="bg-naso-accent hover:bg-naso-accent/80 text-white font-black text-xs h-14 px-10 rounded-2xl shadow-2xl shadow-naso-accent/40 uppercase tracking-widest">
-                    <UserPlus size={18} className="mr-3" /> Register High-Value Target
+                  <Button onClick={() => setIsAddIdentityOpen(true)} className="h-9 px-5 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
+                    <UserPlus size={15} className="mr-2" strokeWidth={2} /> Add Identity
                   </Button>
                 </div>
 
-                <Card className="bg-card/20 backdrop-blur-3xl border-white/5 overflow-hidden shadow-2xl naso-glass border-t-emerald-500/20">
+                <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] overflow-hidden rounded-2xl shadow-sm">
                   <Table>
-                    <TableHeader className="bg-white/[0.02]">
-                      <TableRow className="border-white/5 h-16">
-                        <TableHead className="pl-10 h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Asset Identifier</TableHead>
-                        <TableHead className="h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Vector Type</TableHead>
-                        <TableHead className="h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Threat Exposure Matrix</TableHead>
-                        <TableHead className="text-right pr-10 h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Deep Scrutiny</TableHead>
+                    <TableHeader className="bg-black/20">
+                      <TableRow className="border-b border-white/[0.05] h-11">
+                        <TableHead className="text-[12px] font-medium text-zinc-500 pl-5">Asset Identifier</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Type</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Threat Exposure</TableHead>
+                        <TableHead className="text-right pr-5 text-[12px] font-medium text-zinc-500">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -705,8 +662,8 @@ export default function App() {
                       ))}
                       {identities.length === 0 && (
                           <TableRow>
-                              <TableCell colSpan={4} className="h-40 text-center text-zinc-600 font-mono italic text-xs uppercase tracking-[0.3em]">
-                                 --- Target Hub Empty. No High-Value Assets Registered ---
+                              <TableCell colSpan={4} className="h-40 text-center text-zinc-600 text-[13px]">
+                                 No identities registered yet.
                               </TableCell>
                           </TableRow>
                       )}
@@ -715,68 +672,64 @@ export default function App() {
                 </Card>
               </div>
             ) : activeView === 'dark-search' ? (
-              <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4 text-naso-accent">
-                    <Flame size={32} className="fill-current animate-pulse" />
-                    <span className="text-[12px] font-black uppercase tracking-[0.6em]">Deep Web Reconnaissance Portal</span>
-                  </div>
-                  <h1 className="text-7xl font-black tracking-tighter text-white italic">Dark Recon Hub</h1>
+              <div className="space-y-8">
+                <div>
+                  <h1 className="text-[22px] font-semibold tracking-tight text-white">Dark Recon Probe</h1>
+                  <p className="text-[13px] text-zinc-500 mt-0.5">Scrutinize encrypted databases and active .onion services</p>
                 </div>
 
-                <Card className="bg-card/40 backdrop-blur-3xl border-white/10 p-16 naso-glass shadow-[0_0_150px_rgba(0,0,0,0.8)] border-t-purple-500/20">
-                  <div className="flex flex-col items-center gap-12 max-w-3xl mx-auto text-center">
-                    <div className="p-8 rounded-[40px] bg-naso-accent/10 border-2 border-naso-accent/20 relative group overflow-hidden">
-                        <div className="absolute inset-0 bg-naso-accent/20 blur-3xl rounded-full group-hover:blur-2xl transition-all"></div>
-                        <Radar size={80} className="text-naso-accent relative z-10" />
+                <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] rounded-2xl overflow-hidden">
+                  <CardContent className="p-8">
+                    <div className="flex flex-col items-center gap-8 max-w-2xl mx-auto">
+                      <div className="p-5 rounded-2xl bg-[#0A84FF]/10 border border-[#0A84FF]/20">
+                          <Radar size={48} className="text-[#0A84FF]" strokeWidth={1.5} />
+                      </div>
+                      <div className="space-y-2 text-center">
+                          <h2 className="text-[20px] font-semibold tracking-tight text-white">Onion Intelligence Probe</h2>
+                          <p className="text-[13px] text-zinc-500 max-w-md mx-auto leading-relaxed">Search encrypted databases and .onion services for forensic identifiers, emails, hashes, or signatures.</p>
+                      </div>
+                      <div className="w-full flex gap-3 p-2 pl-4 bg-black/40 rounded-full border border-white/[0.08] focus-within:border-[#0A84FF]/50 transition-all">
+                          <input 
+                              type="text" 
+                              placeholder="Signature, email, or hash..."
+                              value={reconQuery}
+                              onChange={(e) => setReconQuery(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && searchDarkWeb(reconQuery)}
+                              className="flex-1 bg-transparent text-[14px] text-white placeholder:text-zinc-600 outline-none"
+                          />
+                          <Button onClick={() => searchDarkWeb(reconQuery)} className="bg-[#0A84FF] hover:bg-[#007AFF] text-white font-medium text-[13px] px-6 rounded-full h-10 shadow-sm">
+                              {isLoading ? <Loader2 size={15} className="animate-spin" /> : 'Launch Probe'}
+                          </Button>
+                      </div>
+                      <div className="flex gap-6 text-[11px] font-medium text-zinc-500">
+                          <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#32D74B]"></div> Ahmia Active</span>
+                          <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#0A84FF]"></div> Tor Circuit On</span>
+                          <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#0A84FF]"></div> Correlation On</span>
+                      </div>
                     </div>
-                    <div className="space-y-6">
-                        <h2 className="text-4xl font-black tracking-tight text-white uppercase italic">Direct Onion Intelligence Probe</h2>
-                        <p className="text-zinc-500 text-base font-medium max-w-xl mx-auto leading-relaxed uppercase tracking-wider">Scrutinize encrypted historical databases and active .onion services for specific forensic identifiers.</p>
-                    </div>
-                    <div className="w-full flex gap-4 p-2 bg-black/40 rounded-3xl border border-white/10 focus-within:border-naso-accent/50 transition-all shadow-inner">
-                        <input 
-                            type="text" 
-                            placeholder="Enter Signature, Email, or Hash..."
-                            value={reconQuery}
-                            onChange={(e) => setReconQuery(e.target.value)}
-                            className="flex-1 bg-transparent px-8 font-mono text-sm text-white placeholder:text-zinc-700 outline-none"
-                        />
-                        <Button onClick={() => searchDarkWeb(reconQuery)} className="bg-naso-accent hover:bg-naso-accent/80 text-white font-black uppercase tracking-[0.2em] px-12 rounded-2xl h-16 shadow-2xl shadow-naso-accent/40 transition-all active:scale-95">
-                            {isLoading ? <Loader2 className="animate-spin" /> : 'Launch Probe'}
-                        </Button>
-                    </div>
-                    <div className="flex gap-8 text-[9px] font-black uppercase tracking-[0.3em] text-zinc-600">
-                        <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-emerald-500"></div> Ahmia Engine Active</span>
-                        <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-naso-accent"></div> Tor Circuit Operational</span>
-                        <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-naso-accent"></div> Identity Correlation On</span>
-                    </div>
-                  </div>
+                  </CardContent>
                 </Card>
 
                 {darkWebResults.length > 0 && (
-                    <div className="space-y-8">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-6">
-                            <h3 className="text-xs font-black uppercase tracking-[0.4em] text-naso-accent flex items-center gap-3">
-                                <ShieldAlert size={16} /> Intercepted Intel Packages ({darkWebResults.length})
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
+                            <h3 className="text-[14px] font-semibold text-white flex items-center gap-2">
+                                <ShieldAlert size={16} className="text-[#FF453A]" strokeWidth={1.5} /> Intercepted Intel ({darkWebResults.length})
                             </h3>
-                            <Button variant="ghost" className="text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Wipe Discovery History</Button>
+                            <Button variant="ghost" className="text-[12px] font-medium text-zinc-500 hover:text-white h-8 rounded-full px-3">Clear Results</Button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {darkWebResults.map((res, i) => (
-                                <Card key={i} className="bg-white/[0.02] border-white/5 p-8 hover:border-naso-accent/40 transition-all group naso-glass relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-[0.05] transition-opacity pointer-events-none">
-                                        <ExternalLink size={100} />
+                                <Card key={i} className="bg-[#1C1C1E]/50 border-white/[0.08] p-5 hover:border-white/[0.15] transition-all rounded-2xl">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <Badge className="bg-[#0A84FF]/10 text-[#0A84FF] border border-[#0A84FF]/20 font-medium text-[10px]">Match Found</Badge>
+                                        <ExternalLink size={15} className="text-zinc-600 hover:text-white transition-colors cursor-pointer" strokeWidth={1.5} />
                                     </div>
-                                    <div className="flex justify-between items-start mb-6">
-                                        <Badge className="bg-naso-accent/10 text-naso-accent border border-naso-accent/20 font-black text-[9px] py-1 px-3">SIGNATURE MATCH FOUND</Badge>
-                                        <ExternalLink size={18} className="text-zinc-600 group-hover:text-white transition-colors" />
-                                    </div>
-                                    <h4 className="text-xl font-black text-white mb-2 uppercase tracking-tight italic group-hover:text-naso-accent transition-colors">{res.title}</h4>
-                                    <p className="text-xs font-mono text-zinc-500 break-all bg-black/40 p-4 rounded-xl border border-white/5 group-hover:border-naso-accent/20 transition-all">{res.url}</p>
-                                    <div className="flex gap-3 mt-8">
-                                        <Button className="flex-1 text-[10px] font-black uppercase tracking-widest bg-naso-accent/10 text-naso-accent border border-naso-accent/20 hover:bg-naso-accent/20 transition-all rounded-xl h-12">Initiate Deep Scrape</Button>
-                                        <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest border border-white/5 rounded-xl h-12 px-6">Proxy Link</Button>
+                                    <h4 className="text-[15px] font-semibold text-white mb-2 tracking-tight">{res.title}</h4>
+                                    <p className="text-[11px] font-mono text-zinc-500 break-all bg-black/30 p-3 rounded-lg border border-white/[0.05]">{res.url}</p>
+                                    <div className="flex gap-2 mt-4">
+                                        <Button className="flex-1 text-[12px] font-medium bg-[#0A84FF]/10 text-[#0A84FF] border border-[#0A84FF]/20 hover:bg-[#0A84FF]/20 transition-all rounded-full h-9">Deep Scrape</Button>
+                                        <Button variant="ghost" className="text-[12px] font-medium border border-white/10 rounded-full h-9 px-4 text-zinc-400 hover:text-white">Proxy Link</Button>
                                     </div>
                                 </Card>
                             ))}
@@ -785,25 +738,25 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <div className="flex justify-between items-end">
-                  <div className="space-y-3">
-                    <h1 className="text-6xl font-black tracking-tighter text-white italic">Audit & Compliance</h1>
-                    <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px] max-w-2xl">Rigorous Forensic Accountability Feed. Every operation is hashed and logged in the immutable chain.</p>
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h1 className="text-[22px] font-semibold tracking-tight text-white">Audit & Compliance</h1>
+                    <p className="text-[13px] text-zinc-500 mt-0.5">Immutable forensic accountability — every operation hashed and logged</p>
                   </div>
-                  <Button variant="outline" onClick={() => fetchAuditLogs()} className="border-naso-accent/40 text-naso-accent h-14 px-10 font-black uppercase text-[10px] tracking-widest rounded-2xl hover:bg-naso-accent/5 shadow-2xl transition-all">
-                    <Download size={18} className="mr-3" /> Export Signed Compliance CSV
+                  <Button onClick={() => fetchAuditLogs()} variant="outline" className="h-9 px-5 text-[13px] font-medium border-white/10 bg-transparent text-zinc-300 hover:text-white hover:bg-white/10 rounded-full">
+                    <Download size={14} className="mr-2" strokeWidth={1.5} /> Export CSV
                   </Button>
                 </div>
 
-                <Card className="bg-card/20 backdrop-blur-3xl border-white/5 overflow-hidden shadow-2xl naso-glass">
+                <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] overflow-hidden rounded-2xl shadow-sm">
                   <Table>
-                    <TableHeader className="bg-white/[0.02]">
-                      <TableRow className="border-white/5 h-16">
-                        <TableHead className="pl-10 h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Forensic Operator & Action</TableHead>
-                        <TableHead className="h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Asset Vector</TableHead>
-                        <TableHead className="h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Operation Details</TableHead>
-                        <TableHead className="text-right pr-10 h-16 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Timestamp (UTC / ISO 8601)</TableHead>
+                    <TableHeader className="bg-black/20">
+                      <TableRow className="border-b border-white/[0.05] h-11">
+                        <TableHead className="text-[12px] font-medium text-zinc-500 pl-5">Operator & Action</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Asset Vector</TableHead>
+                        <TableHead className="text-[12px] font-medium text-zinc-500">Details</TableHead>
+                        <TableHead className="text-right pr-5 text-[12px] font-medium text-zinc-500">Timestamp (UTC)</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -812,8 +765,8 @@ export default function App() {
                       ))}
                       {auditLogs.length === 0 && (
                           <TableRow>
-                              <TableCell colSpan={4} className="h-40 text-center text-zinc-600 font-mono italic text-xs uppercase tracking-[0.3em]">
-                                 --- Scrutinizing Audit Chain... No Entries Logged ---
+                              <TableCell colSpan={4} className="h-40 text-center text-zinc-600 text-[13px]">
+                                 No audit entries logged yet.
                               </TableCell>
                           </TableRow>
                       )}
@@ -828,145 +781,224 @@ export default function App() {
 
       {/* Side Sheets & Dialogs */}
       <Sheet open={isNotificationsOpen} onOpenChange={setIsNotificationsOpen}>
-        <SheetContent className="w-[450px] sm:w-[600px] bg-[#050507]/95 border-l-naso-accent/20 backdrop-blur-3xl p-0 shadow-[-50px_0_100px_rgba(0,0,0,0.8)]">
-          <SheetHeader className="p-10 border-b border-white/5 bg-gradient-to-br from-naso-accent/10 to-transparent">
+        <SheetContent className="w-[400px] sm:w-[480px] bg-[#1C1C1E]/95 backdrop-blur-3xl border-l border-white/[0.08] p-0 shadow-2xl">
+          <SheetHeader className="p-6 border-b border-white/[0.08]">
             <div className="flex items-center justify-between">
-                <SheetTitle className="text-3xl font-black tracking-tighter flex items-center gap-4 text-white uppercase italic"><Zap className="text-naso-accent animate-pulse" fill="currentColor" size={24} /> Intelligence Center</SheetTitle>
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                    <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Live Alert Feed</span>
+                <SheetTitle className="text-[17px] font-semibold tracking-tight text-white flex items-center gap-3">
+                  <div className="p-1.5 bg-[#FF453A]/10 rounded-lg"><Zap className="text-[#FF453A]" size={16} strokeWidth={1.5} /></div>
+                  Intelligence Alerts
+                </SheetTitle>
+                <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-[#FF453A]/10">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#FF453A] animate-pulse"></div>
+                    <span className="text-[11px] font-medium text-[#FF453A]">Live</span>
                 </div>
             </div>
-            <SheetDescription className="text-zinc-500 font-black uppercase tracking-widest text-[9px] mt-4">Critical forensic artifacts identified in the last 24 duty hours.</SheetDescription>
+            <SheetDescription className="text-[12px] text-zinc-500 mt-1">Critical artifacts identified in the last 24h.</SheetDescription>
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide">
+          <div className="flex-1 overflow-y-auto p-5 space-y-3 scrollbar-hide">
             {leaks.filter(l => l.severity_score >= 80).map(alert => <NotificationItem key={alert.id} alert={alert} />)}
             {leaks.filter(l => l.severity_score >= 80).length === 0 && (
-                 <div className="h-full flex flex-col items-center justify-center opacity-30 gap-6 text-center">
-                    <ShieldCheck size={64} className="text-emerald-500" />
-                    <p className="text-xs font-black uppercase tracking-[0.3em]">No Critical Threats Identified in the Current Cycle</p>
+                 <div className="h-48 flex flex-col items-center justify-center text-zinc-600 gap-4">
+                    <ShieldCheck size={36} className="text-[#32D74B]" strokeWidth={1.5} />
+                    <p className="text-[13px] font-medium text-zinc-500">No critical threats identified</p>
                  </div>
             )}
           </div>
-          <div className="p-8 border-t border-white/5 bg-black/40">
-            <Button className="w-full h-14 font-black uppercase tracking-[0.3em] text-[10px] bg-naso-accent hover:bg-naso-accent/80 text-white shadow-2xl shadow-naso-accent/30 rounded-2xl">Mark all as TRIAGED / RESOLVED</Button>
+          <div className="p-5 border-t border-white/[0.08]">
+            <Button className="w-full h-10 font-medium text-[13px] bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full">Mark All as Resolved</Button>
           </div>
         </SheetContent>
       </Sheet>
 
       <Dialog open={!!selectedIdentityInsights} onOpenChange={clearSelectedIdentity}>
-        <DialogContent className="max-w-5xl bg-[#050507]/98 border-naso-accent/30 backdrop-blur-3xl shadow-[0_0_200px_rgba(0,0,0,1)] overflow-hidden p-0 rounded-none">
+        <DialogContent className="max-w-3xl bg-[#1C1C1E]/95 backdrop-blur-3xl border-white/[0.08] overflow-hidden p-0 rounded-2xl shadow-2xl">
           {selectedIdentityInsights && (
-            <div className="flex flex-col h-[90vh]">
-              <div className="p-12 border-b border-white/5 bg-gradient-to-br from-naso-accent/15 via-black to-transparent relative">
-                <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
-                    <Fingerprint size={200} />
+            <div className="flex flex-col max-h-[85vh]">
+              {/* Header */}
+              <div className="p-6 border-b border-white/[0.08] flex items-center gap-5">
+                <div className={`p-4 rounded-2xl ${selectedIdentityInsights.identity.risk_score >= 80 ? 'bg-[#FF453A]/10 border border-[#FF453A]/20' : 'bg-[#0A84FF]/10 border border-[#0A84FF]/20'}`}>
+                  <Users size={28} strokeWidth={1.5} className={selectedIdentityInsights.identity.risk_score >= 80 ? 'text-[#FF453A]' : 'text-[#0A84FF]'} />
                 </div>
-                <div className="flex items-center gap-10">
-                  <div className={`p-8 rounded-[40px] bg-black/60 border-2 ${selectedIdentityInsights.identity.risk_score >= 80 ? 'border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.2)]' : 'border-naso-accent/50 shadow-naso-glow'}`}>
-                    <Users size={64} className={selectedIdentityInsights.identity.risk_score >= 80 ? 'text-red-500' : 'text-naso-accent'} />
-                  </div>
-                  <div className="space-y-3">
-                    <h2 className="text-6xl font-black tracking-tighter text-white uppercase italic">{selectedIdentityInsights.identity.identifier}</h2>
-                    <div className="flex items-center gap-8 text-[11px] font-black uppercase tracking-[0.3em] text-zinc-500">
-                      <span className="flex items-center gap-2 text-naso-accent"><Fingerprint size={14} /> {selectedIdentityInsights.identity.type} MASTER PROFILE</span>
-                      <span className="w-1.5 h-1.5 bg-zinc-800 rounded-full"></span>
-                      <span className="flex items-center gap-2"><Clock size={14} /> LAST RECON: {new Date(selectedIdentityInsights.last_seen).toLocaleDateString()}</span>
-                    </div>
+                <div className="flex-1">
+                  <h2 className="text-[20px] font-semibold tracking-tight text-white">{selectedIdentityInsights.identity.identifier}</h2>
+                  <div className="flex items-center gap-4 mt-1">
+                    <span className="text-[12px] text-zinc-500 flex items-center gap-1.5"><Fingerprint size={12} strokeWidth={1.5} /> {selectedIdentityInsights.identity.type}</span>
+                    <span className="text-zinc-700">·</span>
+                    <span className="text-[12px] text-zinc-500 flex items-center gap-1.5"><Clock size={12} strokeWidth={1.5} /> {new Date(selectedIdentityInsights.last_seen).toLocaleDateString()}</span>
                   </div>
                 </div>
+                {selectedIdentityInsights.identity.risk_score >= 80 && (
+                  <Badge className="bg-[#FF453A]/10 text-[#FF453A] border border-[#FF453A]/20 font-medium text-[11px]">Critical Risk</Badge>
+                )}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-12 space-y-12 scrollbar-hide">
-                {/* Merged Profile Tree (Y) */}
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+                {/* Stats Row */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-black/30 border border-white/[0.06] rounded-2xl p-4">
+                    <p className="text-[11px] font-medium text-zinc-500 mb-2">Risk Score</p>
+                    <p className={`text-3xl font-semibold tracking-tight ${selectedIdentityInsights.identity.risk_score >= 80 ? 'text-[#FF453A]' : 'text-white'}`}>{selectedIdentityInsights.identity.risk_score}</p>
+                  </div>
+                  <div className="bg-black/30 border border-white/[0.06] rounded-2xl p-4">
+                    <p className="text-[11px] font-medium text-zinc-500 mb-2">Leaked Vectors</p>
+                    <p className="text-3xl font-semibold tracking-tight text-white">{selectedIdentityInsights.total_leaks}</p>
+                  </div>
+                  <div className="bg-black/30 border border-white/[0.06] rounded-2xl p-4 flex flex-col justify-between">
+                    <p className="text-[11px] font-medium text-zinc-500 mb-3">Priority</p>
+                    <Button onClick={() => toggleIdentityProtection(selectedIdentityInsights.identity.id, !selectedIdentityInsights.identity.is_protected)} size="sm" className={`w-full text-[12px] font-medium rounded-full h-9 ${selectedIdentityInsights.identity.is_protected ? 'bg-[#FFD60A]/10 text-[#FFD60A] border border-[#FFD60A]/20 hover:bg-[#FFD60A]/20' : 'bg-white/5 text-zinc-300 border border-white/10 hover:bg-white/10'}`}>
+                      {selectedIdentityInsights.identity.is_protected ? <Lock size={14} className="mr-2" strokeWidth={2} /> : <Unlock size={14} className="mr-2" strokeWidth={2} />}
+                      {selectedIdentityInsights.identity.is_protected ? 'VIP Protected' : 'Set as VIP'}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Merged Identities */}
                 {selectedIdentityInsights.merged_identities.length > 0 && (
-                  <div className="space-y-8 p-8 rounded-3xl bg-naso-accent/5 border border-naso-accent/10">
-                    <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-black uppercase tracking-[0.4em] text-naso-accent flex items-center gap-3">
-                        <Workflow size={20} className="animate-pulse" /> Neural Merged Identity Matrix
-                        </h4>
-                        <Badge className="bg-naso-accent text-white font-black text-[9px] px-3">{selectedIdentityInsights.merged_identities.length} NODES</Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <h4 className="text-[13px] font-semibold text-zinc-300 flex items-center gap-2"><Workflow size={15} strokeWidth={1.5} /> Merged Identity Network <Badge className="ml-1 bg-white/5 text-zinc-400 border border-white/10 text-[10px]">{selectedIdentityInsights.merged_identities.length}</Badge></h4>
+                    <div className="grid grid-cols-2 gap-2">
                       {selectedIdentityInsights.merged_identities.map(slave => (
-                        <div key={slave.id} className="p-5 rounded-2xl bg-black/40 border border-white/5 flex items-center justify-between group hover:border-naso-accent/30 transition-all">
-                          <div className="flex items-center gap-4">
-                            <div className="p-2 bg-naso-accent/10 rounded-lg group-hover:bg-naso-accent group-hover:text-white transition-all text-naso-accent"><UserPlus size={16} /></div>
-                            <span className="text-xs font-black text-zinc-200 uppercase tracking-tight">{slave.identifier}</span>
+                        <div key={slave.id} className="p-3 rounded-xl bg-black/30 border border-white/[0.06] flex items-center justify-between hover:border-[#0A84FF]/30 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-white/[0.04] rounded-lg"><UserPlus size={13} strokeWidth={1.5} className="text-zinc-400" /></div>
+                            <span className="text-[12px] font-medium text-zinc-200">{slave.identifier}</span>
                           </div>
-                          <Badge variant="outline" className="text-[9px] border-white/10 text-zinc-500 group-hover:border-naso-accent/30 group-hover:text-naso-accent uppercase font-black">{slave.type}</Badge>
+                          <Badge variant="outline" className="text-[10px] border-white/10 text-zinc-500">{slave.type}</Badge>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="naso-glass p-8 rounded-3xl border-t-red-500/20 relative overflow-hidden group">
-                    <div className="absolute -right-4 -bottom-4 p-8 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity text-red-500">
-                        <AlertTriangle size={100} />
-                    </div>
-                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.3em] mb-4 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div> Aggregated Risk Matrix
-                    </p>
-                    <p className={`text-6xl font-black italic tracking-tighter ${selectedIdentityInsights.identity.risk_score >= 80 ? 'text-red-500' : 'text-white'}`}>{selectedIdentityInsights.identity.risk_score}</p>
-                  </div>
-                  <div className="naso-glass p-8 rounded-3xl border-t-naso-accent/20 relative overflow-hidden group">
-                    <div className="absolute -right-4 -bottom-4 p-8 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity text-naso-accent">
-                        <Database size={100} />
-                    </div>
-                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.3em] mb-4 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-naso-accent animate-pulse"></div> Vector Compromise Count
-                    </p>
-                    <p className="text-6xl font-black text-white italic tracking-tighter">{selectedIdentityInsights.total_leaks}</p>
-                  </div>
-                  <div className="naso-glass p-8 rounded-3xl border-t-yellow-500/20 flex flex-col justify-center">
-                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.3em] mb-6">Operational Priority</p>
-                    <Button onClick={() => toggleIdentityProtection(selectedIdentityInsights.identity.id, !selectedIdentityInsights.identity.is_protected)} className={`w-full h-16 font-black uppercase text-[11px] tracking-[0.2em] rounded-2xl transition-all shadow-2xl ${selectedIdentityInsights.identity.is_protected ? 'bg-yellow-500 text-black shadow-yellow-500/20' : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'}`}>
-                      {selectedIdentityInsights.identity.is_protected ? <Lock size={18} className="mr-3" /> : <Unlock size={18} className="mr-3" />}
-                      {selectedIdentityInsights.identity.is_protected ? 'SECURE VIP ASSET' : 'ELEVATE TO VIP'}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-8">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-6">
-                    <h4 className="text-xs font-black uppercase tracking-[0.4em] text-zinc-400 flex items-center gap-3"><History size={20} className="text-naso-accent" /> Compromise Forensic Chronology</h4>
-                    <Button variant="ghost" className="text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Expand Timeline</Button>
-                  </div>
-                  <div className="space-y-5">
+                {/* Compromise Timeline */}
+                <div className="space-y-3">
+                  <h4 className="text-[13px] font-semibold text-zinc-300 flex items-center gap-2"><History size={15} strokeWidth={1.5} /> Compromise Timeline</h4>
+                  <div className="space-y-2">
                     {selectedIdentityInsights.leaks.map((leak) => (
-                      <div key={leak.id} className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 hover:border-naso-accent/30 transition-all group naso-glass relative overflow-hidden">
-                        <div className="absolute top-0 right-0 h-full w-24 bg-gradient-to-l from-naso-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        <div className="flex justify-between items-center mb-6">
-                          <div className="flex items-center gap-4">
-                            <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-zinc-400 group-hover:text-naso-accent transition-colors"><Globe size={18} /></div>
-                            <div className="flex flex-col gap-1">
-                                <span className="text-sm font-black text-white uppercase tracking-tight">{leak.source}</span>
-                                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{new Date(leak.discovered_at).toLocaleString()}</span>
-                            </div>
-                          </div>
-                          <Badge className={`${leak.severity_score >= 80 ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-naso-accent/10 text-naso-accent border-naso-accent/20'} font-black text-[10px] py-1.5 px-4 rounded-xl border`}>PROBABILITY: {leak.severity_score}%</Badge>
+                      <div key={leak.id} className="bg-black/30 border border-white/[0.06] rounded-xl p-4 hover:border-white/[0.12] transition-all">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[13px] font-medium text-zinc-200 flex items-center gap-2"><Globe size={13} strokeWidth={1.5} className="text-zinc-500" />{leak.source}</span>
+                          <Badge className={`text-[10px] font-medium ${leak.severity_score >= 80 ? 'bg-[#FF453A]/10 text-[#FF453A] border border-[#FF453A]/20' : 'bg-[#0A84FF]/10 text-[#0A84FF] border border-[#0A84FF]/20'}`}>{leak.severity_score}%</Badge>
                         </div>
-                        <div className="p-5 rounded-2xl bg-black/40 border border-white/5 font-mono text-xs italic text-zinc-400 leading-relaxed group-hover:text-zinc-200 transition-colors">
-                            {leak.content_snippet ? `[DUMP_EXTRACT]: "${leak.content_snippet}"` : '<encrypted_forensic_payload_inaccessible>'}
-                        </div>
+                        <p className="text-[11px] font-mono text-zinc-500 bg-black/30 p-2.5 rounded-lg border border-white/[0.05]">
+                            {leak.content_snippet ? `"${leak.content_snippet}"` : '<encrypted_payload>'}
+                        </p>
+                        <p className="text-[10px] text-zinc-600 mt-2">{new Date(leak.discovered_at).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
               
-              <div className="p-10 border-t border-white/5 bg-black/60 flex justify-end gap-5">
-                <Button variant="outline" className="border-white/10 h-14 px-10 font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-white/5" onClick={clearSelectedIdentity}>De-initialize View</Button>
-                <Button className="bg-naso-accent hover:bg-naso-accent/80 text-white h-14 px-12 font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-2xl shadow-naso-accent/40">
-                    <Download size={18} className="mr-3" /> Generate Forensic Evidence Package
+              {/* Footer */}
+              <div className="p-5 border-t border-white/[0.08] flex justify-end gap-3">
+                <Button variant="outline" className="border-white/10 h-9 px-5 text-[13px] font-medium rounded-full hover:bg-white/5 text-zinc-300" onClick={clearSelectedIdentity}>Close</Button>
+                <Button className="bg-[#0A84FF] hover:bg-[#007AFF] text-white h-9 px-5 text-[13px] font-medium rounded-full shadow-sm">
+                    <Download size={14} className="mr-2" strokeWidth={1.5} /> Export Evidence
                 </Button>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Add Identity Dialog ── */}
+      <Dialog open={isAddIdentityOpen} onOpenChange={setIsAddIdentityOpen}>
+        <DialogContent className="max-w-md bg-[#1C1C1E]/95 backdrop-blur-3xl border-white/[0.08] rounded-2xl shadow-2xl p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-5 border-b border-white/[0.08]">
+            <DialogTitle className="text-[17px] font-semibold text-white tracking-tight">Register Monitored Identity</DialogTitle>
+            <DialogDescription className="text-[13px] text-zinc-500">Track a new asset across intelligence streams</DialogDescription>
+          </DialogHeader>
+          <div className="p-6 space-y-5">
+            <div>
+              <label className="text-[12px] font-medium text-zinc-400 block mb-2">Identifier / Keyword</label>
+              <input 
+                type="text" 
+                value={newIdentityIdentifier}
+                onChange={e => setNewIdentityIdentifier(e.target.value)}
+                placeholder="e.g. j.doe@corp.com or handle123"
+                className="w-full bg-black/40 border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white placeholder:text-zinc-600 focus:border-[#0A84FF]/50 focus:outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-zinc-400 block mb-2">Asset Type</label>
+              <select 
+                value={newIdentityType}
+                onChange={e => setNewIdentityType(e.target.value)}
+                className="w-full bg-black/40 border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:border-[#0A84FF]/50 focus:outline-none transition-colors appearance-none"
+              >
+                <option value="person">Person (Email / Name)</option>
+                <option value="organization">Organization (Domain)</option>
+                <option value="crypto">Cryptocurrency Wallet</option>
+                <option value="credential">Infrastructure Credential</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 px-6 pb-6">
+            <Button variant="ghost" onClick={() => setIsAddIdentityOpen(false)} className="h-9 px-5 text-[13px] rounded-full border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
+            <Button 
+              className="h-9 px-6 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm"
+              disabled={isLoading || !newIdentityIdentifier}
+              onClick={() => {
+                addIdentity(newIdentityIdentifier, newIdentityType);
+                setIsAddIdentityOpen(false);
+                setNewIdentityIdentifier('');
+              }}
+            >
+              {isLoading ? <Loader2 size={14} className="animate-spin" /> : 'Register Identity'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Profile Dialog ── */}
+      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+        <DialogContent className="max-w-md bg-[#1C1C1E]/95 backdrop-blur-3xl border-white/[0.08] rounded-2xl shadow-2xl p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-5 border-b border-white/[0.08]">
+            <DialogTitle className="text-[17px] font-semibold text-white tracking-tight">Edit Operator Profile</DialogTitle>
+          </DialogHeader>
+          <div className="p-6 space-y-5">
+            <div>
+              <label className="text-[12px] font-medium text-zinc-400 block mb-2">Email Address</label>
+              <input 
+                type="email" 
+                value={editProfileEmailState}
+                onChange={e => setEditProfileEmailState(e.target.value)}
+                className="w-full bg-black/40 border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:border-[#0A84FF]/50 focus:outline-none transition-colors"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 px-6 pb-6">
+            <Button variant="ghost" onClick={() => setIsEditProfileOpen(false)} className="h-9 px-5 text-[13px] rounded-full border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
+            <Button 
+              className="h-9 px-6 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm"
+              disabled={isLoading}
+              onClick={() => {
+                updateProfile(editProfileEmailState);
+                setIsEditProfileOpen(false);
+              }}
+            >
+              {isLoading ? <Loader2 size={14} className="animate-spin" /> : 'Save Changes'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Error Toast ── */}
+      {error && (
+        <div className="fixed bottom-6 right-6 p-4 pr-10 rounded-lg bg-red-950/80 border border-red-500/20 shadow-lg flex items-center gap-3 animate-fade-in z-50">
+          <ShieldAlert className="text-red-400 shrink-0" size={16} />
+          <span className="text-[12px] font-medium text-red-200">{error}</span>
+          <button 
+            onClick={clearError}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }

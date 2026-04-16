@@ -22,6 +22,7 @@ export default defineConfig({
       '/identities': 'http://localhost:8000',
       '/yara': 'http://localhost:8000',
       '/system': 'http://localhost:8000',
+      '/users': 'http://localhost:8000',
     }
   }
 })
