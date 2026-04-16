@@ -12,6 +12,67 @@ from shared.domain.services.identity_merging import IdentityMergingService
 
 router = APIRouter()
 
+# ── BUG FIX: /graph MUST be declared before /{identity_id} routes ──
+# FastAPI routes are matched in declaration order. A literal path like /graph
+# would be captured by /{identity_id} pattern if declared after it.
+
+@router.get("/graph")
+async def get_identity_graph(db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+    """
+    Query Side (CQRS #5): Visualizzazione ultra-veloce del grafo potenziata (DD).
+    """
+    # 1. Recupera Nodi Identità
+    identities_query = text("""
+        SELECT id, identifier, risk_score, type, is_protected 
+        FROM identities 
+        WHERE tenant_id = :tenant_id
+    """)
+    ident_result = await db.execute(identities_query, {"tenant_id": current_user.tenant_id})
+    identities = ident_result.mappings().all()
+    
+    # 2. Recupera Archi (Connessioni)
+    edges_query = text("""
+        SELECT il.identity_id as source, il.leak_id as target
+        FROM identity_leaks il
+        JOIN identities i ON il.identity_id = i.id
+        WHERE i.tenant_id = :tenant_id
+    """)
+    edge_result = await db.execute(edges_query, {"tenant_id": current_user.tenant_id})
+    edges = edge_result.mappings().all()
+    
+    # 3. Recupera Metadata Leak per i nodi del grafo
+    leak_ids = list(set([e["target"] for e in edges]))
+    leaks = []
+    if leak_ids:
+        leak_query = select(LeakHit).where(LeakHit.id.in_(leak_ids))
+        l_result = await db.execute(leak_query)
+        leaks = l_result.scalars().all()
+
+    nodes = [
+        {
+            "id": i["id"], 
+            "label": i["identifier"], 
+            "type": "identity", 
+            "risk": i["risk_score"], 
+            "subType": i["type"],
+            "isProtected": i["is_protected"]
+        } for i in identities
+    ]
+    
+    for l in leaks:
+        nodes.append({
+            "id": l.id, 
+            "label": l.source, 
+            "type": "leak", 
+            "risk": l.severity_score,
+            "status": l.status
+        })
+        
+    return {
+        "nodes": nodes, 
+        "links": [{"source": e["source"], "target": e["target"]} for e in edges]
+    }
+
 @router.get("/{identity_id}/insights", response_model=IdentityInsights)
 async def get_identity_insights(
     identity_id: str,
@@ -21,7 +82,6 @@ async def get_identity_insights(
     """
     Identity Insights (Q): Recupera l'analisi dettagliata di un'identità.
     """
-    # 1. Recupera identità master con i suoi leak
     result = await db.execute(
         select(Identity)
         .options(selectinload(Identity.leaks))
@@ -35,13 +95,11 @@ async def get_identity_insights(
     if current_user.role != "admin" and identity.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Access denied")
         
-    # 2. Recupera identità slave (Merged Tree - Y)
     slave_result = await db.execute(
         select(Identity).where(Identity.master_identity_id == identity.id)
     )
     slaves = slave_result.scalars().all()
     
-    # Audit Logging (#10)
     await AuditLogger.log(
         db, 
         user_id=current_user.id, 
@@ -133,60 +191,34 @@ async def search_identities(
     result = await db.execute(query.order_by(Identity.risk_score.desc()))
     return result.scalars().all()
 
-@router.get("/graph")
-async def get_identity_graph(db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+@router.post("/")
+async def create_identity(
+    identifier: str,
+    type: str = "person",
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """
-    Query Side (CQRS #5): Visualizzazione ultra-veloce del grafo potenziata (DD).
+    Create a new monitored identity.
     """
-    # 1. Recupera Nodi Identità
-    identities_query = text("""
-        SELECT id, identifier, risk_score, type, is_protected 
-        FROM identities 
-        WHERE tenant_id = :tenant_id
-    """)
-    ident_result = await db.execute(identities_query, {"tenant_id": current_user.tenant_id})
-    identities = ident_result.mappings().all()
+    new_identity = Identity(
+        identifier=identifier,
+        type=type,
+        tenant_id=current_user.tenant_id,
+        risk_score=0,
+        is_protected=False
+    )
+    db.add(new_identity)
     
-    # 2. Recupera Archi (Connessioni)
-    edges_query = text("""
-        SELECT il.identity_id as source, il.leak_id as target
-        FROM identity_leaks il
-        JOIN identities i ON il.identity_id = i.id
-        WHERE i.tenant_id = :tenant_id
-    """)
-    edge_result = await db.execute(edges_query, {"tenant_id": current_user.tenant_id})
-    edges = edge_result.mappings().all()
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="CREATE_IDENTITY",
+        resource_type="identity",
+        details={"identifier": identifier, "type": type}
+    )
     
-    # 3. Recupera Metadata Leak per i nodi del grafo
-    leak_ids = list(set([e["target"] for e in edges]))
-    leaks = []
-    if leak_ids:
-        leak_query = select(LeakHit).where(LeakHit.id.in_(leak_ids))
-        l_result = await db.execute(leak_query)
-        leaks = l_result.scalars().all()
-
-    # Formattazione SOTA per Network Graph Pro
-    nodes = [
-        {
-            "id": i["id"], 
-            "label": i["identifier"], 
-            "type": "identity", 
-            "risk": i["risk_score"], 
-            "subType": i["type"],
-            "isProtected": i["is_protected"]
-        } for i in identities
-    ]
-    
-    for l in leaks:
-        nodes.append({
-            "id": l.id, 
-            "label": l.source, 
-            "type": "leak", 
-            "risk": l.severity_score,
-            "status": l.status
-        })
-        
-    return {
-        "nodes": nodes, 
-        "links": [{"source": e["source"], "target": e["target"]} for e in edges]
-    }
+    await db.commit()
+    await db.refresh(new_identity)
+    return new_identity

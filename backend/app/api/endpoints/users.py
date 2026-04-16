@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from shared.database import get_db
 from shared.models import User
 from shared.schemas import User as UserSchema, UserUpdate
-from .deps import get_current_user
+from ..deps import get_current_user
 from shared.utils.audit import AuditLogger
 from shared.core.exceptions import ResourceNotFoundError
 

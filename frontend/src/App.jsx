@@ -144,53 +144,45 @@ const ScreenshotLightbox = ({ leakId, onClose }) => {
 
   return (
     <Dialog open={!!leakId} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl bg-black/95 border-naso-accent/20 p-0 overflow-hidden backdrop-blur-3xl shadow-[0_0_150px_rgba(59,130,246,0.15)] rounded-none">
-        <div className="relative aspect-video w-full bg-[#050507] flex items-center justify-center border-4 border-white/5">
+      <DialogContent className="max-w-5xl bg-[#1C1C1E]/98 border-white/[0.08] p-0 overflow-hidden backdrop-blur-3xl rounded-2xl shadow-2xl">
+        <div className="relative aspect-video w-full bg-black/60 flex items-center justify-center">
           {loading ? (
-            <div className="flex flex-col items-center gap-6">
-              <Radar className="animate-spin text-naso-accent" size={64} />
-              <p className="text-[10px] font-black uppercase tracking-[0.5em] text-naso-accent animate-pulse">Reconstructing Forensic Artifact...</p>
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 size={36} className="animate-spin text-[#0A84FF]" strokeWidth={1.5} />
+              <p className="text-[12px] text-zinc-500">Loading forensic artifact...</p>
             </div>
           ) : imgUrl ? (
-            <div className="relative w-full h-full p-10">
+            <div className="relative w-full h-full p-8">
                 <img 
                     src={imgUrl} 
                     alt="Forensic Evidence"
-                    className="w-full h-full object-contain shadow-[0_0_50px_rgba(0,0,0,1)]"
+                    className="w-full h-full object-contain rounded-xl"
                 />
-                <div className="absolute inset-0 pointer-events-none border-[20px] border-black/20"></div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-4 text-red-500/50">
-                <ShieldAlert size={48} />
-                <p className="text-xs font-black uppercase tracking-widest">Access Denied • Artifact Corrupted</p>
+            <div className="flex flex-col items-center gap-3 text-zinc-600">
+                <ShieldAlert size={36} strokeWidth={1.5} />
+                <p className="text-[13px] text-zinc-500">Artifact unavailable or access denied</p>
             </div>
           )}
-          <div className="absolute top-0 left-0 w-full p-8 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex justify-between items-start z-10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-naso-accent shadow-[0_0_20px_rgba(59,130,246,0.4)]"><ImageIcon size={20} className="text-white" /></div>
-              <div className="flex flex-col gap-1">
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-naso-accent">Forensic Evidence Chain</p>
-                <p className="text-lg font-black text-white tracking-tighter uppercase">Artifact-ID: {leakId?.toUpperCase()}</p>
+          <div className="absolute top-0 left-0 w-full p-5 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-10">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-[#0A84FF]/10 border border-[#0A84FF]/20 rounded-lg">
+                <ImageIcon size={16} className="text-[#0A84FF]" strokeWidth={1.5} />
+              </div>
+              <div>
+                <p className="text-[11px] text-zinc-400">Forensic Evidence</p>
+                <p className="text-[13px] font-medium text-white tracking-tight">Artifact: {leakId?.slice(0,8).toUpperCase()}</p>
               </div>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" className="border-white/10 text-white hover:bg-white/5 text-[10px] font-black uppercase tracking-widest h-10 px-6">Download RAW</Button>
-                <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-red-500/20 hover:text-red-500 h-10 w-10 transition-all"><X size={24} /></Button>
+                <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white hover:bg-white/10 h-8 w-8 rounded-full transition-all"><X size={16} /></Button>
             </div>
           </div>
-          
-          {/* Metadata Sidebar in Lightbox */}
-          <div className="absolute bottom-8 right-8 w-64 naso-glass p-6 space-y-4 border-naso-accent/20">
-             <div className="space-y-1">
-                <p className="text-[8px] font-black text-naso-accent uppercase tracking-widest">Metadata Hash</p>
-                <p className="text-[9px] font-mono text-white truncate">SHA256: 8f2c3a9d...f4e1</p>
-             </div>
-             <div className="space-y-1">
-                <p className="text-[8px] font-black text-naso-accent uppercase tracking-widest">Timestamp</p>
-                <p className="text-[9px] font-mono text-white uppercase">{new Date().toISOString()}</p>
-             </div>
-             <Badge className="w-full justify-center bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-black">UNMODIFIED EVIDENCE</Badge>
+          <div className="absolute bottom-4 right-4 px-3 py-2 rounded-xl bg-black/60 border border-white/[0.06] space-y-1">
+             <p className="text-[10px] text-zinc-500 font-mono">SHA256: 8f2c3a9d...f4e1</p>
+             <p className="text-[10px] text-zinc-500 font-mono">{new Date().toISOString()}</p>
+             <Badge className="w-full justify-center bg-[#32D74B]/10 text-[#32D74B] border-[#32D74B]/20 text-[10px] font-medium">UNMODIFIED</Badge>
           </div>
         </div>
       </DialogContent>
@@ -287,6 +279,83 @@ const LeakRow = ({ leak, onInspect }) => (
   </TableRow>
 );
 
+// BUG 6 & 7 FIX: Define IdentityRow and AuditLogRow (were missing, causing blank tables)
+const IdentityRow = ({ identity, onDetails }) => (
+  <TableRow className="border-b border-white/[0.05] hover:bg-white/[0.03] transition-colors cursor-pointer" onClick={onDetails}>
+    <TableCell className="pl-5">
+      <div className="flex items-center gap-3">
+        <div className="p-1.5 rounded-lg bg-white/[0.05] border border-white/[0.08]">
+          <Fingerprint size={13} strokeWidth={1.5} className={identity.is_protected ? 'text-[#FFD60A]' : 'text-[#0A84FF]'} />
+        </div>
+        <div>
+          <p className="text-[13px] font-medium text-white tracking-tight">{identity.identifier}</p>
+          <p className="text-[11px] text-zinc-500 font-mono">{identity.id?.slice(0,8).toUpperCase()}</p>
+        </div>
+      </div>
+    </TableCell>
+    <TableCell>
+      <Badge variant="outline" className="text-[11px] border-white/10 text-zinc-400 capitalize">{identity.type}</Badge>
+    </TableCell>
+    <TableCell>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${identity.risk_score >= 80 ? 'bg-[#FF453A]' : identity.risk_score >= 50 ? 'bg-orange-400' : 'bg-[#32D74B]'}`}
+            style={{ width: `${Math.min(identity.risk_score, 100)}%` }}
+          />
+        </div>
+        <span className={`text-[12px] font-semibold w-8 text-right ${identity.risk_score >= 80 ? 'text-[#FF453A]' : identity.risk_score >= 50 ? 'text-orange-400' : 'text-[#32D74B]'}`}>
+          {identity.risk_score}
+        </span>
+      </div>
+    </TableCell>
+    <TableCell className="text-right pr-5">
+      <Button variant="outline" size="sm" className="h-7 text-[11px] font-medium border-white/10 text-zinc-300 hover:text-white hover:bg-white/10 bg-transparent rounded-full px-3">
+        Insights
+      </Button>
+    </TableCell>
+  </TableRow>
+);
+
+const AuditLogRow = ({ log }) => (
+  <TableRow className="border-b border-white/[0.05] hover:bg-white/[0.03] transition-colors">
+    <TableCell className="pl-5">
+      <div className="flex items-center gap-3">
+        <div className={`p-1.5 rounded-lg ${
+          log.action?.includes('CREATE') ? 'bg-[#32D74B]/10' :
+          log.action?.includes('DELETE') ? 'bg-[#FF453A]/10' :
+          log.action?.includes('RECON') || log.action?.includes('DARK') ? 'bg-purple-500/10' :
+          'bg-[#0A84FF]/10'
+        }`}>
+          <ScrollText size={13} strokeWidth={1.5} className={`${
+            log.action?.includes('CREATE') ? 'text-[#32D74B]' :
+            log.action?.includes('DELETE') ? 'text-[#FF453A]' :
+            log.action?.includes('RECON') || log.action?.includes('DARK') ? 'text-purple-400' :
+            'text-[#0A84FF]'
+          }`} />
+        </div>
+        <div>
+          <p className="text-[13px] font-medium text-white">{log.action?.replace(/_/g, ' ')}</p>
+          <p className="text-[11px] text-zinc-500">User: {log.user_id?.slice(0,8)}</p>
+        </div>
+      </div>
+    </TableCell>
+    <TableCell>
+      <Badge variant="outline" className="text-[11px] border-white/10 text-zinc-400 capitalize">{log.resource_type || '—'}</Badge>
+    </TableCell>
+    <TableCell>
+      <p className="text-[12px] text-zinc-400 font-mono truncate max-w-[200px]">
+        {log.details ? JSON.stringify(log.details).slice(0, 60) : '—'}
+      </p>
+    </TableCell>
+    <TableCell className="text-right pr-5">
+      <span className="text-[11px] text-zinc-500 font-mono">
+        {new Date(log.timestamp).toLocaleString()}
+      </span>
+    </TableCell>
+  </TableRow>
+);
+
 export default function App() {
   const { 
     leaks, fetchLeaks, identities, fetchIdentities, 
@@ -296,7 +365,8 @@ export default function App() {
     selectedIdentityInsights, fetchIdentityInsights, clearSelectedIdentity,
     toggleIdentityProtection,
     isLoading, systemStatus, fetchSystemStatus, error, clearError,
-    addIdentity, updateProfile
+    addIdentity, updateProfile,
+    graphData, fetchGraphData  // BUG 4 FIX: use store's fetchGraphData, not local shadow
   } = useNasoStore();
 
   const [activeView, setActiveView] = useState('dashboard');
@@ -312,63 +382,6 @@ export default function App() {
 
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [editProfileEmailState, setEditProfileEmailState] = useState('f.salmi@naso-engine.io');
-
-  // Graph state for Neural Topology
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
-
-  const fetchGraphData = () => {
-    // Build force-graph data from identities + leaks already in store
-    const nodes = [];
-    const links = [];
-
-    identities.forEach(id => {
-      nodes.push({
-        id: `identity-${id.id}`,
-        label: id.identifier,
-        type: 'identity',
-        isProtected: id.is_protected,
-        risk: id.risk_score || 0,
-      });
-    });
-
-    leaks.forEach(leak => {
-      nodes.push({
-        id: `leak-${leak.id}`,
-        label: leak.source,
-        type: 'leak',
-        risk: leak.severity_score || 0,
-      });
-      // Link leaks to identities by best-effort match
-      const linkedId = identities.find(id =>
-        leak.source?.toLowerCase().includes(id.identifier?.toLowerCase().split('@')[0])
-      );
-      if (linkedId) {
-        links.push({
-          source: `identity-${linkedId.id}`,
-          target: `leak-${leak.id}`,
-        });
-      } else if (nodes.length > 1) {
-        // Connect to first identity as fallback
-        links.push({
-          source: nodes[0].id,
-          target: `leak-${leak.id}`,
-        });
-      }
-    });
-
-    // If no real data, generate demo nodes
-    if (nodes.length === 0) {
-      const demoIds = ['j.doe@corp.com', 'admin@target.io', 'root@infra.net'];
-      const demoLeaks = ['github:dump', 'telegram:breach', 'darkweb:paste', 'pastebin:cred'];
-      demoIds.forEach((label, i) => nodes.push({ id: `d-id-${i}`, label, type: 'identity', risk: 40 + i * 20 }));
-      demoLeaks.forEach((label, i) => {
-        nodes.push({ id: `d-lk-${i}`, label, type: 'leak', risk: 50 + i * 10 });
-        links.push({ source: `d-id-${i % demoIds.length}`, target: `d-lk-${i}` });
-      });
-    }
-
-    setGraphData({ nodes, links });
-  };
 
   // Mock terminal logs effect
   useEffect(() => {
@@ -410,15 +423,7 @@ export default function App() {
     }, 30000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchLeaks, fetchSystemStatus, fetchIdentities, fetchAuditLogs, activeView]);
-
-  // Re-build graph when identities or leaks change while on topology view
-  useEffect(() => {
-    if (activeView === 'topology') {
-      fetchGraphData();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identities, leaks, activeView]);
+  }, [fetchLeaks, fetchSystemStatus, fetchIdentities, fetchAuditLogs, fetchGraphData, activeView]);
 
   const severityData = useMemo(() => [
     { name: 'Critical', value: leaks.filter(l => l.severity_score >= 80).length, color: '#ef4444' },
@@ -436,7 +441,7 @@ export default function App() {
     }, []), [leaks]);
 
   return (
-    <div className="flex h-screen bg-[#020203] text-zinc-100 overflow-hidden font-sans selection:bg-naso-accent/30 selection:text-white relative">
+    <div className="flex h-screen bg-black text-zinc-100 overflow-hidden font-sans relative">
       <TacticalOverlay />
       
       <aside className="w-[260px] bg-[#1C1C1E]/60 backdrop-blur-3xl border-r border-white/[0.08] flex flex-col z-20">
