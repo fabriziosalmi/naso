@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Shield, AlertTriangle, Users, Cpu, Activity, PieChart as PieChartIcon, Target, Download, History, Code2, MessageSquare, Globe, Image as ImageIcon, Database } from 'lucide-react';
+import { Shield, AlertTriangle, Users, Cpu, Activity, PieChart as PieChartIcon, Target, Download, History, Code2, MessageSquare, Globe, Image as ImageIcon, Database, Brain, ChevronRight } from 'lucide-react';
 import useNasoStore from '../store/useNasoStore';
 import { StatCard } from '../components/ui/StatCard';
 import { useNavigate } from 'react-router-dom';
@@ -50,6 +50,59 @@ const LeakRow = ({ leak, onInspect }) => (
   </TableRow>
 );
 
+const OnboardingCard = ({ icon: Icon, title, desc, onClick }) => (
+  <div 
+    onClick={onClick}
+    className="group relative cursor-pointer flex flex-col p-8 bg-[#111111]/80 backdrop-blur-xl border border-white/[0.05] hover:border-[#0A84FF]/50 rounded-[24px] overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_40px_-20px_rgba(10,132,255,0.3)]"
+  >
+    <div className="absolute inset-0 bg-gradient-to-b from-[#0A84FF]/0 to-[#0A84FF]/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+    <div className="w-12 h-12 bg-white/[0.04] rounded-2xl flex items-center justify-center mb-6 group-hover:bg-[#0A84FF]/10 transition-colors duration-500">
+      <Icon size={24} className="text-zinc-400 group-hover:text-[#0A84FF] transition-colors duration-500" strokeWidth={1.5} />
+    </div>
+    <h3 className="text-[17px] font-semibold text-zinc-100 mb-2">{title}</h3>
+    <p className="text-[14px] text-zinc-500 leading-relaxed mb-6 flex-1">{desc}</p>
+    <div className="flex items-center text-[#0A84FF] text-[13px] font-medium opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+      Initialize sequence <ChevronRight size={14} className="ml-1" />
+    </div>
+  </div>
+);
+
+const OnboardingHero = ({ navigate }) => {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[75vh] w-full animate-in fade-in zoom-in duration-700">
+      <div className="w-20 h-20 bg-white/[0.03] rounded-[24px] border border-white/[0.08] flex items-center justify-center mb-8 shadow-2xl relative overflow-hidden">
+         <div className="absolute inset-0 bg-gradient-to-br from-[#0A84FF]/20 to-transparent opacity-50" />
+         <Shield size={36} className="text-[#0A84FF] relative z-10" strokeWidth={1.5} />
+      </div>
+      <h1 className="text-4xl font-bold tracking-tight text-white mb-4">Intelligence Core Initialized.</h1>
+      <p className="text-zinc-400 text-lg max-w-xl text-center mb-16 leading-relaxed">
+        NASO Forensic Engine is online and awaiting raw signals. The operational data lake is empty. Select a primary vector below to establish your intelligence baseline.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+        <OnboardingCard 
+          icon={Globe}
+          title="Sonda il Dark Web"
+          desc="Lancia un probe sulla rete Tor ed estrai le prime evidenze non strutturate."
+          onClick={() => navigate('/dark-search')}
+        />
+        <OnboardingCard 
+          icon={Activity}
+          title="Costruisci Grafo Neurale"
+          desc="Registra un alias o una mail nel registro centrale per innescare correlazioni."
+          onClick={() => navigate('/identities')}
+        />
+        <OnboardingCard 
+          icon={Brain}
+          title="Risveglia l'AI"
+          desc="Apri una sessione con il Co-Analyst per familiarizzare coi tool operativi."
+          onClick={() => navigate('/ai-analyst')}
+        />
+      </div>
+    </div>
+  );
+};
+
 export default function Dashboard({ setViewingScreenshotId }) {
   const { leaks, fetchLeaks, identities, exportMassiveDossier, isLoading } = useNasoStore();
   const navigate = useNavigate();
@@ -68,6 +121,12 @@ export default function Dashboard({ setViewingScreenshotId }) {
       if (existing) { existing.count += 1; } else { acc.push({ date, count: 1 }); }
       return acc;
     }, []), [leaks]);
+
+  const isPlatformEmpty = leaks.length === 0 && identities.length === 0 && !isLoading;
+
+  if (isPlatformEmpty) {
+    return <OnboardingHero navigate={navigate} />;
+  }
 
   return (
     <>
@@ -182,12 +241,6 @@ export default function Dashboard({ setViewingScreenshotId }) {
                          <div className="w-2 h-2 bg-[#0A84FF] rounded-full animate-ping"></div>
                          Syncing Intelligence Matrix...
                        </div>
-                    </TableCell>
-                </TableRow>
-            ) : leaks.length === 0 && (
-                <TableRow>
-                    <TableCell colSpan={5} className="h-40 text-center text-zinc-600 font-mono italic text-xs uppercase tracking-[0.3em]">
-                       --- No artifacts detected ---
                     </TableCell>
                 </TableRow>
             )}
