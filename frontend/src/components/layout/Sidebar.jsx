@@ -37,8 +37,8 @@ export default function Sidebar({ onEditProfile }) {
     return () => clearInterval(interval);
   }, []);
 
-  const getNavClass = ({ isActive }) => 
-    `flex items-center gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium w-full ${isActive ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`;
+  const getNavClass = ({ isActive }) =>
+    `flex flex-nowrap flex-row items-center gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium w-full whitespace-nowrap ${isActive ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'}`;
 
   return (
     <aside className="w-[260px] glass-panel border-r flex flex-col z-20 shrink-0 relative overflow-hidden">
