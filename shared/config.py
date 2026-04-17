@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
+    # API Security
+    ALLOWED_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000"
+    
     # Elasticsearch
     ES_HOST: str = "elasticsearch"
     ES_PORT: int = 9200

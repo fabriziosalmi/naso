@@ -354,6 +354,45 @@ const useNasoStore = create((set, get) => ({
     }
   },
 
+  // Telegram Intelligence (Manual Probe)
+  searchTelegram: async (query) => {
+    const { token } = get();
+    if (!token) return set({ error: 'Authentication required' });
+    if (!query || !query.trim()) return set({ error: 'Enter a search query before launching probe' });
+    set({ isLoading: true, error: null });
+    try {
+      await axios.get('/leaks/recon/telegram', {
+        params: { channel_username: query.trim() },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Telegram data streams into generic Leaks immediately via pipeline
+      get().fetchLeaks();
+      get().fetchAuditLogs();
+      set({ isLoading: false });
+    } catch (err) {
+      set({ error: 'Telegram intercept failed — check backend connectivity', isLoading: false });
+    }
+  },
+
+  // Shodan Recon (Manual Probe)
+  searchShodan: async (ip) => {
+    const { token } = get();
+    if (!token) return set({ error: 'Authentication required' });
+    if (!ip || !ip.trim()) return set({ error: 'Enter an IP address before launching probe' });
+    set({ isLoading: true, error: null });
+    try {
+      await axios.get('/leaks/recon/shodan', {
+        params: { ip: ip.trim() },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      get().fetchIdentities();
+      get().fetchAuditLogs();
+      set({ isLoading: false });
+    } catch (err) {
+      set({ error: 'Shodan scan failed — ensure API key is configured', isLoading: false });
+    }
+  },
+
   // Massive Export (BB)
   exportMassiveDossier: async () => {
     const { token } = get();

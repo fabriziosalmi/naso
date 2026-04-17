@@ -52,7 +52,7 @@ async def secure_headers_middleware(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000"],
+    allow_origins=[origin.strip() for origin in settings.ALLOWED_CORS_ORIGINS.split(",")],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -62,7 +62,6 @@ app.add_middleware(
     TrustedHostMiddleware, 
     allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api"]
 )
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(keywords.router, prefix="/keywords", tags=["keywords"])
 app.include_router(leaks.router, prefix="/leaks", tags=["leaks"])
