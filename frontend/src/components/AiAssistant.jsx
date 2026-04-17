@@ -6,7 +6,7 @@ import {
   Send, Loader2, Zap, Search, Database, Globe, AlertTriangle,
   FileText, X, ChevronDown, ChevronUp, Cpu, Wifi, WifiOff,
   MoreVertical, Archive, Target, Activity, Shield, Info,
-  ClipboardList, Sparkles
+  ClipboardList, Sparkles, Server, MessageSquare
 } from 'lucide-react';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -18,6 +18,8 @@ const TOOL_ICON = {
   get_identity_insights: <Target size={12} strokeWidth={2} />,
   create_task: <ClipboardList size={12} strokeWidth={2} />,
   flag_critical: <AlertTriangle size={12} strokeWidth={2} />,
+  naso_shodan_scan: <Server size={12} strokeWidth={2} />,
+  naso_telegram_intel: <MessageSquare size={12} strokeWidth={2} />,
 };
 
 const TOOL_LABEL = {
@@ -27,6 +29,8 @@ const TOOL_LABEL = {
   get_identity_insights: 'Identity deep-scan',
   create_task: 'Creating task',
   flag_critical: 'Flagging leak',
+  naso_shodan_scan: 'Shodan OSINT scan',
+  naso_telegram_intel: 'Telegram intercept',
 };
 
 const STATUS_COLOR = {
@@ -181,7 +185,19 @@ function EvidenceCard({ item }) {
               {item.name === 'dark_web_probe' && (
                 <p className="text-[11px] text-zinc-400 truncate">{row.title || row.url || JSON.stringify(row)}</p>
               )}
-              {!['search_identities', 'get_leaks', 'dark_web_probe'].includes(item.name) && (
+              {item.name === 'naso_telegram_intel' && (
+                <div>
+                  <p className="text-[11px] text-zinc-300 truncate">{row.text}</p>
+                  <p className="text-[9px] text-zinc-500 mt-0.5">{row.timestamp}</p>
+                </div>
+              )}
+              {item.name === 'naso_shodan_scan' && (
+                <div>
+                  <p className="text-[11px] font-medium text-white">Port {row.port}</p>
+                  <p className="text-[10px] text-zinc-400">{row.product || row.org || JSON.stringify(row)}</p>
+                </div>
+              )}
+              {!['search_identities', 'get_leaks', 'dark_web_probe', 'naso_telegram_intel', 'naso_shodan_scan'].includes(item.name) && (
                 <p className="text-[11px] text-zinc-400 font-mono">{JSON.stringify(row).slice(0, 80)}</p>
               )}
             </div>

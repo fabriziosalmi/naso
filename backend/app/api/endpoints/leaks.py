@@ -12,6 +12,8 @@ from shared.core.exceptions import ResourceNotFoundError, AuthorizationError
 from shared.utils.audit import AuditLogger
 
 from shared.domain.services.darkweb_search import DarkWebSearchService
+from shared.domain.services.shodan_search import ShodanService
+from shared.domain.services.telegram_search import TelegramOSINTService
 
 router = APIRouter()
 
@@ -29,6 +31,42 @@ async def darkweb_recon(
     await AuditLogger.log(
         db, user_id=current_user.id, tenant_id=current_user.tenant_id,
         action="DARK_WEB_RECON", details={"query": q, "results_count": len(results)}
+    )
+    await db.commit()
+    return results
+
+@router.get("/recon/shodan")
+async def shodan_recon(
+    ip: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Esegue una scansione infrastrutturale OSINT tramite Shodan (DD).
+    """
+    results = await ShodanService.scan_host(ip)
+    
+    await AuditLogger.log(
+        db, user_id=current_user.id, tenant_id=current_user.tenant_id,
+        action="SHODAN_RECON", details={"target_ip": ip, "has_error": "error" in results}
+    )
+    await db.commit()
+    return results
+
+@router.get("/recon/telegram")
+async def telegram_recon(
+    channel: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Intercetta il traffico pubblico di un canale Telegram (Threat Actor Chatter).
+    """
+    results = await TelegramOSINTService.scrape_public_channel(channel)
+    
+    await AuditLogger.log(
+        db, user_id=current_user.id, tenant_id=current_user.tenant_id,
+        action="TELEGRAM_RECON", details={"channel": channel, "results_count": len(results)}
     )
     await db.commit()
     return results

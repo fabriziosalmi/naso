@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     TELEGRAM_API_ID: Optional[str] = None
     TELEGRAM_API_HASH: Optional[str] = None
     TELEGRAM_SESSION_NAME: str = "naso_forensic_bot"
+    
+    # Shodan Integration
+    SHODAN_API_KEY: Optional[str] = None
 
     class Config:
         env_file = ".env"

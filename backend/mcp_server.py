@@ -10,6 +10,8 @@ from sqlalchemy.future import select
 from shared.database import AsyncSessionLocal
 from shared.models import Identity, LeakHit
 from shared.domain.services.darkweb_search import DarkWebSearchService
+from shared.domain.services.shodan_search import ShodanService
+from shared.domain.services.telegram_search import TelegramOSINTService
 from shared.utils.audit import AuditLogger
 
 # Configurazione Logger per non inquinare stdio (che romperrebbe MCP protocol)
@@ -35,6 +37,34 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["query"]
+            }
+        ),
+        Tool(
+            name="naso_shodan_scan",
+            description="Query Shodan OSINT to discover open ports, vulnerabilities, and exposed services for a specific IP address.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "target_ip": {
+                        "type": "string",
+                        "description": "The IPv4 address to scan (e.g. '8.8.8.8')."
+                    }
+                },
+                "required": ["target_ip"]
+            }
+        ),
+        Tool(
+            name="naso_telegram_intel",
+            description="Scrape and intercept the most recent public messages from a Telegram channel. Best used for monitoring threat actor groups or hacktivist leaks.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "channel_name": {
+                        "type": "string",
+                        "description": "The telegram channel alias/name (e.g. 'lockbit_news' or 'hacktivist_group')."
+                    }
+                },
+                "required": ["channel_name"]
             }
         ),
         Tool(
@@ -118,6 +148,51 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return [TextContent(type="text", text=report)]
         except Exception as e:
             return [TextContent(type="text", text=f"Dark web recon failed: {str(e)}")]
+
+    elif name == "naso_shodan_scan":
+        target_ip = arguments.get("target_ip")
+        if not target_ip:
+            return [TextContent(type="text", text="Error: target_ip is required.")]
+            
+        try:
+            results = await ShodanService.scan_host(target_ip)
+            if "error" in results:
+                return [TextContent(type="text", text=f"Shodan Scan Error: {results['error']}")]
+                
+            report = f"Shodan Intel for IP: {target_ip}\n"
+            report += f"ISP: {results.get('isp')} | Org: {results.get('org')}\n"
+            report += f"OS: {results.get('os')} | Open Ports: {results.get('ports')}\n\n"
+            
+            for d in results.get("data_summary", []):
+                report += f"- Port {d.get('port')}: {d.get('product') or 'Unknown'} {d.get('version') or ''}\n"
+                
+            if results.get("vulns"):
+                report += f"\nVulnerabilities (CVEs): {', '.join(results.get('vulns'))}\n"
+                
+            return [TextContent(type="text", text=report)]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Shodan scan failed: {str(e)}")]
+
+    elif name == "naso_telegram_intel":
+        channel_name = arguments.get("channel_name")
+        if not channel_name:
+            return [TextContent(type="text", text="Error: channel_name is required.")]
+            
+        try:
+            results = await TelegramOSINTService.scrape_public_channel(channel_name)
+            if not results:
+                return [TextContent(type="text", text=f"No messages found for channel @{channel_name}.")]
+                
+            if "error" in results[0]:
+                return [TextContent(type="text", text=f"Telegram Intel Error: {results[0]['error']}")]
+                
+            report = f"Telegram Threat Chatter intercepted from @{channel_name}:\n\n"
+            for msg in results:
+                report += f"[{msg.get('timestamp')}] (Views: {msg.get('views')})\n{msg.get('text')}\n---\n"
+                
+            return [TextContent(type="text", text=report)]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Telegram intel failed: {str(e)}")]
 
     elif name == "naso_get_identities":
         limit = arguments.get("limit", 50)
