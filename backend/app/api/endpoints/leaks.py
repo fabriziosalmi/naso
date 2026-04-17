@@ -209,6 +209,77 @@ async def update_leak_status(
     return {"status": "updated"}
 
 
+@router.patch("/{leak_id}/ack")
+async def acknowledge_leak(
+    leak_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+):
+    """
+    Acknowledge a single critical leak alert.
+    """
+    result = await db.execute(select(LeakHit).where(LeakHit.id == leak_id))
+    leak = result.scalar_one_or_none()
+
+    if not leak:
+        raise ResourceNotFoundError(f"Leak {leak_id} non trovato")
+
+    if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
+        raise AuthorizationError("Accesso negato")
+
+    from sqlalchemy.sql import func
+    leak.acknowledged_at = func.now()
+    leak.acknowledged_by = current_user.id
+
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="ACKNOWLEDGE_LEAK",
+        resource_type="leak",
+        resource_id=leak_id,
+    )
+
+    await db.commit()
+    return {"status": "acknowledged", "acknowledged_at": leak.acknowledged_at.isoformat() if leak.acknowledged_at else None}
+
+
+@router.post("/ack-all")
+async def acknowledge_all_critical(
+    min_severity: int = 80, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+):
+    """
+    Acknowledge all unacknowledged critical leaks (severity >= min_severity) for the tenant.
+    """
+    from sqlalchemy.sql import func
+
+    query = select(LeakHit).where(
+        LeakHit.severity_score >= min_severity,
+        LeakHit.acknowledged_at.is_(None),
+    )
+    if current_user.role != "admin":
+        query = query.where(LeakHit.tenant_id == current_user.tenant_id)
+
+    result = await db.execute(query)
+    leaks = result.scalars().all()
+
+    count = 0
+    for leak in leaks:
+        leak.acknowledged_at = func.now()
+        leak.acknowledged_by = current_user.id
+        count += 1
+
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="ACKNOWLEDGE_ALL_CRITICAL",
+        resource_type="leak",
+        details={"count": count, "min_severity": min_severity},
+    )
+
+    await db.commit()
+    return {"acknowledged_count": count}
+
+
 @router.get("/")
 async def get_leaks(
     source: Optional[str] = None,

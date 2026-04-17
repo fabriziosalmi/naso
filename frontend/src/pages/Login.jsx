@@ -10,7 +10,10 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) return;
-    await login(email, password);
+    const success = await login(email, password);
+    if (success !== false) {
+      useNasoStore.getState().fetchMe();
+    }
   };
 
   return (

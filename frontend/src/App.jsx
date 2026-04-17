@@ -23,7 +23,7 @@ import DarkRecon from './pages/DarkRecon';
 import Audit from './pages/Audit';
 import Login from './pages/Login';
 
-const NotificationItem = ({ alert }) => (
+const NotificationItem = ({ alert, onAck }) => (
   <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer relative overflow-hidden">
     <div className="flex gap-4">
       <div className={`p-2 rounded-lg ${alert.severity_score >= 80 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}`}>
@@ -34,18 +34,31 @@ const NotificationItem = ({ alert }) => (
           <p className={`text-xs font-semibold ${alert.severity_score >= 80 ? 'text-red-400' : 'text-blue-400'}`}>
             {alert.severity_score >= 80 ? 'Critical Breach' : 'Intelligence Match'}
           </p>
-          <span className="text-[10px] text-zinc-500">{new Date(alert.discovered_at).toLocaleTimeString()}</span>
+          {alert.acknowledged_at ? (
+            <span className="text-[10px] text-zinc-600">Acknowledged</span>
+          ) : (
+            <span className="text-[10px] text-zinc-500">{new Date(alert.discovered_at).toLocaleTimeString()}</span>
+          )}
         </div>
         <p className="text-xs text-zinc-400">
           Artifact identified from <span className="text-zinc-200 font-medium">{alert.source}</span>.
         </p>
       </div>
     </div>
+    {!alert.acknowledged_at && (
+      <button
+        onClick={(e) => { e.stopPropagation(); onAck(alert.id); }}
+        className="mt-2 w-full py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[11px] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all text-center"
+      >
+        Acknowledge
+      </button>
+    )}
   </div>
 );
 
-const ScreenshotLightbox = ({ leakId, onClose }) => {
+const ScreenshotLightbox = ({ leakId, leaks, onClose }) => {
   const { fetchScreenshot } = useNasoStore();
+  const leak = leaks.find(l => l.id === leakId);
   const [imgUrl, setImgUrl] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -100,9 +113,11 @@ const ScreenshotLightbox = ({ leakId, onClose }) => {
             </div>
           </div>
           <div className="absolute bottom-4 right-4 px-3 py-2 rounded-xl bg-black/60 border border-white/[0.06] space-y-1">
-             <p className="text-[10px] text-zinc-500 font-mono">SHA256: 8f2c3a9d...f4e1</p>
-             <p className="text-[10px] text-zinc-500 font-mono">{new Date().toISOString()}</p>
-             <Badge className="w-full justify-center bg-[#32D74B]/10 text-[#32D74B] border-[#32D74B]/20 text-[10px] font-medium">UNMODIFIED</Badge>
+             <p className="text-[10px] text-zinc-500 font-mono">SHA256: {leak?.metadata_json?.sha256 || leakId?.slice(0,16).toUpperCase() || 'unknown'}</p>
+             <p className="text-[10px] text-zinc-500 font-mono">{leak?.discovered_at ? new Date(leak.discovered_at).toLocaleString() : new Date().toISOString()}</p>
+             <Badge className={`w-full justify-center text-[10px] font-medium ${leak?.acknowledged_at ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' : 'bg-[#32D74B]/10 text-[#32D74B] border-[#32D74B]/20'}`}>
+               {leak?.acknowledged_at ? 'ACKNOWLEDGED' : 'UNMODIFIED'}
+             </Badge>
           </div>
         </div>
       </DialogContent>
@@ -111,8 +126,9 @@ const ScreenshotLightbox = ({ leakId, onClose }) => {
 };
 
 export default function App() {
-  const { 
-    leaks, fetchLeaks, identities, fetchIdentities, 
+  const {
+    leaks, fetchLeaks, acknowledgeLeak, acknowledgeAllLeaks,
+    identities, fetchIdentities,
     auditLogs, fetchAuditLogs,
     selectedIdentityInsights, clearSelectedIdentity,
     toggleIdentityProtection,
@@ -134,12 +150,12 @@ export default function App() {
   const [newIdentityType, setNewIdentityType] = useState('person');
 
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [editProfileEmailState, setEditProfileEmailState] = useState('f.salmi@naso-engine.io');
+  const [editProfileEmailState, setEditProfileEmailState] = useState('');
 
   useEffect(() => {
     fetchLeaks();
     fetchSystemStatus();
-    fetchIdentities();
+    fetchIdentities({ only_masters: true });
     
     // Initial fetch based on route if necessary
     if (location.pathname === '/audit') fetchAuditLogs();
@@ -148,7 +164,7 @@ export default function App() {
     const interval = setInterval(() => {
       fetchLeaks();
       fetchSystemStatus();
-      if (location.pathname === '/identities') fetchIdentities();
+      if (location.pathname === '/identities') fetchIdentities({ only_masters: true });
       if (location.pathname === '/audit') fetchAuditLogs();
       if (location.pathname === '/topology') fetchGraphData();
     }, 30000);
@@ -210,7 +226,7 @@ export default function App() {
             <SheetDescription className="text-[12px] text-zinc-500 mt-1">Critical artifacts identified in the last 24h.</SheetDescription>
           </SheetHeader>
           <div className="flex-1 overflow-y-auto p-5 space-y-3 scrollbar-hide">
-            {leaks.filter(l => l.severity_score >= 80).map(alert => <NotificationItem key={alert.id} alert={alert} />)}
+            {leaks.filter(l => l.severity_score >= 80).map(alert => <NotificationItem key={alert.id} alert={alert} onAck={acknowledgeLeak} />)}
             {leaks.filter(l => l.severity_score >= 80).length === 0 && (
                  <div className="h-48 flex flex-col items-center justify-center text-zinc-600 gap-4">
                     <ShieldCheck size={36} className="text-[#32D74B]" strokeWidth={1.5} />
@@ -219,7 +235,12 @@ export default function App() {
             )}
           </div>
           <div className="p-5 border-t border-white/[0.08]">
-            <Button className="w-full h-10 font-medium text-[13px] bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full">Mark All as Resolved</Button>
+            <Button
+              className="w-full h-10 font-medium text-[13px] bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full"
+              onClick={() => acknowledgeAllLeaks()}
+            >
+              Mark All as Resolved
+            </Button>
           </div>
         </SheetContent>
       </Sheet>
@@ -312,7 +333,7 @@ export default function App() {
           )}
         </DialogContent>
       </Dialog>
-      <ScreenshotLightbox leakId={viewingScreenshotId} onClose={() => setViewingScreenshotId(null)} />
+      <ScreenshotLightbox leakId={viewingScreenshotId} leaks={leaks} onClose={() => setViewingScreenshotId(null)} />
 
       {/* ── Add Identity Dialog ── */}
       <Dialog open={isAddIdentityOpen} onOpenChange={setIsAddIdentityOpen}>

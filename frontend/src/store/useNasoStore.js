@@ -535,7 +535,59 @@ const useNasoStore = create((set, get) => ({
   },
 
   clearSelectedIdentity: () => set({ selectedIdentityInsights: null }),
-  clearError: () => set({ error: null })
+  clearError: () => set({ error: null }),
+
+  acknowledgeLeak: async (leakId) => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      await axios.patch(`/leaks/${leakId}/ack`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set(state => ({
+        leaks: state.leaks.map(l =>
+          l.id === leakId ? { ...l, acknowledged_at: new Date().toISOString() } : l
+        )
+      }));
+    } catch {
+      set({ error: 'Failed to acknowledge alert' });
+    }
+  },
+
+  acknowledgeAllLeaks: async () => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.post('/leaks/ack-all', { min_severity: 80 }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const acknowledgedIds = new Set(
+        get().leaks
+          .filter(l => l.severity_score >= 80 && !l.acknowledged_at)
+          .map(l => l.id)
+      );
+      const now = new Date().toISOString();
+      set(state => ({
+        leaks: state.leaks.map(l =>
+          acknowledgedIds.has(l.id) ? { ...l, acknowledged_at: now } : l
+        )
+      }));
+      return res.data.acknowledged_count;
+    } catch {
+      set({ error: 'Failed to acknowledge alerts' });
+    }
+  },
+
+  fetchMe: async () => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const res = await axios.get('/users/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      set({ user: res.data });
+    } catch { /* silent — user stays null */ }
+  },
 }));
 
 export default useNasoStore;

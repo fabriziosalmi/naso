@@ -528,10 +528,7 @@ async def ai_chat(
                                 except (json.JSONDecodeError, KeyError, IndexError):
                                     pass
                     
-                    if full_response.strip() and not globals().get("redis_client"): # We defined redis_client in generate()
-                        redis_client = await jwt_blacklist.get_client()
-                        semantic_string = orjson.dumps([{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)])
-                        cache_key = f"ai_cache:{hashlib.sha256(semantic_string).hexdigest()}"
+                    if full_response.strip():
                         await redis_client.setex(cache_key, 7200, full_response)
 
                 except Exception as e:

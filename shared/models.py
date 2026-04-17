@@ -80,8 +80,10 @@ class LeakHit(Base):
     metadata_json = Column(JSON)
     severity_score = Column(Integer, default=0, index=True)
     status = Column(String, default="new", index=True)
-    screenshot_path = Column(String)  # Forensic Proof (W)
+    screenshot_path = Column(String)
     discovered_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    acknowledged_by = Column(String, ForeignKey("users.id"), nullable=True)
 
     tenant = relationship("Tenant", back_populates="leak_hits")
     identities = relationship("Identity", secondary=identity_leaks, back_populates="leaks")

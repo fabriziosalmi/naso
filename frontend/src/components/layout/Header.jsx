@@ -2,9 +2,12 @@ import React from 'react';
 import { Crosshair, Bell } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useLocation } from 'react-router-dom';
+import useNasoStore from '@/store/useNasoStore';
 
 export default function Header({ systemStatus, onOpenNotifications }) {
   const location = useLocation();
+  const leaks = useNasoStore((s) => s.leaks);
+  const unacknowledged = leaks.filter(l => l.severity_score >= 80 && !l.acknowledged_at).length;
   const getPageTitle = () => {
     switch (location.pathname) {
       case '/': return 'Dashboard';
@@ -50,14 +53,18 @@ export default function Header({ systemStatus, onOpenNotifications }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
-              size="icon" 
+            <Button
+              variant="outline"
+              size="icon"
               onClick={onOpenNotifications}
               className="h-8 w-8 relative border-transparent bg-white/5 text-zinc-300 hover:text-white hover:bg-white/10 rounded-full transition-all"
             >
               <Bell size={14} strokeWidth={2} />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#0A84FF] rounded-full"></span>
+              {unacknowledged > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-[#FF453A] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow-sm">
+                  {unacknowledged > 9 ? '9+' : unacknowledged}
+                </span>
+              )}
             </Button>
             <Button className="h-8 px-4 text-[12px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
                 Deploy Unit

@@ -61,22 +61,20 @@ describe('useNasoStore', () => {
 
   it('should engage Shodan API loader toggle', async () => {
     useNasoStore.setState({ token: 'valid-token' });
-    
-    // Simulate slow network request
-    let resolveAxios;
-    axios.get.mockReturnValueOnce(new Promise(resolve => {
-        resolveAxios = resolve;
-    }));
+
+    axios.get
+      .mockResolvedValueOnce({ data: { success: true } })
+      .mockResolvedValueOnce({ data: [] });
 
     const shodanPromise = useNasoStore.getState().searchShodan('127.0.0.1');
     expect(useNasoStore.getState().isLoading).toBe(true);
 
-    resolveAxios({ data: { success: true } });
     await shodanPromise;
 
     expect(axios.get).toHaveBeenCalledWith(
-        '/leaks/recon/shodan', 
+        '/leaks/recon/shodan',
         expect.objectContaining({ params: { ip: '127.0.0.1' } })
     );
+    expect(useNasoStore.getState().isLoading).toBe(false);
   });
 });
