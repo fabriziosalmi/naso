@@ -379,7 +379,9 @@ curl /leaks/ -H 'Authorization: Bearer <token>'`} />
           rows={[
             ['POST', '/auth/login', 'Get JWT token (form-data)'],
             ['GET', '/leaks/', 'List leaks (filter: source, status, min_severity)'],
-            ['GET', '/leaks/recon/darkweb?q=', 'Dark web probe'],
+            ['GET', '/leaks/recon/darkweb?q=', 'Dark web Tor probe'],
+            ['GET', '/leaks/recon/telegram?channel_username=', 'Telegram channel intercept'],
+            ['GET', '/leaks/recon/shodan?ip=', 'Shodan IP vulnerability scan'],
             ['GET', '/leaks/export/dossier', 'Download full PDF dossier'],
             ['GET', '/leaks/{id}/intelligence', 'AI + YARA analysis for a leak'],
             ['PATCH', '/leaks/{id}/status', 'Update leak triage status'],

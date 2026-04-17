@@ -63,7 +63,13 @@ const useNasoStore = create((set, get) => ({
         }),
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        if (response.status === 401) {
+          get().logout();
+          return;
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
