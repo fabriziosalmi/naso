@@ -14,8 +14,40 @@ from shared.utils.audit import AuditLogger
 from shared.domain.services.darkweb_search import DarkWebSearchService
 from shared.domain.services.shodan_search import ShodanService
 from shared.domain.services.telegram_search import TelegramOSINTService
+from shared.tasks.pipeline import process_potential_leak
+from pydantic import BaseModel, Field
 
 router = APIRouter()
+
+class WebhookPayload(BaseModel):
+    source: str = Field(..., description="Name of the external tool or script (e.g. 'custom_scraper')")
+    content: str = Field(..., description="Raw text or JSON dump discovered")
+    metadata: Optional[dict] = Field(default={}, description="Optional tracking tags and OSINT parameters")
+
+@router.post("/ingest/webhook", status_code=202)
+async def unified_ingestion_webhook(
+    payload: WebhookPayload,
+    current_user = Depends(get_current_user)
+):
+    """
+    UNIVERSAL WEBHOOK INGESTION (BYO-Data)
+    Accepts raw threat intelligence feeds from arbitrary external scripts.
+    Dispatches directly to the Celery Async Pipeline for YARA & LLM Triage.
+    Returns 202 Accepted.
+    """
+    
+    # Inject into the async Celery workflow directly
+    process_potential_leak.delay(
+        source=payload.source,
+        content_snippet=payload.content,
+        metadata={"tenant_id": current_user.tenant_id, **payload.metadata}
+    )
+    
+    return {
+        "status": "accepted", 
+        "msg": "Payload routed to Celery inference pipeline for processing",
+        "tenant_id": current_user.tenant_id
+    }
 
 @router.get("/recon/darkweb")
 async def darkweb_recon(
