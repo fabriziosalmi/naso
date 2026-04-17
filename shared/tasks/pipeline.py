@@ -151,6 +151,7 @@ def process_potential_leak(self, hit_data, raw_content):
                 webhook_url = os.getenv("SOAR_WEBHOOK_URL")
                 if webhook_url:
                     import requests
+
                     stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
                     requests.post(webhook_url, json=stix_payload, timeout=3)
                     logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")

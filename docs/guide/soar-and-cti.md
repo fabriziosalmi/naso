@@ -1,27 +1,27 @@
-# Automation: SOAR Webhooks & Keyless CTI
+# Automation: SOAR Webhooks & CTI
 
-NASO is designed to operate autonomously in enterprise environments. Its pipeline executes two highly critical phases automatically before forensic data ever hits the disk: **Language Inference (Babel)** and **Automated Response (SOAR)**.
+NASO's pipeline can execute automated response actions when critical threats are detected.
 
-## The Babel Node (NLP Filter)
-Before processing raw web leaks, the NASO engine feeds the content into the `BabelNode`.
-1. **Heuristics Mapping**: Scans the payload for Unicode block clusters matching Cyrillic (Russian), Hanzi (Chinese), Arabic, and other target tracking languages.
-2. **Textual NERExtraction**: Parses raw lines to detect and store underlying indicators like standard standard IPs, E-mails, and advanced indicators like **Bitcoin and Monero wallets**.
+## SOAR Webhooks
 
-## Keyless CTI Adapters
-NASO operates securely *without* requiring the purchase of paid Tier 1 CTI feeds.
-Whenever Babel detects a Bitcoin Wallet, a Celery hook fetches the latest balance and transaction history from public explorers (e.g. `blockchain.info`) completely anonymously. IP addresses are automatically bounced off the ThreatFox API for public malware correlation scoring.
-
-## SOAR (Security Orchestration, Automation, and Response) Webhooks
-If the YARA engine or the local LLM scores a leak with a `severity_score >= 90`, waiting for human intervention is unviable.
+When a leak is processed with `severity_score >= 80`, NASO can fire a webhook to your SIEM/SOAR platform.
 
 ### Enabling the Hook
-Set the following environment variable in `.env`:
+
+Set the following environment variable:
+
 ```bash
-SOAR_WEBHOOK_URL="https://splunk-heavy-forwarder.corp.local/api/v1/stix-feed"
+SOAR_WEBHOOK_URL="https://your-splunk-heavy-forwarder.corp.local/api/v1/stix-feed"
 ```
 
+### Threshold
+
+The SOAR trigger threshold is `80` (configurable at call time via the `ack-all` endpoint parameter).
+
 ### The Payload
-NASO will immediately dispatch a non-blocking `POST` request formulated as a quasi-STIX JSON payload:
+
+NASO dispatches a non-blocking `POST` with a JSON body:
+
 ```json
 {
   "alert_type": "CRITICAL_OSINT_LEAK",
@@ -29,10 +29,21 @@ NASO will immediately dispatch a non-blocking `POST` request formulated as a qua
     "tenant_id": "ORG-1X",
     "source": "tor-crawl",
     "severity_score": 98,
-    "metadata_json": {
-       "babel": { ... }
-    }
+    "metadata_json": { ... }
   }
 }
 ```
-This payload can be intercepted by firewalls to instantly burn/ban IP ranges or used by Azure AD APIs to force credentials rotations on compromised employees.
+
+### Rate Limiting
+
+The webhook call has a 3-second timeout and is fire-and-forget (non-blocking). Configure your SIEM to accept this payload format.
+
+## CTI Adapters
+
+NASO integrates with public, keyless CTI sources:
+
+- **Bitcoin wallet balance** — queried from public blockchain explorers
+- **IP threat scoring** — fetched from ThreatFox public API
+- **YARA rule matching** — local rule engine against all ingested content
+
+These integrations are implemented as Celery tasks and run asynchronously within the pipeline worker.

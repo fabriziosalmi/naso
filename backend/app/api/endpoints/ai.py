@@ -428,9 +428,11 @@ async def ai_chat(
     async def generate() -> AsyncGenerator[str, None]:
         redis_client = await jwt_blacklist.get_client()
         # Semantic Caching ID (SHA-256)
-        semantic_string = orjson.dumps([{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)])
+        semantic_string = orjson.dumps(
+            [{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)]
+        )
         cache_key = f"ai_cache:{hashlib.sha256(semantic_string).hexdigest()}"
-        
+
         cached_response = await redis_client.get(cache_key)
         if cached_response:
             logger.info(f"⚡ [AI SEMANTIC CACHE HIT] Bypassing LM Studio for {cache_key}")
@@ -527,7 +529,7 @@ async def ai_chat(
                                         yield f"data: {json.dumps({'type': 'text', 'content': content})}\n\n"
                                 except (json.JSONDecodeError, KeyError, IndexError):
                                     pass
-                    
+
                     if full_response.strip():
                         await redis_client.setex(cache_key, 7200, full_response)
 

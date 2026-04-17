@@ -33,8 +33,7 @@ async def init():
         if not admin_user:
             if not admin_password:
                 raise RuntimeError(
-                    "NASO_ADMIN_PASSWORD env var is not set. "
-                    "Set it to provision the initial admin user."
+                    "NASO_ADMIN_PASSWORD env var is not set. Set it to provision the initial admin user."
                 )
             admin_user = User(
                 email=admin_email,

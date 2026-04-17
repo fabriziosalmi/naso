@@ -34,10 +34,11 @@ class WebhookPayload(BaseModel):
 async def unified_ingestion_webhook(request: Request, current_user=Depends(get_current_user)):
     """
     ZERO-ALLOCATION WEBHOOK INGESTION (SOTA)
-    Reads raw bytes stream via orjson and directly writes to RabbitMQ 
+    Reads raw bytes stream via orjson and directly writes to RabbitMQ
     Celery Queue via aio_pika, bypassing heap allocation buffering.
     """
     from shared.config import settings
+
     raw_body = await request.body()
     try:
         payload = orjson.loads(raw_body)
@@ -52,15 +53,19 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
     # 1. Connect to RabbitMQ via aio-pika (Zero-Blocking)
     amqp_url = f"amqp://{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASS}@{settings.RABBITMQ_HOST}/"
     connection = await aio_pika.connect_robust(amqp_url)
-    
+
     async with connection:
         channel = await connection.channel()
-        exchange = await channel.get_exchange("celery", ensure=False) # standard celery exchange
-        
+        exchange = await channel.get_exchange("celery", ensure=False)  # standard celery exchange
+
         # 2. Celery Protocol v2 JSON Envelope Construction
         task_id = str(uuid.uuid4())
-        task_args = ([], {"source": source, "content_snippet": content, "metadata": metadata}, {"callbacks": None, "errbacks": None, "chain": None, "chord": None})
-        
+        task_args = (
+            [],
+            {"source": source, "content_snippet": content, "metadata": metadata},
+            {"callbacks": None, "errbacks": None, "chain": None, "chord": None},
+        )
+
         message = aio_pika.Message(
             body=orjson.dumps(task_args),
             content_type="application/json",
@@ -69,16 +74,16 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
                 "task": "shared.tasks.pipeline.process_potential_leak",
                 "id": task_id,
             },
-            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         )
-        
+
         await exchange.publish(message, routing_key="celery")
 
     return {
         "status": "accepted",
         "msg": "Payload statically routed via zero-allocation memory pool to Celery Inference Pipeline",
         "tenant_id": current_user.tenant_id,
-        "task_id": task_id
+        "task_id": task_id,
     }
 
 
@@ -210,9 +215,7 @@ async def update_leak_status(
 
 
 @router.patch("/{leak_id}/ack")
-async def acknowledge_leak(
-    leak_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
-):
+async def acknowledge_leak(leak_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
     Acknowledge a single critical leak alert.
     """
@@ -226,6 +229,7 @@ async def acknowledge_leak(
         raise AuthorizationError("Accesso negato")
 
     from sqlalchemy.sql import func
+
     leak.acknowledged_at = func.now()
     leak.acknowledged_by = current_user.id
 
@@ -239,7 +243,10 @@ async def acknowledge_leak(
     )
 
     await db.commit()
-    return {"status": "acknowledged", "acknowledged_at": leak.acknowledged_at.isoformat() if leak.acknowledged_at else None}
+    return {
+        "status": "acknowledged",
+        "acknowledged_at": leak.acknowledged_at.isoformat() if leak.acknowledged_at else None,
+    }
 
 
 @router.post("/ack-all")
