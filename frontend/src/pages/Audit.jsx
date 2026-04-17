@@ -85,8 +85,17 @@ export default function Audit() {
                 </TableRow>
             ) : auditLogs.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={4} className="h-40 text-center text-zinc-600 text-[13px]">
-                        No audit entries logged yet.
+                    <TableCell colSpan={4} className="h-48">
+                         <div className="flex flex-col items-center justify-center text-zinc-500 gap-4">
+                            <div className="relative">
+                               <div className="absolute inset-0 bg-[#0A84FF]/20 blur-xl rounded-full"></div>
+                               <ScrollText size={36} className="text-[#0A84FF] relative z-10 opacity-80" strokeWidth={1} />
+                            </div>
+                            <div className="text-center">
+                                <p className="text-[13px] font-semibold text-white tracking-tight">No Audit Operations Logged</p>
+                                <p className="text-[12px] text-zinc-500 mt-1">Actions performed by forensic operators will be cryptographically hashed here.</p>
+                            </div>
+                         </div>
                     </TableCell>
                 </TableRow>
             )}
