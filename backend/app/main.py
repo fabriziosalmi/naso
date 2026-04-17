@@ -8,12 +8,14 @@ from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
-sentry_sdk.init(
-    dsn="https://00000000000000000000000000000000@o0.ingest.sentry.io/0",  # Fake Mock DSN
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-    environment="production"
-)
+if os.environ.get("SENTRY_DSN"):
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        profiles_sample_rate=float(os.environ.get("SENTRY_PROFILES_SAMPLE_RATE", "0.1")),
+        environment=os.environ.get("ENVIRONMENT", "production"),
+    )
 
 from shared.config import settings
 from shared.database import engine

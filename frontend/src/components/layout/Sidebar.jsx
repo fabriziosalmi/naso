@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import { NavLink } from 'react-router-dom';
+import useNasoStore from '@/store/useNasoStore';
 import { 
   Radar, LayoutDashboard, Share2, Fingerprint, Flame, ScrollText, Brain, BookOpen, Settings
 } from 'lucide-react';
@@ -9,6 +10,8 @@ import { TerminalLog } from './TerminalLog';
 import * as Tooltip from '@radix-ui/react-tooltip';
 
 export default function Sidebar({ onEditProfile }) {
+  const user = useNasoStore((s) => s.user);
+  const role = user?.role;
   const [terminalLogs, setTerminalLogs] = useState([]);
 
   useEffect(() => {
@@ -53,8 +56,8 @@ export default function Sidebar({ onEditProfile }) {
           
         <div className="bg-white/[0.03] p-3 rounded-xl border border-white/[0.05] space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-[11px] font-medium text-zinc-400">Class</span>
-                <Badge variant="outline" className="text-[10px] h-5 border-white/[0.1] bg-white/[0.02]">Root / Lvl 5</Badge>
+                <span className="text-[11px] font-medium text-zinc-400">Role</span>
+                <Badge variant="outline" className="text-[10px] h-5 border-white/[0.1] bg-white/[0.02]">{role || "Operator"}</Badge>
             </div>
             <div className="flex justify-between items-center">
                 <span className="text-[11px] font-medium text-zinc-400">Vault</span>
@@ -162,11 +165,11 @@ export default function Sidebar({ onEditProfile }) {
           <TerminalLog logs={terminalLogs} />
           <div className="flex items-center gap-3 mt-4 p-2 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition-all cursor-pointer">
             <div className="w-8 h-8 rounded-lg bg-[#0A84FF] shadow-sm flex items-center justify-center">
-              <span className="text-white font-bold text-xs">FS</span>
+              <span className="text-white font-bold text-xs">{user?.full_name ? user.full_name.charAt(0).toUpperCase() : "U"}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[13px] font-medium text-white tracking-tight">Fabrizio Salmi</span>
-              <span className="text-[10px] text-zinc-400">System Architect</span>
+              <span className="text-[13px] font-medium text-white tracking-tight">{user?.full_name || "User"}</span>
+              <span className="text-[10px] text-zinc-400">{user?.role || "operator"}</span>
             </div>
             <Button variant="ghost" size="icon" onClick={onEditProfile} className="ml-auto h-7 w-7 rounded-full text-zinc-400 hover:text-white hover:bg-white/10"><Settings size={14} /></Button>
           </div>

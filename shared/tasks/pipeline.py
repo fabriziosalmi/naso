@@ -148,15 +148,14 @@ def process_potential_leak(self, hit_data, raw_content):
         # 4. SOAR Integration & Automated Response (SIEM)
         if hit_data.get("severity_score", 0) >= 90:
             try:
-                webhook_url = os.getenv("SOAR_WEBHOOK_URL", "http://soar-mock-url/api/v1/alerts")
-                if webhook_url and webhook_url != "http://soar-mock-url/api/v1/alerts":
+                webhook_url = os.getenv("SOAR_WEBHOOK_URL")
+                if webhook_url:
                     import requests
-
                     stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
                     requests.post(webhook_url, json=stix_payload, timeout=3)
                     logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
                 else:
-                    logger.info("[SOAR] Simulated Webhook Fire (CRITICAL SEVERITY DETECTED)")
+                    logger.info("[SOAR] SOAR_WEBHOOK_URL not configured, skipping webhook dispatch")
             except Exception as e:
                 logger.error(f"[SOAR] Webhook dispatch failed: {e}")
 

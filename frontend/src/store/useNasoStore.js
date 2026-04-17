@@ -1,9 +1,17 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
+const getStoredToken = () => {
+  try {
+    return localStorage.getItem('naso_token');
+  } catch {
+    return null;
+  }
+};
+
 const useNasoStore = create((set, get) => ({
   user: null,
-  token: localStorage.getItem('naso_token') || null,
+  token: getStoredToken(),
   leaks: [],
   identities: [],
   auditLogs: [],
@@ -249,7 +257,7 @@ const useNasoStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
       const { access_token } = response.data;
-      localStorage.setItem('naso_token', access_token);
+      window.localStorage.setItem('naso_token', access_token);
       set({ token: access_token, isLoading: false });
     } catch (err) {
       set({ error: 'Authentication failed', isLoading: false });
@@ -257,7 +265,9 @@ const useNasoStore = create((set, get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('naso_token');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('naso_token');
+    }
     set({ user: null, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
   },
 

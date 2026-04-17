@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from sqlalchemy.future import select
 
@@ -13,7 +14,7 @@ async def init():
         await conn.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as db:
-        # Crea il tenant di sistema se non esiste
+        # Create the system tenant if it does not exist
         result = await db.execute(select(Tenant).where(Tenant.name == "System"))
         system_tenant = result.scalar_one_or_none()
         if not system_tenant:
@@ -23,14 +24,21 @@ async def init():
             await db.refresh(system_tenant)
             print("System tenant created.")
 
-        # Crea l'utente admin se non esiste
-        admin_email = "admin@naso.local"
+        # Create the admin user if it does not exist
+        # SECURITY: set NASO_ADMIN_EMAIL and NASO_ADMIN_PASSWORD env vars in production
+        admin_email = os.environ.get("NASO_ADMIN_EMAIL", "admin@naso.local")
+        admin_password = os.environ.get("NASO_ADMIN_PASSWORD")
         result = await db.execute(select(User).where(User.email == admin_email))
         admin_user = result.scalar_one_or_none()
         if not admin_user:
+            if not admin_password:
+                raise RuntimeError(
+                    "NASO_ADMIN_PASSWORD env var is not set. "
+                    "Set it to provision the initial admin user."
+                )
             admin_user = User(
                 email=admin_email,
-                hashed_password=get_password_hash("rigorous_admin_password_2026"),
+                hashed_password=get_password_hash(admin_password),
                 full_name="System Administrator",
                 role="admin",
                 tenant_id=system_tenant.id,

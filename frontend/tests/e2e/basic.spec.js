@@ -1,12 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 test('has title and login form', async ({ page }) => {
-  await page.goto('http://localhost:5173');
+  await page.goto('/');
 
-  // Expect a title "to contain" a substring.
   await expect(page).toHaveTitle(/NASO/);
-  
-  // Check if we are at least rendering the main container
-  const main = page.locator('role=application');
-  await expect(main).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'NASO' })).toBeVisible();
+  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Authenticate' })).toBeVisible();
 });

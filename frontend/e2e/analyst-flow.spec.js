@@ -13,13 +13,11 @@ test.describe('NASO Forensic Analyst E2E Flow', () => {
   });
 
   test('Complete Investigation Flow (Login -> Topology -> Recon -> Logout)', async ({ page }) => {
-    // 1. Assert Login Page Load
-    await expect(page.locator('text=Authenticate Operator')).toBeVisible();
+    await expect(page.locator('text=Authenticate')).toBeVisible();
 
-    // 2. Perform Login
     await page.fill('input[type="email"]', MOCK_USER.email);
     await page.fill('input[type="password"]', MOCK_USER.password);
-    await page.click('button:has-text("Engage Secure Uplink")');
+    await page.click('button:has-text("Authenticate")');
 
     // 3. Assert Backend Token Assignment & Dashboard Route
     // Wait for the UI elements of the Dashboard Header

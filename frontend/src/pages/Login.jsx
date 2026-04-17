@@ -76,7 +76,7 @@ export default function Login() {
         </form>
 
         <p className="text-center text-[11px] text-zinc-600 mt-8">
-          Secured by JWT/HS256. All sessions are audited.
+          Secured by signed JWT. All sessions are audited.
         </p>
       </div>
     </div>

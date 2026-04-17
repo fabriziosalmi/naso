@@ -47,7 +47,7 @@ graph TD
 The API server is built on FastAPI with full async/await support. All database interactions use SQLAlchemy 2.0's asynchronous API with the `asyncpg` PostgreSQL driver.
 
 - **Connection Pooling**: Configurable via `DB_POOL_SIZE` (default: 20) and `DB_MAX_OVERFLOW` (default: 10).
-- **Authentication**: OAuth2 Bearer tokens with JWT (HS256). Token expiry configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`.
+- **Authentication**: OAuth2 Bearer tokens with JWT (EdDSA / Ed25519). Token expiry configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`.
 - **Multi-Tenancy**: Every data query is scoped to `tenant_id` by default. Admin-role users can bypass tenant isolation for global views.
 
 ## 2. Worker Pipeline (Celery)
