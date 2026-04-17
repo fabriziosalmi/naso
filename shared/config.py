@@ -1,43 +1,51 @@
-from pydantic_settings import BaseSettings
 from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Naso Forensic"
-    DATABASE_URL: str
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
+    DATABASE_URL: str = "postgresql+asyncpg://naso:naso@db:5432/naso"
+
+    # JWT EdDSA
+    JWT_PRIVATE_KEY: Optional[str] = None
+    JWT_PUBLIC_KEY: Optional[str] = None
+    ALGORITHM: str = "EdDSA"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    
+
+    # Redis Blacklist
+    REDIS_HOST: str = "redis://naso-cache:6379/0"
+
     # API Security
     ALLOWED_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000"
-    
+
     # Elasticsearch
     ES_HOST: str = "elasticsearch"
     ES_PORT: int = 9200
     ES_USER: Optional[str] = None
     ES_PASSWORD: Optional[str] = None
-    
+
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
-    
+
     # RabbitMQ
     RABBITMQ_HOST: str = "rabbitmq"
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASS: str = "guest"
-    
+
     # System Performance Constants
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     API_TIMEOUT_SECONDS: int = 60
-    
+
     # Forensic Constants
     DEFAULT_SEVERITY_SCORE: int = 0
     MAX_SEVERITY_SCORE: int = 100
     CRITICAL_SCORE_THRESHOLD: int = 80
-    
+
     # Local AI — LM Studio / Ollama (OpenAI-compatible)
     # When running backend in Docker, use host.docker.internal:1234
     # When running locally, use localhost:1234
@@ -57,12 +65,11 @@ class Settings(BaseSettings):
     TELEGRAM_API_ID: Optional[str] = None
     TELEGRAM_API_HASH: Optional[str] = None
     TELEGRAM_SESSION_NAME: str = "naso_forensic_bot"
-    
+
     # Shodan Integration
     SHODAN_API_KEY: Optional[str] = None
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", secrets_dir="/run/secrets", extra="ignore")
+
 
 settings = Settings()

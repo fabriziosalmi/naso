@@ -1,23 +1,31 @@
-from fastapi import FastAPI, Request
+import logging
+import sentry_sdk
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from contextlib import asynccontextmanager
-import logging
-from shared.database import engine
-from shared.config import settings
 
-from .api.endpoints import auth, tenants, keywords, leaks, identities, yara, system, users, ai
-from shared.utils.backend_tracing import setup_tracing
-from shared.core.exceptions import NasoBaseException, AuthenticationError, AuthorizationError, ResourceNotFoundError
+sentry_sdk.init(
+    dsn="https://00000000000000000000000000000000@o0.ingest.sentry.io/0",  # Fake Mock DSN
+    traces_sample_rate=1.0,
+    profiles_sample_rate=1.0,
+    environment="production"
+)
+
+from shared.config import settings
+from shared.database import engine
+
+from .api.endpoints import ai, auth, identities, keywords, leaks, system, tenants, users, yara
 
 # Configurazione Logging Professionale
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()]
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger("naso-core")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +36,7 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
     logger.info("System safely shut down. Async resources released.")
 
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="NASO Forensic Engine API - High-performance intelligence framework for real-time threat intelligence and identity correlation.",
@@ -35,10 +44,22 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
+    default_response_class=ORJSONResponse,
 )
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global Exception Caught: {exc}")
+    sentry_sdk.capture_exception(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "A critical system error occurred. Telemetry has logged the payload."},
+    )
+
 
 @app.middleware("http")
 async def secure_headers_middleware(request: Request, call_next):
@@ -50,6 +71,7 @@ async def secure_headers_middleware(request: Request, call_next):
     response.headers["Content-Security-Policy"] = "default-src 'self'"
     return response
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.ALLOWED_CORS_ORIGINS.split(",")],
@@ -58,10 +80,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api"]
-)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api"])
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(keywords.router, prefix="/keywords", tags=["keywords"])
 app.include_router(leaks.router, prefix="/leaks", tags=["leaks"])

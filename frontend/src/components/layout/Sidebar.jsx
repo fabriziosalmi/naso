@@ -6,6 +6,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TerminalLog } from './TerminalLog';
+import * as Tooltip from '@radix-ui/react-tooltip';
 
 export default function Sidebar({ onEditProfile }) {
   const [terminalLogs, setTerminalLogs] = useState([]);
@@ -50,7 +51,7 @@ export default function Sidebar({ onEditProfile }) {
             </div>
           </div>
           
-          <div className="bg-white/[0.03] p-3 rounded-xl border border-white/[0.05] space-y-2">
+        <div className="bg-white/[0.03] p-3 rounded-xl border border-white/[0.05] space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[11px] font-medium text-zinc-400">Class</span>
                 <Badge variant="outline" className="text-[10px] h-5 border-white/[0.1] bg-white/[0.02]">Root / Lvl 5</Badge>
@@ -62,22 +63,100 @@ export default function Sidebar({ onEditProfile }) {
           </div>
         </div>
         
-        <nav className="flex-1 px-3 space-y-0.5">
+        <Tooltip.Provider delayDuration={200}>
+        <nav className="flex-1 px-3 space-y-0.5" data-tour="navigation">
           <p className="px-3 py-2 text-[11px] font-medium text-zinc-500 mb-1">Navigation</p>
-          <NavLink to="/" className={getNavClass}><LayoutDashboard size={16} strokeWidth={1.5} /> <span>Dashboard</span></NavLink>
-          <NavLink to="/topology" className={getNavClass}><Share2 size={16} strokeWidth={1.5} /> <span>Neural Topology</span></NavLink>
-          <NavLink to="/identities" className={getNavClass}><Fingerprint size={16} strokeWidth={1.5} /> <span>Master Identities</span></NavLink>
-          <NavLink to="/dark-search" className={getNavClass}><Flame size={16} strokeWidth={1.5} /> <span>Dark Recon Probe</span></NavLink>
-          <NavLink to="/audit" className={getNavClass}><ScrollText size={16} strokeWidth={1.5} /> <span>Audit Logs</span></NavLink>
+          
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/" className={getNavClass}><LayoutDashboard size={16} strokeWidth={1.5} /> <span>Dashboard</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 Overview of Active Feeds
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/topology" className={getNavClass} data-tour="topology"><Share2 size={16} strokeWidth={1.5} /> <span>Neural Topology</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 2D Matrix of Threat Correlations
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/identities" className={getNavClass}><Fingerprint size={16} strokeWidth={1.5} /> <span>Master Identities</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 Manage Tracked VIP Assets
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/dark-search" className={getNavClass}><Flame size={16} strokeWidth={1.5} /> <span>Dark Recon Probe</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 Launch Onion Tor Scans
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/audit" className={getNavClass}><ScrollText size={16} strokeWidth={1.5} /> <span>Audit Logs</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 System Security Events
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
 
           <div className="pt-2 pb-1">
             <div className="h-[1px] bg-white/[0.05] mx-1" />
             <p className="px-3 pt-3 pb-1 text-[11px] font-medium text-zinc-500">Intelligence</p>
           </div>
 
-          <NavLink to="/ai-analyst" className={getNavClass}><Brain size={16} strokeWidth={1.5} /> <span>AI Co-Analyst</span></NavLink>
-          <NavLink to="/docs" className={getNavClass}><BookOpen size={16} strokeWidth={1.5} /> <span>Docs & Help</span></NavLink>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/ai-analyst" className={getNavClass} data-tour="ai-analyst"><Brain size={16} strokeWidth={1.5} /> <span>AI Co-Analyst</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 Local LLM Investigation Core
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+               <NavLink to="/docs" className={getNavClass}><BookOpen size={16} strokeWidth={1.5} /> <span>Docs & Help</span></NavLink>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content side="right" sideOffset={10} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-xl border border-zinc-700 animate-in fade-in zoom-in-95">
+                 SOPs & API Documentation
+                 <Tooltip.Arrow className="fill-zinc-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
         </nav>
+        </Tooltip.Provider>
 
         <div className="p-4 mt-auto border-t border-white/[0.08] bg-transparent">
           <TerminalLog logs={terminalLogs} />

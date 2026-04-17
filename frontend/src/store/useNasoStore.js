@@ -50,98 +50,114 @@ const useNasoStore = create((set, get) => ({
     const assistantMsg = { id: assistantMsgId, role: 'assistant', content: '', toolCalls: [], toolResults: [] };
     set(state => ({ chatHistory: [...state.chatHistory, assistantMsg] }));
 
-    try {
-      const response = await fetch('/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          messages: history.map(m => ({ role: m.role, content: m.content })),
-          investigation_id: activeInvestigationId,
-        }),
-      });
+    const maxRetries = 5;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        const response = await fetch('/ai/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            messages: history.map(m => ({ role: m.role, content: m.content })),
+            investigation_id: activeInvestigationId,
+          }),
+        });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          get().logout();
-          return;
+        if (!response.ok) {
+          if (response.status === 401) {
+            get().logout();
+            return;
+          }
+          throw new Error(`HTTP ${response.status}`);
         }
-        throw new Error(`HTTP ${response.status}`);
-      }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // Keep incomplete line
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // Keep incomplete line
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]') break;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') break;
 
-          try {
-            const event = JSON.parse(raw);
+            try {
+              const event = JSON.parse(raw);
 
-            if (event.type === 'text') {
-              set(state => {
-                const msgs = [...state.chatHistory];
-                const idx = msgs.findIndex(m => m.id === assistantMsgId);
-                if (idx !== -1) msgs[idx] = { ...msgs[idx], content: msgs[idx].content + event.content };
-                return { chatHistory: msgs };
-              });
-            } else if (event.type === 'tool_call') {
-              set(state => {
-                const msgs = [...state.chatHistory];
-                const idx = msgs.findIndex(m => m.id === assistantMsgId);
-                if (idx !== -1) {
-                  msgs[idx] = { ...msgs[idx], toolCalls: [...(msgs[idx].toolCalls || []), event] };
-                }
-                return { chatHistory: msgs };
-              });
-            } else if (event.type === 'tool_result') {
-              set(state => {
-                const msgs = [...state.chatHistory];
-                const idx = msgs.findIndex(m => m.id === assistantMsgId);
-                if (idx !== -1) {
-                  msgs[idx] = { ...msgs[idx], toolResults: [...(msgs[idx].toolResults || []), event] };
-                }
-                return {
-                  chatHistory: msgs,
-                  evidencePanel: [event, ...state.evidencePanel].slice(0, 20),
-                };
-              });
-              // Refresh investigations if a task was created
-              if (event.name === 'create_task') get().fetchInvestigations();
-            } else if (event.type === 'error') {
-              set(state => {
-                const msgs = [...state.chatHistory];
-                const idx = msgs.findIndex(m => m.id === assistantMsgId);
-                if (idx !== -1) msgs[idx] = { ...msgs[idx], content: `⚠️ ${event.message}`, isError: true };
-                return { chatHistory: msgs };
-              });
-            }
-          } catch { /* Skip malformed SSE lines */ }
+              if (event.type === 'text') {
+                set(state => {
+                  const msgs = [...state.chatHistory];
+                  const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                  if (idx !== -1) msgs[idx] = { ...msgs[idx], content: msgs[idx].content + event.content };
+                  return { chatHistory: msgs };
+                });
+              } else if (event.type === 'tool_call') {
+                set(state => {
+                  const msgs = [...state.chatHistory];
+                  const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                  if (idx !== -1) {
+                    msgs[idx] = { ...msgs[idx], toolCalls: [...(msgs[idx].toolCalls || []), event] };
+                  }
+                  return { chatHistory: msgs };
+                });
+              } else if (event.type === 'tool_result') {
+                set(state => {
+                  const msgs = [...state.chatHistory];
+                  const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                  if (idx !== -1) {
+                    msgs[idx] = { ...msgs[idx], toolResults: [...(msgs[idx].toolResults || []), event] };
+                  }
+                  return {
+                    chatHistory: msgs,
+                    evidencePanel: [event, ...state.evidencePanel].slice(0, 20),
+                  };
+                });
+                // Refresh investigations if a task was created
+                if (event.name === 'create_task') get().fetchInvestigations();
+              } else if (event.type === 'error') {
+                set(state => {
+                  const msgs = [...state.chatHistory];
+                  const idx = msgs.findIndex(m => m.id === assistantMsgId);
+                  if (idx !== -1) msgs[idx] = { ...msgs[idx], content: `⚠️ ${event.message}`, isError: true };
+                  return { chatHistory: msgs };
+                });
+              }
+            } catch { /* Skip malformed SSE lines */ }
+          }
+        }
+        // Success breaks the retry loop
+        break; 
+      } catch (err) {
+        attempt++;
+        if (attempt >= maxRetries) {
+          set(state => {
+            const msgs = [...state.chatHistory];
+            const idx = msgs.findIndex(m => m.id === assistantMsgId);
+            if (idx !== -1) msgs[idx] = { ...msgs[idx], content: `⚠️ Connection permanently failed after ${maxRetries} retries: ${err.message}`, isError: true };
+            return { chatHistory: msgs };
+          });
+          break;
+        } else {
+          // Exponential backoff + Jitter
+          const backoff = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 10000);
+          console.warn(`[SSE Stream] Reconnecting... Attempt ${attempt}/${maxRetries} in ${backoff}ms`);
+          await new Promise(r => setTimeout(r, backoff));
         }
       }
-    } catch (err) {
-      set(state => {
-        const msgs = [...state.chatHistory];
-        const idx = msgs.findIndex(m => m.id === assistantMsgId);
-        if (idx !== -1) msgs[idx] = { ...msgs[idx], content: `⚠️ Connection error: ${err.message}`, isError: true };
-        return { chatHistory: msgs };
-      });
-    } finally {
-      set({ isAiStreaming: false });
     }
+    
+    set({ isAiStreaming: false });
   },
 
   clearChatHistory: () => set({ chatHistory: [], evidencePanel: [] }),

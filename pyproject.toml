@@ -1,0 +1,43 @@
+[tool.ruff]
+# Enable Pyflakes (F), pycodestyle (E, W), isort (I), pyupgrade (UP), flake8-bugbear (B), and flake8-simplify (SIM)
+lint.select = ["E", "F", "I", "UP", "B", "SIM"]
+lint.ignore = ["E501", "B008", "E402", "B904", "E741", "SIM102"] # Ignore long lines, FastAPI Depends, top-level imports and B904 for Celery retry
+
+# Allow autofix for all enabled rules
+lint.fixable = ["ALL"]
+lint.unfixable = []
+
+# Exclude common directories
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+# Set line length to 120
+line-length = 120
+
+# Assume Python 3.9
+target-version = "py39"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

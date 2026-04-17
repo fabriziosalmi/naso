@@ -1,8 +1,9 @@
-import aiohttp
 import logging
-import asyncio
+
+import aiohttp
 
 logger = logging.getLogger("naso-cti")
+
 
 class CTIAdapters:
     """
@@ -18,7 +19,7 @@ class CTIAdapters:
         """
         logger.info(f"[CTI ADAPTER] Fetching Blockchain data for {btc_address}")
         url = f"https://blockchain.info/rawaddr/{btc_address}"
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 # rate limit friendly timeout
@@ -27,12 +28,12 @@ class CTIAdapters:
                         data = await response.json()
                         balance_satoshi = data.get("final_balance", 0)
                         total_received = data.get("total_received", 0)
-                        
+
                         return {
                             "btc_address": btc_address,
                             "balance_btc": balance_satoshi / 100000000.0,
                             "total_received_btc": total_received / 100000000.0,
-                            "tx_count": data.get("n_tx", 0)
+                            "tx_count": data.get("n_tx", 0),
                         }
                     else:
                         logger.warning(f"[CTI BTC] Blockchain API returned {response.status}")
@@ -50,14 +51,14 @@ class CTIAdapters:
         logger.info(f"[CTI ADAPTER] Querying ThreatFox for {search_term}")
         url = "https://threatfox-api.abuse.ch/api/v1/"
         payload = {"query": "search_ioc", "search_term": search_term}
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(url, json=payload, timeout=10) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data.get("query_status") == "ok":
-                            return {"threatfox_matches": data.get("data", [])[:3]} # Return top 3
+                            return {"threatfox_matches": data.get("data", [])[:3]}  # Return top 3
                         return {}
                     else:
                         return {}

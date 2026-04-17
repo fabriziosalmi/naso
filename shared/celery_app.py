@@ -1,6 +1,7 @@
 from celery import Celery
-from shared.utils.worker_tracing import setup_worker_tracing
+
 from shared.config import settings
+from shared.utils.worker_tracing import setup_worker_tracing
 
 # Inizializza Tracing prima della creazione dell'app Celery
 setup_worker_tracing()
@@ -12,15 +13,15 @@ celery_app = Celery(
     "naso_workers",
     broker=f"pyamqp://{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASS}@{settings.RABBITMQ_HOST}//",
     include=[
-        "shared.tasks.github", 
-        "shared.tasks.pastes", 
-        "shared.tasks.telegram", 
-        "shared.tasks.pipeline", 
+        "shared.tasks.github",
+        "shared.tasks.pastes",
+        "shared.tasks.telegram",
+        "shared.tasks.pipeline",
         "shared.tasks.maintenance",
         "shared.tasks.darkweb",
         "shared.tasks.infrastructure",
-        "shared.tasks.massive"
-    ]
+        "shared.tasks.massive",
+    ],
 )
 
 celery_app.conf.update(
@@ -31,14 +32,14 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     # Backpressure & Bulkhead (#16, #18)
-    worker_prefetch_multiplier=1, # Evita accumulo di task nel worker
-    task_acks_late=True, # Ack solo a task completato
-    worker_concurrency=4, # Numero di processi paralleli (ottimizzato per core Mac)
-    task_time_limit=300, # Hard limit 5 min
+    worker_prefetch_multiplier=1,  # Evita accumulo di task nel worker
+    task_acks_late=True,  # Ack solo a task completato
+    worker_concurrency=4,  # Numero di processi paralleli (ottimizzato per core Mac)
+    task_time_limit=300,  # Hard limit 5 min
     task_routes={
-        'tasks.massive.*': {'queue': 'massive'},
-        'tasks.infrastructure.*': {'queue': 'osint'},
-        'tasks.darkweb.*': {'queue': 'osint'},
-        '*': {'queue': 'default'}
-    }
+        "tasks.massive.*": {"queue": "massive"},
+        "tasks.infrastructure.*": {"queue": "osint"},
+        "tasks.darkweb.*": {"queue": "osint"},
+        "*": {"queue": "default"},
+    },
 )

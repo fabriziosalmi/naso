@@ -12,6 +12,8 @@ import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import AiAssistant from './components/AiAssistant';
 import DocsView from './components/DocsView';
+import CommandMenu from './components/ui/CommandMenu';
+import OnboardingTour from './components/layout/OnboardingTour';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -162,6 +164,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-black text-zinc-100 overflow-hidden font-sans relative">
+      <OnboardingTour />
+      <CommandMenu />
       <Sidebar onEditProfile={() => setIsEditProfileOpen(true)} />
 
       <main className="flex-1 flex flex-col relative overflow-hidden bg-black">

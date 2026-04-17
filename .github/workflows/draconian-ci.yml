@@ -1,0 +1,50 @@
+name: Draconian NASO CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  ruff-quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.9+
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          
+      - name: Install Ruff
+        run: pip install ruff
+        
+      - name: Draconian Format Check
+        run: ruff format --check .
+        
+      - name: Draconian Lint Control
+        run: ruff check .
+
+  docker-matrix-tests:
+    needs: ruff-quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Bootstrap Zero-Trust Mock Env
+        run: |
+          python3 cli/generate_secrets.py
+          cp .env.example .env
+          
+      - name: Ignition Engine (Docker Compose)
+        run: |
+          docker compose up -d db redis elasticsearch minio rabbitmq
+          sleep 15
+          docker compose up -d --build backend worker-pipeline
+          sleep 5
+          
+      - name: Pipeline Structural Verification (cli/validate.sh)
+        run: |
+          chmod +x cli/validate.sh
+          ./cli/validate.sh

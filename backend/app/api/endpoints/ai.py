@@ -7,11 +7,17 @@ via the AI_ENDPOINT setting. Supports:
   - Server-side tool dispatch (search_identities, get_leaks, dark_web_probe, etc.)
   - Investigation plan and task CRUD
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from typing import Any, AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
+import hashlib
+import orjson
+from shared.core.jwt_manager import jwt_blacklist
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,11 +29,10 @@ from sqlalchemy.orm import selectinload
 
 from shared.config import settings
 from shared.database import get_db
-from shared.models import (
-    Identity, InvestigationPlan, InvestigationTask, LeakHit
-)
 from shared.domain.services.darkweb_search import DarkWebSearchService
+from shared.models import Identity, InvestigationPlan, InvestigationTask, LeakHit
 from shared.utils.audit import AuditLogger
+
 from ..deps import get_current_user
 
 logger = logging.getLogger("naso-ai")
@@ -35,32 +40,39 @@ router = APIRouter()
 
 # ─────────────────────────── Pydantic schemas ───────────────────────────────
 
+
 class ChatMessage(BaseModel):
-    role: str   # system | user | assistant | tool
+    role: str  # system | user | assistant | tool
     content: str
-    tool_calls: Optional[list] = None
-    tool_call_id: Optional[str] = None
-    name: Optional[str] = None
+    tool_calls: list | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
+
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
-    investigation_id: Optional[str] = None
+    investigation_id: str | None = None
+
 
 class PlanCreate(BaseModel):
     title: str
-    description: Optional[str] = None
+    description: str | None = None
+
 
 class TaskCreate(BaseModel):
     content: str
 
+
 class TaskUpdate(BaseModel):
-    status: Optional[str] = None
-    content: Optional[str] = None
+    status: str | None = None
+    content: str | None = None
+
 
 class PlanUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+
 
 # ─────────────────────────── Tool definitions ───────────────────────────────
 
@@ -77,9 +89,9 @@ NASO_TOOLS = [
                     "min_risk": {"type": "integer", "description": "Minimum risk score (0-100) to filter by"},
                     "type": {"type": "string", "description": "Identity type: person, email, username, phone, domain"},
                 },
-                "required": []
-            }
-        }
+                "required": [],
+            },
+        },
     },
     {
         "type": "function",
@@ -89,14 +101,17 @@ NASO_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "source": {"type": "string", "description": "Source platform, e.g. 'github', 'telegram', 'darkweb'"},
+                    "source": {
+                        "type": "string",
+                        "description": "Source platform, e.g. 'github', 'telegram', 'darkweb'",
+                    },
                     "min_severity": {"type": "integer", "description": "Minimum severity score (0-100)"},
                     "status": {"type": "string", "description": "Leak status: new, reviewing, resolved"},
                     "limit": {"type": "integer", "description": "Max results to return (default 10)"},
                 },
-                "required": []
-            }
-        }
+                "required": [],
+            },
+        },
     },
     {
         "type": "function",
@@ -108,9 +123,9 @@ NASO_TOOLS = [
                 "properties": {
                     "query": {"type": "string", "description": "Search query to probe the dark web for"},
                 },
-                "required": ["query"]
-            }
-        }
+                "required": ["query"],
+            },
+        },
     },
     {
         "type": "function",
@@ -122,9 +137,9 @@ NASO_TOOLS = [
                 "properties": {
                     "identity_id": {"type": "string", "description": "The UUID of the identity to analyze"},
                 },
-                "required": ["identity_id"]
-            }
-        }
+                "required": ["identity_id"],
+            },
+        },
     },
     {
         "type": "function",
@@ -137,9 +152,9 @@ NASO_TOOLS = [
                     "content": {"type": "string", "description": "Description of the task or finding"},
                     "plan_id": {"type": "string", "description": "ID of the investigation plan to add the task to"},
                 },
-                "required": ["content"]
-            }
-        }
+                "required": ["content"],
+            },
+        },
     },
     {
         "type": "function",
@@ -152,9 +167,9 @@ NASO_TOOLS = [
                     "leak_id": {"type": "string", "description": "UUID of the leak to update"},
                     "status": {"type": "string", "description": "New status: reviewing, resolved, escalated"},
                 },
-                "required": ["leak_id", "status"]
-            }
-        }
+                "required": ["leak_id", "status"],
+            },
+        },
     },
     {
         "type": "function",
@@ -167,9 +182,9 @@ NASO_TOOLS = [
                     "identity_id": {"type": "string", "description": "UUID of the identity"},
                     "is_protected": {"type": "boolean", "description": "True to protect, False to unprotect"},
                 },
-                "required": ["identity_id", "is_protected"]
-            }
-        }
+                "required": ["identity_id", "is_protected"],
+            },
+        },
     },
 ]
 
@@ -207,12 +222,9 @@ When starting an investigation:
 
 # ─────────────────────────── Tool executor ───────────────────────────────────
 
+
 async def execute_tool(
-    tool_name: str,
-    tool_args: dict,
-    db: AsyncSession,
-    current_user,
-    investigation_id: Optional[str]
+    tool_name: str, tool_args: dict, db: AsyncSession, current_user, investigation_id: str | None
 ) -> dict[str, Any]:
     """Execute a tool call and return structured result."""
     try:
@@ -232,10 +244,15 @@ async def execute_tool(
                 "tool": "search_identities",
                 "count": len(identities),
                 "data": [
-                    {"id": i.id, "identifier": i.identifier, "type": i.type,
-                     "risk_score": i.risk_score, "is_protected": i.is_protected}
+                    {
+                        "id": i.id,
+                        "identifier": i.identifier,
+                        "type": i.type,
+                        "risk_score": i.risk_score,
+                        "is_protected": i.is_protected,
+                    }
                     for i in identities
-                ]
+                ],
             }
 
         elif tool_name == "get_leaks":
@@ -255,11 +272,16 @@ async def execute_tool(
                 "tool": "get_leaks",
                 "count": len(leaks),
                 "data": [
-                    {"id": l.id, "source": l.source, "severity": l.severity_score,
-                     "status": l.status, "discovered_at": l.discovered_at.isoformat(),
-                     "snippet": (l.content_snippet or "")[:120]}
+                    {
+                        "id": l.id,
+                        "source": l.source,
+                        "severity": l.severity_score,
+                        "status": l.status,
+                        "discovered_at": l.discovered_at.isoformat(),
+                        "snippet": (l.content_snippet or "")[:120],
+                    }
                     for l in leaks
-                ]
+                ],
             }
 
         elif tool_name == "dark_web_probe":
@@ -268,8 +290,11 @@ async def execute_tool(
                 return {"tool": "dark_web_probe", "error": "Query required"}
             results = await DarkWebSearchService.search_onion_links(query)
             await AuditLogger.log(
-                db, user_id=current_user.id, tenant_id=current_user.tenant_id,
-                action="AI_DARK_WEB_PROBE", details={"query": query, "count": len(results)}
+                db,
+                user_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                action="AI_DARK_WEB_PROBE",
+                details={"query": query, "count": len(results)},
             )
             await db.commit()
             return {"tool": "dark_web_probe", "query": query, "count": len(results), "data": results[:10]}
@@ -286,17 +311,23 @@ async def execute_tool(
             return {
                 "tool": "get_identity_insights",
                 "identity": {
-                    "id": identity.id, "identifier": identity.identifier,
-                    "type": identity.type, "risk_score": identity.risk_score,
+                    "id": identity.id,
+                    "identifier": identity.identifier,
+                    "type": identity.type,
+                    "risk_score": identity.risk_score,
                     "is_protected": identity.is_protected,
                 },
                 "total_leaks": len(leaks),
                 "highest_severity": max([l.severity_score for l in leaks]) if leaks else 0,
                 "recent_leaks": [
-                    {"id": l.id, "source": l.source, "severity": l.severity_score,
-                     "discovered_at": l.discovered_at.isoformat()}
+                    {
+                        "id": l.id,
+                        "source": l.source,
+                        "severity": l.severity_score,
+                        "discovered_at": l.discovered_at.isoformat(),
+                    }
                     for l in leaks[:5]
-                ]
+                ],
             }
 
         elif tool_name == "create_task":
@@ -304,12 +335,7 @@ async def execute_tool(
             content = tool_args.get("content", "")
             if not content:
                 return {"tool": "create_task", "error": "content required"}
-            task = InvestigationTask(
-                plan_id=plan_id,
-                content=content,
-                status="pending",
-                created_by="ai"
-            )
+            task = InvestigationTask(plan_id=plan_id, content=content, status="pending", created_by="ai")
             if plan_id:
                 db.add(task)
                 await db.commit()
@@ -327,9 +353,13 @@ async def execute_tool(
             old_status = leak.status
             leak.status = new_status
             await AuditLogger.log(
-                db, user_id=current_user.id, tenant_id=current_user.tenant_id,
-                action="AI_FLAG_LEAK", resource_type="leak", resource_id=leak_id,
-                details={"old_status": old_status, "new_status": new_status}
+                db,
+                user_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                action="AI_FLAG_LEAK",
+                resource_type="leak",
+                resource_id=leak_id,
+                details={"old_status": old_status, "new_status": new_status},
             )
             await db.commit()
             return {"tool": "flag_critical", "leak_id": leak_id, "old_status": old_status, "new_status": new_status}
@@ -341,16 +371,25 @@ async def execute_tool(
             identity = result.scalar_one_or_none()
             if not identity:
                 return {"tool": "toggle_identity_vip", "error": f"Identity {identity_id} not found"}
-            
+
             old_state = identity.is_protected
             identity.is_protected = is_protected
             await AuditLogger.log(
-                db, user_id=current_user.id, tenant_id=current_user.tenant_id,
-                action="AI_TOGGLE_VIP", resource_type="identity", resource_id=identity_id,
-                details={"old": old_state, "new": is_protected}
+                db,
+                user_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                action="AI_TOGGLE_VIP",
+                resource_type="identity",
+                resource_id=identity_id,
+                details={"old": old_state, "new": is_protected},
             )
             await db.commit()
-            return {"tool": "toggle_identity_vip", "identity_id": identity_id, "is_protected": is_protected, "status": "success"}
+            return {
+                "tool": "toggle_identity_vip",
+                "identity_id": identity_id,
+                "is_protected": is_protected,
+                "status": "success",
+            }
 
         else:
             return {"error": f"Unknown tool: {tool_name}"}
@@ -362,11 +401,12 @@ async def execute_tool(
 
 # ─────────────────────────── Chat endpoint ───────────────────────────────────
 
+
 @router.post("/chat")
 async def ai_chat(
     body: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """
     Streaming AI chat with tool calling.
@@ -386,6 +426,18 @@ async def ai_chat(
         messages.append(msg)
 
     async def generate() -> AsyncGenerator[str, None]:
+        redis_client = await jwt_blacklist.get_client()
+        # Semantic Caching ID (SHA-256)
+        semantic_string = orjson.dumps([{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)])
+        cache_key = f"ai_cache:{hashlib.sha256(semantic_string).hexdigest()}"
+        
+        cached_response = await redis_client.get(cache_key)
+        if cached_response:
+            logger.info(f"⚡ [AI SEMANTIC CACHE HIT] Bypassing LM Studio for {cache_key}")
+            yield f"data: {json.dumps({'type': 'text', 'content': cached_response})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             # ─── Phase 1: Non-streaming call to detect tool calls ───
             try:
@@ -432,23 +484,24 @@ async def ai_chat(
                     yield f"data: {json.dumps({'type': 'tool_call', 'id': tc_id, 'name': tc_name, 'args': tc_args})}\n\n"
 
                     # Execute the tool
-                    tool_result = await execute_tool(
-                        tc_name, tc_args, db, current_user, body.investigation_id
-                    )
+                    tool_result = await execute_tool(tc_name, tc_args, db, current_user, body.investigation_id)
 
                     # Emit tool_result event
                     yield f"data: {json.dumps({'type': 'tool_result', 'id': tc_id, 'name': tc_name, 'data': tool_result})}\n\n"
 
                     # Append to messages for second LLM call
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "name": tc_name,
-                        "content": json.dumps(tool_result),
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "name": tc_name,
+                            "content": json.dumps(tool_result),
+                        }
+                    )
 
                 # ─── Phase 2: Streaming call for final response ───
                 try:
+                    full_response = ""
                     async with client.stream(
                         "POST",
                         f"{settings.AI_ENDPOINT}/chat/completions",
@@ -470,9 +523,17 @@ async def ai_chat(
                                     delta = chunk["choices"][0].get("delta", {})
                                     content = delta.get("content")
                                     if content:
+                                        full_response += content
                                         yield f"data: {json.dumps({'type': 'text', 'content': content})}\n\n"
                                 except (json.JSONDecodeError, KeyError, IndexError):
                                     pass
+                    
+                    if full_response.strip() and not globals().get("redis_client"): # We defined redis_client in generate()
+                        redis_client = await jwt_blacklist.get_client()
+                        semantic_string = orjson.dumps([{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)])
+                        cache_key = f"ai_cache:{hashlib.sha256(semantic_string).hexdigest()}"
+                        await redis_client.setex(cache_key, 7200, full_response)
+
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {e}'})}\n\n"
 
@@ -484,7 +545,7 @@ async def ai_chat(
                     chunk_size = 4
                     words = content.split(" ")
                     for i in range(0, len(words), chunk_size):
-                        chunk = " ".join(words[i:i+chunk_size])
+                        chunk = " ".join(words[i : i + chunk_size])
                         if i + chunk_size < len(words):
                             chunk += " "
                         yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
@@ -492,21 +553,27 @@ async def ai_chat(
         yield "data: [DONE]\n\n"
 
         await AuditLogger.log(
-            db, user_id=current_user.id, tenant_id=current_user.tenant_id,
-            action="AI_CHAT", details={"investigation_id": body.investigation_id}
+            db,
+            user_id=current_user.id,
+            tenant_id=current_user.tenant_id,
+            action="AI_CHAT",
+            details={"investigation_id": body.investigation_id},
         )
-        try:
+        with contextlib.suppress(Exception):
             await db.commit()
-        except Exception:
-            pass
 
-    return StreamingResponse(generate(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    })
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ─────────────────────────── Health check ────────────────────────────────────
+
 
 @router.get("/health")
 async def ai_health():
@@ -529,10 +596,11 @@ async def ai_health():
 
 # ─────────────────────────── Investigation Plans CRUD ────────────────────────
 
+
 @router.get("/plans")
 async def list_plans(
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     result = await db.execute(
         select(InvestigationPlan)
@@ -552,12 +620,15 @@ async def list_plans(
             "completed_tasks": sum(1 for t in p.tasks if t.status == "completed"),
             "tasks": [
                 {
-                    "id": t.id, "content": t.content, "status": t.status,
-                    "tool_used": t.tool_used, "created_by": t.created_by,
+                    "id": t.id,
+                    "content": t.content,
+                    "status": t.status,
+                    "tool_used": t.tool_used,
+                    "created_by": t.created_by,
                     "created_at": t.created_at.isoformat(),
                 }
                 for t in p.tasks
-            ]
+            ],
         }
         for p in plans
     ]
@@ -567,7 +638,7 @@ async def list_plans(
 async def create_plan(
     body: PlanCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     plan = InvestigationPlan(
         title=body.title,
@@ -577,8 +648,11 @@ async def create_plan(
     )
     db.add(plan)
     await AuditLogger.log(
-        db, user_id=current_user.id, tenant_id=current_user.tenant_id,
-        action="CREATE_INVESTIGATION", details={"title": body.title}
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="CREATE_INVESTIGATION",
+        details={"title": body.title},
     )
     await db.commit()
     await db.refresh(plan)
@@ -590,12 +664,14 @@ async def update_plan(
     plan_id: str,
     body: PlanUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    result = await db.execute(select(InvestigationPlan).where(
-        InvestigationPlan.id == plan_id,
-        InvestigationPlan.tenant_id == current_user.tenant_id,
-    ))
+    result = await db.execute(
+        select(InvestigationPlan).where(
+            InvestigationPlan.id == plan_id,
+            InvestigationPlan.tenant_id == current_user.tenant_id,
+        )
+    )
     plan = result.scalar_one_or_none()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -613,12 +689,14 @@ async def update_plan(
 async def delete_plan(
     plan_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    result = await db.execute(select(InvestigationPlan).where(
-        InvestigationPlan.id == plan_id,
-        InvestigationPlan.tenant_id == current_user.tenant_id,
-    ))
+    result = await db.execute(
+        select(InvestigationPlan).where(
+            InvestigationPlan.id == plan_id,
+            InvestigationPlan.tenant_id == current_user.tenant_id,
+        )
+    )
     plan = result.scalar_one_or_none()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -632,12 +710,13 @@ async def add_task(
     plan_id: str,
     body: TaskCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    plan_check = await db.execute(select(InvestigationPlan).where(
-        InvestigationPlan.id == plan_id,
-        InvestigationPlan.tenant_id == current_user.tenant_id
-    ))
+    plan_check = await db.execute(
+        select(InvestigationPlan).where(
+            InvestigationPlan.id == plan_id, InvestigationPlan.tenant_id == current_user.tenant_id
+        )
+    )
     if not plan_check.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Plan not found")
 
@@ -654,12 +733,14 @@ async def update_task(
     task_id: str,
     body: TaskUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    result = await db.execute(select(InvestigationTask).where(
-        InvestigationTask.id == task_id,
-        InvestigationTask.plan_id == plan_id,
-    ))
+    result = await db.execute(
+        select(InvestigationTask).where(
+            InvestigationTask.id == task_id,
+            InvestigationTask.plan_id == plan_id,
+        )
+    )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")

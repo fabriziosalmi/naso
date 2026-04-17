@@ -32,3 +32,4 @@ frontend_startup.log
 
 # Infrastructure
 infrastructure/tor/data/
+.secrets-mock/

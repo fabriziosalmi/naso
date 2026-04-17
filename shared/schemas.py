@@ -1,14 +1,18 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr
+
 
 # Tenant Schemas
 class TenantBase(BaseModel):
     name: str
     description: Optional[str] = None
 
+
 class TenantCreate(TenantBase):
     pass
+
 
 class Tenant(TenantBase):
     id: str
@@ -18,6 +22,7 @@ class Tenant(TenantBase):
     class Config:
         from_attributes = True
 
+
 # User Schemas
 class UserBase(BaseModel):
     email: EmailStr
@@ -25,12 +30,15 @@ class UserBase(BaseModel):
     role: str = "analyst"
     tenant_id: Optional[str] = None
 
+
 class UserCreate(UserBase):
     password: str
+
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
+
 
 class User(UserBase):
     id: str
@@ -39,13 +47,16 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
+
 # Keyword Schemas
 class KeywordBase(BaseModel):
     value: str
     type: str
 
+
 class KeywordCreate(KeywordBase):
     tenant_id: str
+
 
 class Keyword(KeywordBase):
     id: str
@@ -55,15 +66,18 @@ class Keyword(KeywordBase):
     class Config:
         from_attributes = True
 
+
 # Token Schemas
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class TokenData(BaseModel):
     email: Optional[str] = None
     tenant_id: Optional[str] = None
     role: Optional[str] = None
+
 
 # Yara Schemas (#25)
 class YaraRuleBase(BaseModel):
@@ -71,8 +85,10 @@ class YaraRuleBase(BaseModel):
     content: str
     is_active: bool = True
 
+
 class YaraRuleCreate(YaraRuleBase):
     tenant_id: Optional[str] = None
+
 
 class YaraRule(YaraRuleBase):
     id: str
@@ -82,14 +98,17 @@ class YaraRule(YaraRuleBase):
     class Config:
         from_attributes = True
 
+
 # Identity Schemas (#11)
 class IdentityBase(BaseModel):
     identifier: str
     type: str
     is_protected: bool = False
 
+
 class IdentityUpdate(BaseModel):
     is_protected: bool
+
 
 class Identity(IdentityBase):
     id: str
@@ -100,12 +119,14 @@ class Identity(IdentityBase):
     class Config:
         from_attributes = True
 
+
 # Leak Schemas
 class LeakHitBase(BaseModel):
     source: str
     severity_score: int
     status: str = "new"
     metadata_json: dict = {}
+
 
 # Mitre ATT&CK Schemas (CC)
 class MitreTechniqueBase(BaseModel):
@@ -114,9 +135,11 @@ class MitreTechniqueBase(BaseModel):
     tactic: str
     description: Optional[str] = None
 
+
 class MitreTechnique(MitreTechniqueBase):
     class Config:
         from_attributes = True
+
 
 class LeakHit(LeakHitBase):
     id: str
@@ -125,16 +148,17 @@ class LeakHit(LeakHitBase):
     content_snippet: Optional[str] = None
     storage_path: Optional[str] = None
     screenshot_path: Optional[str] = None
-    mitre_techniques: List[MitreTechnique] = []
+    mitre_techniques: list[MitreTechnique] = []
 
     class Config:
         from_attributes = True
 
+
 # Identity Insights Schema (Q)
 class IdentityInsights(BaseModel):
     identity: Identity
-    leaks: List[LeakHit]
-    merged_identities: List[Identity] = [] # Profile tree (Y)
+    leaks: list[LeakHit]
+    merged_identities: list[Identity] = []  # Profile tree (Y)
     total_leaks: int
     highest_severity: int
     first_seen: datetime

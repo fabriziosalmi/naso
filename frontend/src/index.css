@@ -2,74 +2,123 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 
+======================================================
+1. CORE VARIABLES (Apple-style dark mode)
+======================================================
+*/
 @layer base {
   :root {
-    --background: 240 10% 2%;
+    /* Palette FAANG Premium: Deep Zinc & Indigo Glow */
+    --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 3%;
+    --card: 240 10% 4.5%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 240 10% 5%;
     --popover-foreground: 0 0% 98%;
-    --primary: 217.2 91.2% 59.8%;
+    
+    /* Primary (Accent) and Secondary (Muted layout) */
+    --primary: 235 86% 65%; /* Indigo vivo */
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 240 3.7% 10%;
+    --secondary: 240 4% 10%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 10%;
-    --muted-foreground: 240 5% 50%;
-    --accent: 217.2 91.2% 50%;
+    
+    /* Utility colors */
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 250 84% 60%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 12%;
-    --input: 240 3.7% 12%;
-    --ring: 217.2 91.2% 59.8%;
-    --radius: 0.5rem;
+    
+    --border: 240 5% 14%;
+    --input: 240 5% 16%;
+    --ring: 235 86% 65%;
+    
+    --radius: 0.75rem; /* Rounding più dolce Apple-style */
   }
 }
 
+/* 
+======================================================
+2. GLOBAL DEFAULTS
+======================================================
+*/
 @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-naso-dark text-zinc-100 antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
   }
 }
 
-@layer utilities {
-  .bg-grid-pattern {
-    background-image: 
-      linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
-    background-size: 40px 40px;
-  }
-  
-  .glass-panel {
-    @apply bg-naso-panel/60 backdrop-blur-xl border border-white/5 shadow-2xl;
+/* 
+======================================================
+3. MODULAR COMPONENTS (Glassmorphism & Panels)
+======================================================
+*/
+@layer components {
+  /* FAANG Glassmorphism Card base */
+  .lux-glass-panel {
+    @apply bg-naso-panel/60 backdrop-blur-xl border border-white/5 shadow-2xl rounded-2xl;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 
-  .ambient-glow {
+  /* Input form fields premium */
+  .lux-input {
+    @apply bg-naso-panel/80 border border-white/10 rounded-lg text-sm transition-all text-white placeholder-zinc-500;
+    @apply focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 outline-none;
+  }
+  
+  /* Buttons Premium */
+  .lux-btn-primary {
+    @apply bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 transition-all font-medium rounded-lg;
+  }
+}
+
+/* 
+======================================================
+4. MODULAR UTILITIES (Animations & Aesthetic FX)
+======================================================
+*/
+@layer utilities {
+  /* Dynamic Vercel-like background grid */
+  .bg-grid-pattern {
+    background-image: 
+      linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 3rem 3rem;
+    mask-image: radial-gradient(circle at center, black, transparent 80%);
+    -webkit-mask-image: radial-gradient(circle at center, black, transparent 80%);
+  }
+
+  /* Sfondo radiale animato (Nasconde gli angoli duri) */
+  .ambient-glow-mesh {
     position: absolute;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(0,0,0,0) 70%);
+    width: 60vw;
+    height: 60vh;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0,0,0,0) 70%);
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: -1;
+    filter: blur(60px);
   }
   
+  /* Testo Shimmer stile Apple */
   .shimmer-text {
-    @apply bg-[linear-gradient(110deg,#e2e8f0,45%,#ffffff,55%,#e2e8f0)] bg-[length:200%_100%] bg-clip-text text-transparent;
+    @apply bg-[linear-gradient(110deg,#a1a1aa,45%,#ffffff,55%,#a1a1aa)] bg-[length:200%_100%] bg-clip-text text-transparent;
     animation: shimmer 2.5s linear infinite;
   }
 }
 
+/* Scrollbar invisibile modulare */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

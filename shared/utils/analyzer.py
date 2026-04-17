@@ -1,18 +1,20 @@
-import yara
 import os
+
+import yara
+
 
 class NasoAnalyzer:
     def __init__(self, rules_path="shared/rules/"):
         self.rules_path = rules_path
         self.static_rules = self._load_static_rules(rules_path)
-        self.dynamic_rules = {} # Rules from DB
+        self.dynamic_rules = {}  # Rules from DB
         self.compiled_rules = self._compile_all()
 
     def _load_static_rules(self, rules_path):
         rule_files = {}
         if not os.path.exists(rules_path):
             rules_path = os.path.join(os.path.dirname(__file__), "..", "rules")
-            
+
         if os.path.exists(rules_path):
             for filename in os.listdir(rules_path):
                 if filename.endswith(".yar"):
@@ -24,14 +26,14 @@ class NasoAnalyzer:
         # Aggiungiamo le statiche (filepaths)
         # Aggiungiamo le dinamiche (strings)
         # Nota: yara.compile supporta filepaths o source strings, ma mescolarli richiede attenzione.
-        # Useremo 'sources' per tutto caricando i file statici in memoria se necessario, 
+        # Useremo 'sources' per tutto caricando i file statici in memoria se necessario,
         # o useremo namespace diversi.
-        
+
         sources = {}
         # Carica statiche come stringhe per coerenza
         for name, path in self.static_rules.items():
             try:
-                with open(path, 'r') as f:
+                with open(path) as f:
                     sources[f"static_{name}"] = f.read()
             except Exception as e:
                 print(f"Error loading static rule {name}: {e}")
@@ -39,11 +41,11 @@ class NasoAnalyzer:
         # Aggiungi dinamiche
         for name, content in self.dynamic_rules.items():
             sources[f"dynamic_{name}"] = content
-            
+
         if not sources:
             # Fallback rule per evitare crash se non ci sono regole
             sources["fallback"] = "rule fallback { condition: false }"
-            
+
         return yara.compile(sources=sources)
 
     def refresh_dynamic_rules(self, db_rules):
@@ -61,20 +63,17 @@ class NasoAnalyzer:
         except Exception as e:
             print(f"YARA matching error: {e}")
             return [], 0
-            
+
         results = []
         score = 0
-        
+
         for match in matches:
-            results.append({
-                "rule": match.rule,
-                "tags": match.tags,
-                "meta": match.meta
-            })
+            results.append({"rule": match.rule, "tags": match.tags, "meta": match.meta})
             # Logica di scoring: usa metadati YARA se presenti, altrimenti default
             rule_score = match.meta.get("score", 10)
             score += rule_score
-            
+
         return results, min(score, 100)
+
 
 analyzer = NasoAnalyzer()

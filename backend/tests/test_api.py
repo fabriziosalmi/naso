@@ -1,5 +1,6 @@
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_read_system_status(client):
     response = await client.get("/system/status")
@@ -7,6 +8,7 @@ async def test_read_system_status(client):
     data = response.json()
     assert data["status"] == "operational"
     assert "latency_ms" in data
+
 
 @pytest.mark.asyncio
 async def test_auth_protected_route(client):

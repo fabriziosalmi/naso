@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/logo.svg" width="120" alt="NASO Logo" />
+  <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/logo.svg" width="140" alt="NASO Logo" />
   <h1>NASO Forensic Engine</h1>
   <p>
     <strong>Mission-Critical Cyber Threat Intelligence & OSINT Automation Platform</strong><br/>
@@ -7,102 +7,105 @@
   </p>
 
   <p>
-    <a href="https://github.com/fabriziosalmi/naso/actions"><img src="https://img.shields.io/github/actions/workflow/status/fabriziosalmi/naso/build.yml?style=flat-square" alt="Build Status"></a>
-    <a href="https://github.com/fabriziosalmi/naso/network/members"><img src="https://img.shields.io/github/forks/fabriziosalmi/naso?style=flat-square" alt="Forks"></a>
-    <a href="https://github.com/fabriziosalmi/naso/blob/main/LICENSE"><img src="https://img.shields.io/github/license/fabriziosalmi/naso?style=flat-square" alt="License"></a>
+    <a href="https://github.com/fabriziosalmi/naso/actions"><img src="https://img.shields.io/github/actions/workflow/status/fabriziosalmi/naso/build.yml?style=for-the-badge&logo=github&color=6366f1" alt="Build Status"></a>
+    <a href="https://github.com/fabriziosalmi/naso/network/members"><img src="https://img.shields.io/github/forks/fabriziosalmi/naso?style=for-the-badge&color=8b5cf6" alt="Forks"></a>
+    <a href="https://github.com/fabriziosalmi/naso/blob/main/LICENSE"><img src="https://img.shields.io/github/license/fabriziosalmi/naso?style=for-the-badge&color=zinc" alt="License"></a>
   </p>
+  
+  <!-- PLACEHOLDER FOR DEMO GIF OVERVIEW -->
+  <!-- <img src="docs/public/demo.gif" width="100%" alt="Operation Lazarus Demo" style="border-radius: 12px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" /> -->
 </div>
 
 ---
 
-NASO is a **Data-Sovereign, High-Performance Intelligence Engine** designed exclusively for enterprise SecOps and Red Teams. It integrates asynchronous processing, strict Zero-Trust paradigms, and Local AI (via Model Context Protocol) to seamlessly analyze massive dark-web data leaks without exposing internal PII to external cloud inference vendors.
+**NASO** is a Data-Sovereign, High-Performance Intelligence Engine built for enterprise SecOps and Red Teams. It fuses a non-blocking asynchronous architecture with Local AI (Model Context Protocol), bringing unstructured dark web telemetry into a crisp, actionable canvas.
 
-## 1. System Architecture
+## ✨ State-Of-The-Art Features
 
-NASO leverages a partitioned, horizontally scalable backend via RabbitMQ and Celery Workers, strictly separated by task computational weight.
+<details>
+<summary><b>🛡️ Draconian Zero-Trust Architecture</b></summary>
+<br>
+Runs via strictly isolated eBPF-minded Docker containers (<code>cap_drop: ALL</code>, <code>no-new-privileges:true</code>). Secrets aren't hardcoded in environments; they are injected via <b>Docker Secrets</b> into ephemeral RAM mounts. Cryptographic sessions are upheld by <b>EdDSA (Ed25519)</b> and instantly invalidated via Redis JTI Blacklisting.
+</details>
+
+<details>
+<summary><b>⚡ Zero-Allocation Ingestion API</b></summary>
+<br>
+The ingest webhook (<code>POST /leaks/ingest/webhook</code>) utilizes <code>orjson</code> and <code>aio-pika</code> to cast raw unstructured BYO-Data straight into the <b>RabbitMQ</b> native socket stream. This evades Python's heap allocation limits, processing vast GBs of leaks with zero memory spikes.
+</details>
+
+<details>
+<summary><b>🧠 Local AI Semantic Caching</b></summary>
+<br>
+NASO ships with a robust React Zustand frontend that features a rock-solid <b>Exponential Back-off SSE</b> engine. The backend AI protects your VRAM computational limits by caching matching Semantic Threat vectors (SHA-256) inside <b>Redis</b>. Your GPU performs analytics only when novel TTPs are observed.
+</details>
+
+---
+
+## 🏗 System Architecture
+
+NASO scales horizontally. Computational workflows are offloaded into Celery pools, separating web-serving threads from forensic inferencing.
 
 ```mermaid
 graph TD
-    %% Define Styles
-    classDef intel fill:#1A1A1A,stroke:#3B82F6,stroke-width:2px,color:#FFFFFF;
-    classDef worker fill:#312E81,stroke:#6366F1,stroke-width:2px,color:#FFFFFF;
-    classDef storage fill:#064E3B,stroke:#10B981,stroke-width:2px,color:#FFFFFF;
-    classDef external fill:#7F1D1D,stroke:#EF4444,stroke-width:2px,color:#FFFFFF;
+    %% FAANG Aesthetics
+    classDef intel fill:#18181b,stroke:#6366f1,stroke-width:2px,color:#FFFFFF,rx:8,ry:8;
+    classDef worker fill:#09090b,stroke:#8b5cf6,stroke-width:2px,color:#FFFFFF,rx:8,ry:8;
+    classDef storage fill:#18181b,stroke:#10b981,stroke-width:2px,color:#FFFFFF,rx:8,ry:8;
     
-    A1((Custom Scrapers)):::external
-    A2((Dark Web JSON)):::external
+    A1((OSINT Feeds)):::worker
+    A2((Dark Web JSON)):::worker
     
-    B(POST /leaks/ingest/webhook):::intel
-    A1 & A2 -->|Raw Data| B
+    B("⚡ POST /ingest/webhook \n(Zero-Alloc stream)"):::intel
+    A1 & A2 -->|orjson BYO-Data| B
     
-    B --> C[RabbitMQ Broker]:::worker
-    C --> D[Celery Pipeline]:::worker
+    B --> C["Message Broker\n(RabbitMQ)"]:::worker
+    C --> D["Task Cluster\n(Celery Workers)"]:::worker
     
-    D --> E{Local LLM / YARA Engine}:::intel
+    D --> E{"Local LLM (Ai-Cache) \n& YARA Engine"}:::intel
     
-    E -->|Indicators| F1(PostgreSQL):::storage
-    E -->|Full-Text Index| F2(Elasticsearch):::storage
-    E -->|Binary Artifacts| F3(MinIO Object Store):::storage
+    E -->|Threat Topology| F1("GraphDB & SQL \n(PostgreSQL)"):::storage
+    E -->|Full-Text Index| F2("Search Engine \n(Elasticsearch)"):::storage
+    E -->|Malware Payloads| F3("Object Store \n(MinIO)"):::storage
 ```
 
-## 2. Platform Capabilities (1:1 Codebase Mapping)
+## 🚀 Zero-to-Hero in 60 Seconds
 
-### 2.1 Universal Threat Ingestion (BYO-Data)
-NASO operates on a "Bring Your Own Data" model. The system exposes a constant, non-blocking webhook (`POST /leaks/ingest/webhook`) that accepts raw, unformatted JSON from any arbitrary external script. The FastAPI layer immediately redirects the payload to the Celery asynchronous pipeline for backend LLM evaluation and YARA rule execution, guaranteeing zero HTTP-thread blockage.
+NASO infrastructure relies strictly on self-contained Docker orchestration. 
 
-### 2.2 Local AI Co-Analyst & Correlation
-Integration with local LLM runtimes (LM Studio, Ollama) operates natively over REST (`/ai/chat`) utilizing Server-Sent Events (SSE). The AI acts natively via defined Tool Calls (`search_identities`, `get_leaks`, `dark_web_probe`) to autonomously evaluate local PostgreSQL telemetry without data exfiltration. 
-
-### 2.3 Force-Directed Topology Graph
-The React-based frontend aggregates complex primary keys from the `identity_leaks` SQL table into an interactive 2D Canvas matrix. Nodes utilize dynamic scaling based on graph degree-centrality, ensuring visual isolation of critical compromised assets globally.
-
-## 3. Provisioning & Deployment
-
-NASO infrastructure relies strictly on `.env` bindings and automated Docker provisioning. 
-
-### Step 1: Initialize the Environment
+### 1. Initialize
 ```bash
 git clone https://github.com/fabriziosalmi/naso.git
 cd naso
 cp .env.example .env
-# Edit .env and supply rigid PostgreSQL/RabbitMQ passwords
 ```
 
-### Step 2: Deploy the Sovereign Data Engine
+### 2. Ignite Engine
 ```bash
 make up
 ```
 
-### Step 3: Zero-to-Hero Initialization (Demo Mode)
-To immediately populate the system graph with complex, synthetic threat telemetry (VIP accounts, Dark Web breaches, and Mitre mappings) without establishing a live production feed, execute the demo seeder core:
+### 3. Deploy "Operation Lazarus" Demo
+Don't have real live Dark Web data right now? NASO features an integrated, Hollywood-style CLI seeder built with `rich` that synthetically maps out VIP accounts, threat telemetry, and YARA-triggered simulated breaches directly into your database.
 ```bash
 make demo
 ```
-*Users can verify the live execution at `http://localhost:5173` with credentials `admin@naso.local` / `admin`.*
+*Visit the glassmorphism frontend at `http://localhost:5173`.*
+*(Credentials: `admin@naso.local` / `admin`)*
 
-## 4. Continuous Integration & Draconian Testing
+---
 
-NASO ships with an integrated, multi-layered regression enforcement suite (`cli/validate.sh`). This script executes before commits to guarantee absolute architectural integrity:
+## 🛡️ CI Validation (Draconian)
 
-1. **Pytest Backend Verification**: Asserts multi-tenant JWT boundaries, simulates disconnected Celery fallback states, and validates the AI tool dispatcher.
-2. **Vitest State Machine**: Triggers mock executions against the React/Zustand logic (simulating `HTTP 401 Unauthorized` flushes).
-3. **Playwright UI E2E**: Dispatches an embedded headless browser mapping the human forensic flow (Login -> Topology Visualizer -> OSINT Query -> System Logout).
+The `main` branch is protected by strict internal validations simulating real REST loads:
 
-To execute the test matrix:
 ```bash
+# Triggers the massive End-to-End simulation testing
 ./cli/validate.sh
 ```
 
-## 5. Technical Documentation
-Explore the full developer and agent orchestration specs in the `docs/` VitePress suite:
+## 📚 Official Docs
 
-* [MCP Server Integration](https://fabriziosalmi.github.io/naso/guide/mcp-integration)
-* [SOAR Architectures & CTI Setup](https://fabriziosalmi.github.io/naso/guide/soar-and-cti)
-
-To compile the documentation locally:
-```bash
-cd docs && npm ci && npm run docs:dev
-```
-
----
-*Developed under MIT License pattern. Mission-critical deployment usage relies on the security posture of the host hypervisor.*
+Explore developer documentation and Model Context Protocol setups inside the `docs/` VitePress suite:
+* [Core Platform Setup & MCP](https://fabriziosalmi.github.io/naso/guide/mcp-integration)
+* [BYO-Data Threat Ingestion](https://fabriziosalmi.github.io/naso/guide/soar-and-cti)

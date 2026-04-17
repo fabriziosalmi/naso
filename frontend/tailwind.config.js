@@ -50,9 +50,9 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         naso: {
-          dark: "#050507",
-          panel: "#0a0a0c",
-          accent: "#3b82f6"
+          dark: "#09090b",   /* Deep Zinc Background */
+          panel: "#18181b",  /* Raised Zinc for cards */
+          accent: "#6366f1"  /* Vibrant Indigo */
         }
       },
       borderRadius: {
@@ -70,14 +70,19 @@ export default {
           '100%': { backgroundPosition: '-200% 0' },
         },
         pulseGlow: {
-          '0%, 100%': { opacity: 1, boxShadow: '0 0 15px rgba(239, 68, 68, 0.2)' },
-          '50%': { opacity: .7, boxShadow: '0 0 35px rgba(239, 68, 68, 0.6)' },
+          '0%, 100%': { opacity: 1, boxShadow: '0 0 20px rgba(99, 102, 241, 0.2)' },
+          '50%': { opacity: .6, boxShadow: '0 0 40px rgba(99, 102, 241, 0.5)' },
+        },
+        gradientShift: {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
         }
       },
       animation: {
         'radar': 'radar 4s linear infinite',
         'shimmer': 'shimmer 2.5s linear infinite',
-        'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
+        'pulse-glow': 'pulseGlow 3s ease-in-out infinite',
+        'gradient-shift': 'gradientShift 8s ease infinite',
       },
     },
   },
