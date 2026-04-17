@@ -16,14 +16,14 @@ class Settings(BaseSettings):
     
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
-    MINIO_ACCESS_KEY: str
-    MINIO_SECRET_KEY: str
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
     
     # RabbitMQ
     RABBITMQ_HOST: str = "rabbitmq"
-    RABBITMQ_USER: str
-    RABBITMQ_PASS: str
+    RABBITMQ_USER: str = "guest"
+    RABBITMQ_PASS: str = "guest"
     
     # System Performance Constants
     DB_POOL_SIZE: int = 20
