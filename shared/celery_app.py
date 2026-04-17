@@ -1,19 +1,16 @@
 from celery import Celery
-import os
 from shared.utils.worker_tracing import setup_worker_tracing
+from shared.config import settings
 
 # Inizializza Tracing prima della creazione dell'app Celery
 setup_worker_tracing()
 
-RABBITMQ_USER = os.getenv("RABBIT_USER")
-RABBITMQ_PASS = os.getenv("RABBIT_PASSWORD")
-RABBITMQ_HOST = os.getenv("RABBIT_HOST", "rabbitmq")
-if not RABBITMQ_USER or not RABBITMQ_PASS:
-    raise ValueError("CRITICAL: RABBITMQ credentials missing!")
+if not settings.RABBITMQ_USER or not settings.RABBITMQ_PASS:
+    raise ValueError("CRITICAL: RABBITMQ credentials missing in config/env!")
 
 celery_app = Celery(
     "naso_workers",
-    broker=f"pyamqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}//",
+    broker=f"pyamqp://{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASS}@{settings.RABBITMQ_HOST}//",
     include=[
         "shared.tasks.github", 
         "shared.tasks.pastes", 
