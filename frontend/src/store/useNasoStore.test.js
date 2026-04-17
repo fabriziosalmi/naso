@@ -39,4 +39,44 @@ describe('useNasoStore', () => {
     const state = useNasoStore.getState();
     expect(state.leaks).toEqual(mockLeaks);
   });
+
+  it('should flush state securely on logout', () => {
+    useNasoStore.setState({
+      token: 'hacked-token',
+      user: { email: 'admin' },
+      leaks: [1, 2, 3],
+      identities: ['target_alpha'],
+      auditLogs: ['action_1']
+    });
+
+    useNasoStore.getState().logout();
+    
+    const state = useNasoStore.getState();
+    expect(state.token).toBeNull();
+    expect(state.user).toBeNull();
+    expect(state.leaks).toEqual([]);
+    expect(state.identities).toEqual([]);
+    expect(state.auditLogs).toEqual([]);
+  });
+
+  it('should engage Shodan API loader toggle', async () => {
+    useNasoStore.setState({ token: 'valid-token' });
+    
+    // Simulate slow network request
+    let resolveAxios;
+    axios.get.mockReturnValueOnce(new Promise(resolve => {
+        resolveAxios = resolve;
+    }));
+
+    const shodanPromise = useNasoStore.getState().searchShodan('127.0.0.1');
+    expect(useNasoStore.getState().isLoading).toBe(true);
+
+    resolveAxios({ data: { success: true } });
+    await shodanPromise;
+
+    expect(axios.get).toHaveBeenCalledWith(
+        '/leaks/recon/shodan', 
+        expect.objectContaining({ params: { ip: '127.0.0.1' } })
+    );
+  });
 });

@@ -5,8 +5,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from app.main import app
-from app.database import get_db
-from app.models import Base
+from shared.database import get_db
+from shared.models import Base
 
 # In-memory SQLite for testing
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
