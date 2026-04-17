@@ -1,12 +1,13 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 
 const EMPTY_GRAPH = { nodes: [], links: [] };
 
-const NetworkGraphPro = ({ data, isLoading }) => {
+const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
   const fgRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [hoverNode, setHoverNode] = useState(null);
 
   // Measure container and update on resize
   useEffect(() => {
@@ -30,29 +31,70 @@ const NetworkGraphPro = ({ data, isLoading }) => {
   // Zoom to fit when data or dimensions change
   useEffect(() => {
     let t;
-    if (fgRef.current && graphData.nodes.length > 0) {
+    if (fgRef.current && data?.nodes?.length > 0) {
       t = setTimeout(() => fgRef.current?.zoomToFit(400, 60), 300);
     }
     return () => { if (t) clearTimeout(t); };
   }, [data, dimensions]);
 
-  const graphData = (data?.nodes?.length > 0) ? data : EMPTY_GRAPH;
+  // Compute Degree Centrality and Neighbors
+  const graphData = useMemo(() => {
+    const gData = (data?.nodes?.length > 0) ? data : EMPTY_GRAPH;
+    
+    // Reset properties to avoid stale data between scans
+    gData.nodes.forEach(node => {
+      node.neighbors = [];
+      node.links = [];
+      node.degree = 0;
+    });
 
-  const getNodeColor = (node) => {
-    if (node.type === 'leak') {
-      return node.risk >= 80 ? '#FF453A' : '#FF9F0A';
-    }
-    return node.isProtected ? '#FFD60A' : '#0A84FF';
-  };
+    gData.links.forEach(link => {
+      const a = gData.nodes.find(n => n.id === link.source?.id || n.id === link.source);
+      const b = gData.nodes.find(n => n.id === link.target?.id || n.id === link.target);
+      
+      if (a && b) {
+        a.neighbors.push(b);
+        b.neighbors.push(a);
+        a.links.push(link);
+        b.links.push(link);
+        a.degree += 1;
+        b.degree += 1;
+      }
+    });
 
-  const getNodeSize = (node) => node.type === 'leak' ? 6 : 4;
+    return gData;
+  }, [data]);
 
   const isEmpty = graphData.nodes.length === 0;
+
+  // --- Rendering Helpers ---
+  const getNodeColorBase = useCallback((node) => {
+    if (node.type === 'leak') {
+      return node.risk >= 80 ? '255, 69, 58' : '255, 159, 10'; // Red : Orange
+    }
+    return node.isProtected ? '255, 214, 10' : '10, 132, 255'; // Yellow : Blue
+  }, []);
+
+  const getNodeSize = useCallback((node) => {
+    const base = node.type === 'leak' ? 5 : 3;
+    // Centrality scaling: +0.5 per connection, max +8
+    const scaling = Math.min((node.degree || 0) * 0.5, 8);
+    return base + scaling;
+  }, []);
+
+  const handleNodeHover = useCallback((node) => {
+    setHoverNode(node || null);
+    
+    // Change cursor dynamically
+    if (containerRef.current) {
+      containerRef.current.style.cursor = node ? 'pointer' : 'grab';
+    }
+  }, []);
 
   return (
     <div
       ref={containerRef}
-      className="w-full h-full relative bg-black/60"
+      className="w-full h-full relative border border-white/[0.08] bg-black/60 rounded-2xl overflow-hidden"
       style={{ minHeight: '500px' }}
     >
       {/* Legend */}
@@ -112,38 +154,62 @@ const NetworkGraphPro = ({ data, isLoading }) => {
           graphData={graphData}
           width={dimensions.width}
           height={dimensions.height}
-          nodeLabel="label"
-          nodeColor={getNodeColor}
+          nodeLabel={(node) => `${node.label} ${node.degree ? `(${node.degree} connections)` : ''}`}
           nodeRelSize={1}
-          nodeVal={getNodeSize}
-          linkDirectionalParticles={2}
+          onNodeClick={onNodeClick}
+          onNodeHover={handleNodeHover}
+          linkWidth={link => (hoverNode && (link.source === hoverNode || link.target === hoverNode)) ? 2 : 1}
+          linkColor={link => {
+            if (hoverNode) {
+              const isHighlight = link.source === hoverNode || link.target === hoverNode;
+              return isHighlight ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.02)';
+            }
+            return 'rgba(255,255,255,0.08)';
+          }}
+          linkDirectionalParticles={link => (hoverNode && (link.source === hoverNode || link.target === hoverNode)) ? 4 : 2}
           linkDirectionalParticleSpeed={0.004}
-          linkColor={() => 'rgba(255,255,255,0.08)'}
           backgroundColor="rgba(0,0,0,0)"
           nodeCanvasObject={(node, ctx, globalScale) => {
             const size = getNodeSize(node);
-            const color = getNodeColor(node);
+            const rgb = getNodeColorBase(node);
+            
+            // Focus mode dynamics
+            let opacity = 1.0;
+            let isHighlight = false;
+            
+            if (hoverNode) {
+              if (node === hoverNode) {
+                isHighlight = true;
+              } else if (hoverNode.neighbors && hoverNode.neighbors.includes(node)) {
+                isHighlight = true;
+                opacity = 0.8;
+              } else {
+                opacity = 0.15; // Dim non-neighbors heavily
+              }
+            }
 
-            // Glow ring
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, size + 3, 0, 2 * Math.PI, false);
-            ctx.fillStyle = color.replace(')', ', 0.12)').replace('rgb', 'rgba').replace('#', 'rgba(').replace('rgba(', 'rgba(');
-            ctx.fill();
+            // Glow ring for highlighted or normal nodes
+            if (!hoverNode || isHighlight) {
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, size + (isHighlight ? 4 : 3), 0, 2 * Math.PI, false);
+              ctx.fillStyle = `rgba(${rgb}, ${isHighlight ? 0.3 : 0.12})`;
+              ctx.fill();
+            }
 
-            // Node circle
+            // Node core
             ctx.beginPath();
             ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-            ctx.fillStyle = color;
+            ctx.fillStyle = `rgba(${rgb}, ${opacity})`;
             ctx.fill();
 
-            // Label at higher zoom
-            if (globalScale > 2.5) {
-              const label = node.label?.length > 20 ? node.label.slice(0, 20) + '…' : node.label;
-              const fontSize = Math.min(12 / globalScale, 4);
-              ctx.font = `${fontSize}px -apple-system, sans-serif`;
+            // Render Labels at specific zoom or if highlighted
+            if (globalScale > 2.5 || isHighlight) {
+              const label = node.label?.length > 25 ? node.label.slice(0, 25) + '…' : node.label;
+              const fontSize = Math.min(12 / globalScale, isHighlight ? 5 : 4);
+              ctx.font = `${isHighlight ? 'bold ' : ''}${fontSize}px -apple-system, sans-serif`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'top';
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+              ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.9})`;
               ctx.fillText(label, node.x, node.y + size + 2);
             }
           }}
