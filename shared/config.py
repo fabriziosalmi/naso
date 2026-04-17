@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     ES_HOST: str = "elasticsearch"
     ES_PORT: int = 9200
     ES_USER: Optional[str] = None
-    ES_PASSWORD: str
+    ES_PASSWORD: Optional[str] = None
     
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     # SMTP / Notifications (#9)
     SMTP_HOST: str = "smtp.naso.local"
     SMTP_PORT: int = 587
-    SMTP_USER: str
-    SMTP_PASSWORD: str
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: str = "naso-engine@naso.local"
     ENABLE_NOTIFICATIONS: bool = True
 
