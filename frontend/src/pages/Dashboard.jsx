@@ -82,20 +82,20 @@ const OnboardingHero = ({ navigate }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
         <OnboardingCard 
           icon={Globe}
-          title="Sonda il Dark Web"
-          desc="Lancia un probe sulla rete Tor ed estrai le prime evidenze non strutturate."
+          title="Probe the Dark Web"
+          desc="Launch a targeted probe across the Tor network to extract unstructured intelligence."
           onClick={() => navigate('/dark-search')}
         />
         <OnboardingCard 
           icon={Activity}
-          title="Costruisci Grafo Neurale"
-          desc="Registra un alias o una mail nel registro centrale per innescare correlazioni."
+          title="Build Neural Graph"
+          desc="Register a target alias or email in the central ledger to trigger threat correlations."
           onClick={() => navigate('/identities')}
         />
         <OnboardingCard 
           icon={Brain}
-          title="Risveglia l'AI"
-          desc="Apri una sessione con il Co-Analyst per familiarizzare coi tool operativi."
+          title="Awaken the AI"
+          desc="Open a session with the Co-Analyst to explore automated triage and tool dispatch."
           onClick={() => navigate('/ai-analyst')}
         />
       </div>
