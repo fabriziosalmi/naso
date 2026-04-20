@@ -41,3 +41,17 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+# Register the custom markers we use so pytest stops emitting
+# "Unknown pytest.mark.*" warnings. Each line is "name: description".
+markers = [
+    "live: requires a live external service (e.g. LM Studio at LM_STUDIO_URL). Skipped when the dependency is unreachable.",
+    "timeout: per-test wall-clock cap (provided by the pytest-timeout plugin).",
+]
+# Silence the pydantic-settings probe for /run/secrets — that's the Docker
+# secret-mount convention and is expected to be absent outside a
+# container. The warning is not actionable in dev/test environments.
+filterwarnings = [
+    "ignore:directory .* does not exist:UserWarning:pydantic_settings.sources.providers.secrets",
+]
