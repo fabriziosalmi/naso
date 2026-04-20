@@ -1,17 +1,12 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const getStoredToken = () => {
-  try {
-    return localStorage.getItem('naso_token');
-  } catch {
-    return null;
-  }
-};
+// Tutti i request axios inviano automaticamente il cookie httpOnly naso_access_token
+axios.defaults.withCredentials = true;
 
 const useNasoStore = create((set, get) => ({
   user: null,
-  token: getStoredToken(),
+  isAuthenticated: false,
   leaks: [],
   identities: [],
   auditLogs: [],
@@ -33,10 +28,7 @@ const useNasoStore = create((set, get) => ({
   // Check if local AI is reachable
   checkAiHealth: async () => {
     try {
-      const { token } = get();
-      const res = await axios.get('/ai/health', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.get('/ai/health');
       set({ aiStatus: res.data.status });
       return res.data;
     } catch {
@@ -47,8 +39,8 @@ const useNasoStore = create((set, get) => ({
 
   // Stream a message to the AI Co-Analyst
   sendAiMessage: async (content) => {
-    const { token, chatHistory, activeInvestigationId } = get();
-    if (!token || !content.trim()) return;
+    const { isAuthenticated, chatHistory, activeInvestigationId } = get();
+    if (!isAuthenticated || !content.trim()) return;
 
     const userMsg = { id: Date.now().toString(), role: 'user', content };
     const history = [...chatHistory, userMsg];
@@ -65,9 +57,9 @@ const useNasoStore = create((set, get) => ({
       try {
         const response = await fetch('/ai/chat', {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             messages: history.map(m => ({ role: m.role, content: m.content })),
@@ -172,21 +164,19 @@ const useNasoStore = create((set, get) => ({
 
   // Investigation Plans
   fetchInvestigations: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      const res = await axios.get('/ai/plans', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get('/ai/plans');
       set({ investigations: res.data });
     } catch { /* silent */ }
   },
 
   createInvestigation: async (title, description) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      const res = await axios.post('/ai/plans', { title, description }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.post('/ai/plans', { title, description });
       set(state => ({ investigations: [res.data, ...state.investigations], activeInvestigationId: res.data.id }));
       return res.data;
     } catch (err) {
@@ -195,19 +185,19 @@ const useNasoStore = create((set, get) => ({
   },
 
   updateInvestigation: async (planId, updates) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      await axios.patch(`/ai/plans/${planId}`, updates, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.patch(`/ai/plans/${planId}`, updates);
       get().fetchInvestigations();
     } catch { /* silent */ }
   },
 
   deleteInvestigation: async (planId) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      await axios.delete(`/ai/plans/${planId}`, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.delete(`/ai/plans/${planId}`);
       set(state => ({
         investigations: state.investigations.filter(p => p.id !== planId),
         activeInvestigationId: state.activeInvestigationId === planId ? null : state.activeInvestigationId,
@@ -216,19 +206,19 @@ const useNasoStore = create((set, get) => ({
   },
 
   addTaskToInvestigation: async (planId, content) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      await axios.post(`/ai/plans/${planId}/tasks`, { content }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`/ai/plans/${planId}/tasks`, { content });
       get().fetchInvestigations();
     } catch { /* silent */ }
   },
 
   updateTask: async (planId, taskId, updates) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      await axios.patch(`/ai/plans/${planId}/tasks/${taskId}`, updates, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.patch(`/ai/plans/${planId}/tasks/${taskId}`, updates);
       get().fetchInvestigations();
     } catch { /* silent */ }
   },
@@ -253,34 +243,31 @@ const useNasoStore = create((set, get) => ({
       params.append('username', email);
       params.append('password', password);
       
-      const response = await axios.post('/auth/login', params, {
+      await axios.post('/auth/login', params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
-      const { access_token } = response.data;
-      window.localStorage.setItem('naso_token', access_token);
-      set({ token: access_token, isLoading: false });
+      // Il backend imposta il cookie httpOnly — nessun token da memorizzare in JS
+      set({ isAuthenticated: true, isLoading: false });
     } catch (err) {
       set({ error: 'Authentication failed', isLoading: false });
     }
   },
 
-  logout: () => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem('naso_token');
-    }
-    set({ user: null, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
+  logout: async () => {
+    try {
+      await axios.post('/auth/logout'); // Il backend cancella il cookie
+    } catch { /* ignora errori di rete — il logout locale avviene sempre */ }
+    set({ user: null, isAuthenticated: false, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
   },
 
   // Leaks Actions
   fetchLeaks: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     
     set({ isLoading: true });
     try {
-      const response = await axios.get('/leaks/', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get('/leaks/');
       set({ leaks: response.data, isLoading: false });
     } catch (err) {
       set({ error: 'Failed to retrieve intelligence data', isLoading: false });
@@ -289,13 +276,11 @@ const useNasoStore = create((set, get) => ({
 
   // Identity Actions (Q)
   addIdentity: async (identifier, type) => {
-    const { token } = get();
-    if (!token) return set({ error: 'Auth token missing' });
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return set({ error: 'Not authenticated' });
     set({ isLoading: true });
     try {
-      await axios.post('/identities/', { identifier, type }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.post('/identities/', { identifier, type });
       get().fetchIdentities();
       get().fetchAuditLogs();
       set({ isLoading: false });
@@ -305,14 +290,11 @@ const useNasoStore = create((set, get) => ({
   },
   
   fetchIdentities: async (params = {}) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     set({ isLoading: true });
     try {
-      const response = await axios.get('/identities/', { 
-        params,
-        headers: { Authorization: `Bearer ${token}` } 
-      });
+      const response = await axios.get('/identities/', { params });
       set({ identities: response.data, isLoading: false });
     } catch (err) {
       set({ error: 'Failed to load identities', isLoading: false });
@@ -320,13 +302,11 @@ const useNasoStore = create((set, get) => ({
   },
 
   triggerIdentityMerging: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     set({ isLoading: true });
     try {
-      await axios.post('/identities/merge', {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.post('/identities/merge', {});
       get().fetchIdentities();
       get().fetchAuditLogs();
       get().fetchGraphData();
@@ -337,13 +317,11 @@ const useNasoStore = create((set, get) => ({
 
 
   fetchIdentityInsights: async (identityId) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     set({ isLoading: true });
     try {
-      const response = await axios.get(`/identities/${identityId}/insights`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get(`/identities/${identityId}/insights`);
       set({ selectedIdentityInsights: response.data, isLoading: false });
     } catch (err) {
       set({ error: 'Failed to load identity details', isLoading: false });
@@ -351,13 +329,10 @@ const useNasoStore = create((set, get) => ({
   },
 
   toggleIdentityProtection: async (identityId, isProtected) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      await axios.patch(`/identities/${identityId}/protect`, 
-        { is_protected: isProtected },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await axios.patch(`/identities/${identityId}/protect`, { is_protected: isProtected });
       get().fetchIdentities();
       get().fetchAuditLogs();
       if (get().selectedIdentityInsights?.identity.id === identityId) {
@@ -370,15 +345,12 @@ const useNasoStore = create((set, get) => ({
 
   // Dark Web Search (AA)
   searchDarkWeb: async (query) => {
-    const { token } = get();
-    if (!token) return set({ error: 'Authentication required' });
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return set({ error: 'Authentication required' });
     if (!query || !query.trim()) return set({ error: 'Enter a search query before launching probe' });
     set({ isLoading: true, error: null, darkWebResults: [] });
     try {
-      const response = await axios.get('/leaks/recon/darkweb', {
-        params: { q: query.trim() },
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get('/leaks/recon/darkweb', { params: { q: query.trim() } });
       set({ darkWebResults: response.data, isLoading: false });
       get().fetchAuditLogs();
     } catch (err) {
@@ -388,16 +360,12 @@ const useNasoStore = create((set, get) => ({
 
   // Telegram Intelligence (Manual Probe)
   searchTelegram: async (query) => {
-    const { token } = get();
-    if (!token) return set({ error: 'Authentication required' });
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return set({ error: 'Authentication required' });
     if (!query || !query.trim()) return set({ error: 'Enter a search query before launching probe' });
     set({ isLoading: true, error: null });
     try {
-      await axios.get('/leaks/recon/telegram', {
-        params: { channel_username: query.trim() },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      // Telegram data streams into generic Leaks immediately via pipeline
+      await axios.get('/leaks/recon/telegram', { params: { channel_username: query.trim() } });
       get().fetchLeaks();
       get().fetchAuditLogs();
       set({ isLoading: false });
@@ -408,15 +376,12 @@ const useNasoStore = create((set, get) => ({
 
   // Shodan Recon (Manual Probe)
   searchShodan: async (ip) => {
-    const { token } = get();
-    if (!token) return set({ error: 'Authentication required' });
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return set({ error: 'Authentication required' });
     if (!ip || !ip.trim()) return set({ error: 'Enter an IP address before launching probe' });
     set({ isLoading: true, error: null });
     try {
-      await axios.get('/leaks/recon/shodan', {
-        params: { ip: ip.trim() },
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.get('/leaks/recon/shodan', { params: { ip: ip.trim() } });
       get().fetchIdentities();
       get().fetchAuditLogs();
       set({ isLoading: false });
@@ -427,13 +392,10 @@ const useNasoStore = create((set, get) => ({
 
   // Massive Export (BB)
   exportMassiveDossier: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      const response = await axios.get('/leaks/export/dossier', {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
-      });
+      const response = await axios.get('/leaks/export/dossier', { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -448,13 +410,11 @@ const useNasoStore = create((set, get) => ({
 
   // System & Compliance Actions (#10)
   updateProfile: async (email) => {
-    const { token } = get();
-    if (!token) return set({ error: 'Auth token missing' });
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return set({ error: 'Not authenticated' });
     set({ isLoading: true });
     try {
-      await axios.put('/users/me', { email }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.put('/users/me', { email });
       get().fetchAuditLogs();
       set({ isLoading: false });
     } catch (err) {
@@ -463,13 +423,11 @@ const useNasoStore = create((set, get) => ({
   },
 
   fetchAuditLogs: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     set({ isLoading: true });
     try {
-      const response = await axios.get('/system/audit', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get('/system/audit');
       set({ auditLogs: response.data, isLoading: false });
     } catch (err) {
       set({ error: "Audit log fetch failed", isLoading: false });
@@ -505,12 +463,10 @@ const useNasoStore = create((set, get) => ({
 
 
   fetchGraphData: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      const response = await axios.get('/identities/graph', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get('/identities/graph');
       set({ graphData: response.data });
     } catch (err) {
       set({ error: "Graph fetch failed" });
@@ -519,13 +475,10 @@ const useNasoStore = create((set, get) => ({
   },
 
   fetchScreenshot: async (leakId) => {
-    const { token } = get();
-    if (!token) return null;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return null;
     try {
-      const response = await axios.get(`/leaks/${leakId}/screenshot`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
-      });
+      const response = await axios.get(`/leaks/${leakId}/screenshot`, { responseType: 'blob' });
       return URL.createObjectURL(response.data);
     } catch (err) {
       set({ error: "Screenshot fetch failed" });
@@ -538,12 +491,10 @@ const useNasoStore = create((set, get) => ({
   clearError: () => set({ error: null }),
 
   acknowledgeLeak: async (leakId) => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      await axios.patch(`/leaks/${leakId}/ack`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.patch(`/leaks/${leakId}/ack`, {});
       set(state => ({
         leaks: state.leaks.map(l =>
           l.id === leakId ? { ...l, acknowledged_at: new Date().toISOString() } : l
@@ -555,12 +506,10 @@ const useNasoStore = create((set, get) => ({
   },
 
   acknowledgeAllLeaks: async () => {
-    const { token } = get();
-    if (!token) return;
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
     try {
-      const res = await axios.post('/leaks/ack-all', { min_severity: 80 }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.post('/leaks/ack-all', { min_severity: 80 });
       const acknowledgedIds = new Set(
         get().leaks
           .filter(l => l.severity_score >= 80 && !l.acknowledged_at)
@@ -579,14 +528,12 @@ const useNasoStore = create((set, get) => ({
   },
 
   fetchMe: async () => {
-    const { token } = get();
-    if (!token) return;
     try {
-      const res = await axios.get('/users/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      set({ user: res.data });
-    } catch { /* silent — user stays null */ }
+      const res = await axios.get('/users/me');
+      set({ user: res.data, isAuthenticated: true });
+    } catch {
+      set({ isAuthenticated: false, user: null });
+    }
   },
 }));
 

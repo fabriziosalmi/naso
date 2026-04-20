@@ -8,6 +8,7 @@ class NasoAnalyzer:
         self.rules_path = rules_path
         self.static_rules = self._load_static_rules(rules_path)
         self.dynamic_rules = {}  # Rules from DB
+        self._version: int = 0
         self.compiled_rules = self._compile_all()
 
     def _load_static_rules(self, rules_path):
@@ -49,10 +50,14 @@ class NasoAnalyzer:
         return yara.compile(sources=sources)
 
     def refresh_dynamic_rules(self, db_rules):
-        """Aggiorna le regole in memoria con quelle provenienti dal DB."""
-        self.dynamic_rules = {r.name: r.content for r in db_rules}
+        """Aggiorna le regole in memoria. Recompila SOLO se il set è cambiato (P-01: O(1) check)."""
+        new_dynamic = {r.name: r.content for r in db_rules}
+        if new_dynamic == self.dynamic_rules:
+            return  # Nessuna modifica: skip recompile costosa
+        self.dynamic_rules = new_dynamic
         self.compiled_rules = self._compile_all()
-        print(f"[NASO ANALYZER] Dynamic rules refreshed: {len(self.dynamic_rules)} rules loaded.")
+        self._version += 1
+        print(f"[NASO ANALYZER] Dynamic rules recompiled (v{self._version}): {len(self.dynamic_rules)} rules loaded.")
 
     def analyze_text(self, text):
         """

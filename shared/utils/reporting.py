@@ -73,6 +73,16 @@ class ForensicReportGenerator:
         """
         private_key_path = os.getenv("NASO_PRIVATE_KEY_PATH")
         if private_key_path and os.path.exists(private_key_path):
+            # Controllo permessi: la chiave privata deve essere leggibile solo dal proprietario (G-13).
+            # Permessi troppo aperti (es. 0o644) compromettono l'affidabilità legale delle prove forensi.
+            file_stat = os.stat(private_key_path)
+            # Bit 0o077: qualsiasi permesso a gruppo o altri
+            if file_stat.st_mode & 0o077:
+                raise PermissionError(
+                    f"SECURITY: private key file '{private_key_path}' has unsafe permissions "
+                    f"(mode {oct(file_stat.st_mode & 0o777)}). "
+                    "Set permissions to 0o400 or 0o600 (owner read-only)."
+                )
             with open(private_key_path, "rb") as key_file:
                 private_key = serialization.load_pem_private_key(key_file.read(), password=None)
             signature = private_key.sign(

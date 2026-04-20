@@ -46,5 +46,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
         await db.execute(text("SELECT 1"))
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         return {"status": "operational", "latency_ms": {"total": round(elapsed_ms, 2)}}
-    except Exception as e:
-        return {"status": "degraded", "latency_ms": {"total": -1}, "error": str(e)}
+    except Exception:
+        # Non esponiamo mai dettagli interni (connection string, stacktrace, hostname DB)
+        # al client — solo uno stato generico per evitare information disclosure.
+        return {"status": "degraded", "latency_ms": {"total": -1}}

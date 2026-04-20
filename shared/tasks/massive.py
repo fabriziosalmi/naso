@@ -1,5 +1,10 @@
+import io
 import logging
+import os
 import re
+from urllib.parse import urlparse
+
+import requests
 
 from shared.celery_app import celery_app
 from shared.tasks.pipeline import process_potential_leak
@@ -10,56 +15,85 @@ logger = logging.getLogger("naso-massive")
 EMAIL_REGEX = re.compile(r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+", re.I)
 PRIVATE_KEY_REGEX = re.compile(r"-----BEGIN (RSA|OPENSSH) PRIVATE KEY-----")
 
+# Limite di dimensione per singola riga (evita OOM su righe malformate)
+MAX_LINE_BYTES = 1024 * 64  # 64 KB
+
+# P-12: batch N righe in un singolo task Celery invece di 1 task per riga.
+# 1 task per riga su un dump da 5M righe = 5M messaggi RabbitMQ + 5M DB connections.
+BATCH_SIZE = 100
+
+
+def _flush_batch(batch: list[str], tenant_id: str, source: str, up_to_line: int) -> None:
+    """Dispatcha un batch di righe sospette alla pipeline come unico task."""
+    hit_data = {
+        "tenant_id": tenant_id,
+        "source": f"Massive Dump Stream: {source}",
+        "metadata_json": {"up_to_line": up_to_line, "engine": "Naso-Stream-Processor", "batch_size": len(batch)},
+    }
+    combined = "\n".join(batch)
+    process_potential_leak.apply_async((hit_data, combined), queue="default")
+
+
+def _open_stream(file_url_or_path: str):
+    """
+    Ritorna un iteratore di righe (str) dal path locale o dall'URL HTTP/HTTPS.
+    Non carica mai l'intero file in memoria.
+    """
+    parsed = urlparse(file_url_or_path)
+    if parsed.scheme in ("http", "https"):
+        resp = requests.get(file_url_or_path, stream=True, timeout=30)
+        resp.raise_for_status()
+        return resp.iter_lines(decode_unicode=True)
+    else:
+        # Path locale — supporta sia path assoluti che relativi
+        return open(file_url_or_path, encoding="utf-8", errors="replace")  # noqa: SIM115
+
 
 @celery_app.task(bind=True, max_retries=1, queue="massive", name="tasks.massive.process_blob_stream")
 def process_blob_stream(self, file_url_or_path: str, tenant_id: str):
     """
-    Streaming Processor SOTA.
-    Legge un dump gigabyte riga per riga, evitando buffer OOM.
-    Applica Fast Regex e inoltra alla pipeline solo i "chunk" rilevanti.
+    Streaming Processor OOM-safe.
+    Legge un dump gigabyte riga per riga da un file locale o URL HTTP/HTTPS.
+    Applica Fast Regex e inoltra alla pipeline solo i chunk rilevanti.
     """
+    stream = None
     try:
         logger.info(f"[MASSIVE INGESTION] Starting OOM-safe stream for: {file_url_or_path}")
 
         suspicious_chunks_found = 0
         total_lines_read = 0
+        _batch: list[str] = []
 
-        # Simuliamo un file pointer o buffer.
-        # In un contesto reale useremmo requests.get(url, stream=True).iter_lines()
+        stream = _open_stream(file_url_or_path)
 
-        def mock_stream_generator():
-            yield "system_startup, no issues"
-            yield "user: admin, location: it, password: rigourous_admin123"
-            yield "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAK... (leaked ssh key test)"
-            yield "test@corp.com:password123!"
-            yield "normal traffic trace 404"
-            for _ in range(100):  # Simuliamo noise di background
-                yield "DEBUG: Background worker pulse"
+        for line in stream:
+            # Tronca righe abnormalmente lunghe per evitare OOM nel worker AI
+            if len(line) > MAX_LINE_BYTES:
+                line = line[:MAX_LINE_BYTES]
 
-        # Algoritmo SOTA: Non-Blocking Line Reader
-        # Estraiamo buffer accumulati o mandiamo riga per riga
-        for line in mock_stream_generator():
             total_lines_read += 1
 
-            # Filter Fast Phase:
             if EMAIL_REGEX.search(line) or PRIVATE_KEY_REGEX.search(line):
                 suspicious_chunks_found += 1
+                _batch.append(line)
+                # P-12: dispatch in batch, not one task per line
+                if len(_batch) >= BATCH_SIZE:
+                    _flush_batch(_batch, tenant_id, file_url_or_path, total_lines_read)
+                    _batch = []
 
-                # Delegation Pattern SOTA:
-                # Disaccoppiamo la scoperta grezza dal processing pesante.
-                # Il massive worker rimbalza la hit al worker generico.
-                hit_data = {
-                    "tenant_id": tenant_id,
-                    "source": f"Massive Dump Stream: {file_url_or_path}",
-                    "metadata_json": {"line_number": total_lines_read, "engine": "Naso-Stream-Processor"},
-                }
-                process_potential_leak.apply_async((hit_data, line), queue="default")
+        # Flush remaining partial batch
+        if _batch:
+            _flush_batch(_batch, tenant_id, file_url_or_path, total_lines_read)
 
         logger.info(
-            f"[MASSIVE INGESTION] Complete. 0 RAM overload. Stream lines: {total_lines_read}. Suspicious hits delegated: {suspicious_chunks_found}."
+            f"[MASSIVE INGESTION] Complete. Lines read: {total_lines_read}. "
+            f"Suspicious hits delegated: {suspicious_chunks_found}."
         )
         return f"Processato {file_url_or_path} - Delegati {suspicious_chunks_found} hit alla pipeline primaria."
 
     except Exception as e:
         logger.error(f"[MASSIVE OOM-SAFE FAILED] Stream collapse on {file_url_or_path}: {e}")
         raise self.retry(exc=e, countdown=60)
+    finally:
+        if stream is not None and hasattr(stream, "close"):
+            stream.close()

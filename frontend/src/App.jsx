@@ -135,7 +135,7 @@ export default function App() {
     isLoading, systemStatus, fetchSystemStatus, error, clearError,
     addIdentity, updateProfile,
     graphData, fetchGraphData,
-    token, logout
+    isAuthenticated, logout
   } = useNasoStore();
 
   const location = useLocation();
@@ -173,8 +173,8 @@ export default function App() {
 
   const isFullHeightView = ['/ai-analyst', '/docs'].includes(location.pathname);
 
-  // Auth gate: show login if no token
-  if (!token) {
+  // Auth gate: show login if not authenticated
+  if (!isAuthenticated) {
     return <Login />;
   }
 

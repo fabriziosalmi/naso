@@ -28,8 +28,13 @@ def start_realtime_listener(self, tenant_id, channels: list):
         logger.error("[TELEGRAM] API_ID or API_HASH not set. Cannot start real-time listener.")
         return
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(run_telethon_listener(tenant_id, channels))
+    # asyncio.get_event_loop() in Python 3.10+ con Celery prefork può ritornare
+    # un loop già chiuso o condiviso dal processo padre (G-06).
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(run_telethon_listener(tenant_id, channels))
+    finally:
+        loop.close()
 
 
 async def run_telethon_listener(tenant_id, channels):
@@ -71,7 +76,11 @@ def monitor_telegram_channel(self, channel_username, tenant_id):
         logger.warning("[TELEGRAM] API_ID or API_HASH not set. Telegram Intelligence is in DRY-RUN mode.")
         return "Telegram API keys missing, skipping monitor."
 
-    asyncio.run(scrape_telegram_channel(channel_username, tenant_id))
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(scrape_telegram_channel(channel_username, tenant_id))
+    finally:
+        loop.close()
     return f"Monitoring initiated for {channel_username}"
 
 

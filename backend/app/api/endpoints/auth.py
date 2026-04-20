@@ -1,7 +1,8 @@
+import os
 from datetime import timedelta
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -14,12 +15,23 @@ from shared.models import User
 from shared.schemas import Token
 
 from ..deps import oauth2_scheme
+from ..limiter import limiter
 
 router = APIRouter()
 
+_COOKIE_NAME = "naso_access_token"
+_COOKIE_SAMESITE = "lax"  # 'strict' romperebbe il proxy Vite in sviluppo
+
 
 @router.post("/login", response_model=Token)
-async def login_for_access_token(db: AsyncSession = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+@limiter.limit("10/minute")
+async def login_for_access_token(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    form_data: OAuth2PasswordRequestForm = Depends(),
+):
+
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
 
@@ -34,14 +46,29 @@ async def login_for_access_token(db: AsyncSession = Depends(get_db), form_data: 
     access_token = create_access_token(
         data={"sub": user.email, "tenant_id": user.tenant_id, "role": user.role}, expires_delta=access_token_expires
     )
+
+    # Imposta il token come cookie httpOnly — il JS non può leggerlo (protezione XSS)
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        samesite=_COOKIE_SAMESITE,
+        secure=os.getenv("NASO_COOKIE_SECURE", "false").lower() == "true",
+        max_age=int(access_token_expires.total_seconds()),
+        path="/",
+    )
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(token: str = Depends(oauth2_scheme)):
+async def logout(request: Request, response: Response, token: str = Depends(oauth2_scheme)):
+    # Cancella il cookie httpOnly
+    response.delete_cookie(key=_COOKIE_NAME, httponly=True, samesite=_COOKIE_SAMESITE, path="/")
+
     try:
-        # Decode without verification as it was verified by upstream deps (or just to extract metadata)
-        payload = jwt.decode(token, options={"verify_signature": False})
+        # Verifica la firma prima di aggiungere alla blacklist (fix C-01 mantenuto)
+        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
         jti = payload.get("jti")
         exp = payload.get("exp")
 
@@ -54,4 +81,5 @@ async def logout(token: str = Depends(oauth2_scheme)):
                 await jwt_blacklist.blacklist_token(jti, ttl)
         return {"msg": "Successfully logged out"}
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        # Cookie già cancellato — il logout è comunque effettivo
+        return {"msg": "Logged out"}

@@ -1,5 +1,5 @@
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -10,15 +10,33 @@ from shared.database import get_db
 from shared.models import User
 from shared.schemas import TokenData
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+
+_COOKIE_NAME = "naso_access_token"
 
 
-async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)):
+def _extract_token(request: Request, bearer_token: str | None) -> str | None:
+    """Prova prima il cookie httpOnly, poi l'header Authorization Bearer."""
+    cookie_token = request.cookies.get(_COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+    return bearer_token
+
+
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    bearer_token: str | None = Depends(oauth2_scheme),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    token = _extract_token(request, bearer_token)
+    if not token:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
         jti: str = payload.get("jti")

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from shared.core.exceptions import ResourceNotFoundError
+from shared.core.security import verify_password
 from shared.database import get_db
 from shared.models import User
 from shared.schemas import User as UserSchema
@@ -20,7 +21,7 @@ async def update_operator_profile(
 ):
     """
     Updates the current operator's profile (e.g., email change).
-    Triggers an audit log.
+    Changing the email requires the current password to prevent account takeover.
     """
     result = await db.execute(select(User).where(User.id == current_user.id))
     user = result.scalar_one_or_none()
@@ -30,12 +31,23 @@ async def update_operator_profile(
 
     old_email = user.email
 
-    if user_update.email:
+    if user_update.email and user_update.email != user.email:
+        # Verifica password obbligatoria per il cambio email (OWASP A07)
+        if not user_update.current_password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="current_password is required to change your email address",
+            )
+        if not verify_password(user_update.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current password is incorrect",
+            )
         user.email = user_update.email
+
     if user_update.full_name:
         user.full_name = user_update.full_name
 
-    # Log the action in the audit trail
     await AuditLogger.log(
         db,
         user_id=user.id,
