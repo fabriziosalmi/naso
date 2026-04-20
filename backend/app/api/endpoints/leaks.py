@@ -1,13 +1,15 @@
+import ipaddress
 from typing import Optional
+
+import aio_pika
+import orjson
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
-import orjson
-import aio_pika
-import uuid
 
 from shared.core.exceptions import AuthorizationError, ResourceNotFoundError
 from shared.database import get_db
@@ -20,6 +22,7 @@ from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
 
 from ..deps import get_current_user
+from ..infrastructure.rabbitmq import rabbitmq_pool
 
 router = APIRouter()
 
@@ -37,8 +40,6 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
     Reads raw bytes stream via orjson and directly writes to RabbitMQ
     Celery Queue via aio_pika, bypassing heap allocation buffering.
     """
-    from shared.config import settings
-
     raw_body = await request.body()
     try:
         payload = orjson.loads(raw_body)
@@ -50,19 +51,22 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
     metadata = payload.get("metadata", {})
     metadata["tenant_id"] = current_user.tenant_id
 
-    # 1. Connect to RabbitMQ via aio-pika (Zero-Blocking)
-    amqp_url = f"amqp://{settings.RABBITMQ_USER}:{settings.RABBITMQ_PASS}@{settings.RABBITMQ_HOST}/"
-    connection = await aio_pika.connect_robust(amqp_url)
-
-    async with connection:
-        channel = await connection.channel()
+    # 1. Ottieni un canale dal pool condiviso (evita una connessione TCP per ogni request)
+    channel = await rabbitmq_pool.get_channel()
+    try:
         exchange = await channel.get_exchange("celery", ensure=False)  # standard celery exchange
 
         # 2. Celery Protocol v2 JSON Envelope Construction
+        # task signature: process_potential_leak(self, hit_data, raw_content)
         task_id = str(uuid.uuid4())
+        hit_data_dict = {
+            "tenant_id": current_user.tenant_id,
+            "source": source,
+            "metadata_json": metadata,
+        }
         task_args = (
-            [],
-            {"source": source, "content_snippet": content, "metadata": metadata},
+            [hit_data_dict, content],  # positional: hit_data, raw_content
+            {},
             {"callbacks": None, "errbacks": None, "chain": None, "chord": None},
         )
 
@@ -78,6 +82,8 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
         )
 
         await exchange.publish(message, routing_key="celery")
+    finally:
+        await channel.close()
 
     return {
         "status": "accepted",
@@ -110,7 +116,14 @@ async def shodan_recon(ip: str, db: AsyncSession = Depends(get_db), current_user
     """
     Esegue una scansione infrastrutturale OSINT tramite Shodan (DD).
     """
-    results = await ShodanService.scan_host(ip)
+    # Validazione IP: accetta solo indirizzi IPv4/IPv6 validi per prevenire SSRF e abuso quota
+    try:
+        ipaddress.ip_address(ip.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
+    clean_ip = ip.strip()
+
+    results = await ShodanService.scan_host(clean_ip)
 
     await AuditLogger.log(
         db,

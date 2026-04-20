@@ -1,5 +1,7 @@
 import logging
+import math
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -16,47 +18,40 @@ class IdentityRiskScoringService:
     @classmethod
     async def calculate_and_update_risk(cls, db: AsyncSession, identity_id: str):
         """
-        Ricalcola il risk_score di un'identità basandosi sulla storia dei leak.
-        Formula: (Media Severity * 0.6) + (Log2(Numero Leak) * 20)
-        Garantisce che il punteggio sia compreso tra 0 e 100.
+        Ricalcola il risk_score tramite aggregazione SQL (P-03).
+        Formula: (avg_severity * 0.6) + (log2(count+1) * 15), capped at 100.
+
+        P-03: una singola query SQL AVG+COUNT sostituisce il fetch di tutte le righe
+        in Python — O(1) round-trip invece di O(n) rows trasferiti sul wire.
         """
-        # 1. Recupera tutti i leak associati all'identità
-        query = (
-            select(LeakHit.severity_score)
+        # P-03: calcola avg e count in un'unica query aggregata lato DB
+        agg_query = (
+            select(
+                func.avg(LeakHit.severity_score).label("avg_sev"),
+                func.count(LeakHit.id).label("cnt"),
+            )
             .join(identity_leaks, LeakHit.id == identity_leaks.c.leak_id)
             .where(identity_leaks.c.identity_id == identity_id)
         )
-        result = await db.execute(query)
-        severities = [r[0] for r in result.all()]
+        row = (await db.execute(agg_query)).first()
 
-        if not severities:
+        if not row or not row.cnt:
             return 0
 
-        leak_count = len(severities)
-        avg_severity = sum(severities) / leak_count
-
-        # 2. Logica di Scoring
-        # Bonus frequenza: più un'identità appare in leak diversi, più è a rischio
-        # Usiamo un moltiplicatore logaritmico per non esplodere
-        import math
+        avg_severity = float(row.avg_sev or 0)
+        leak_count = int(row.cnt)
 
         frequency_bonus = math.log2(leak_count + 1) * 15
+        final_score = min(100, round((avg_severity * 0.6) + frequency_bonus))
 
-        base_score = (avg_severity * 0.6) + frequency_bonus
-
-        # 3. Cap a 100
-        final_score = min(100, round(base_score))
-
-        # 4. Update Identity
-        update_query = select(Identity).where(Identity.id == identity_id)
-        identity_result = await db.execute(update_query)
+        # Update Identity risk_score
+        identity_result = await db.execute(select(Identity).where(Identity.id == identity_id))
         identity = identity_result.scalar_one_or_none()
 
         if identity:
             old_score = identity.risk_score
             identity.risk_score = final_score
             await db.flush()
-
             logger.info(
                 f"[RISK SCORING] Identity {identity.identifier} updated: {old_score} -> {final_score} (Leaks: {leak_count})"
             )

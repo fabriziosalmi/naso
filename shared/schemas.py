@@ -38,6 +38,8 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
+    # Richiesta per cambiare l'email — previene account-takeover con token temporaneamente rubati
+    current_password: Optional[str] = None
 
 
 class User(UserBase):

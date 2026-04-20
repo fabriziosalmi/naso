@@ -32,20 +32,31 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
         to_visit = [root_url]
         pages_crawled = 0
 
-        while to_visit and pages_crawled < max_pages:
-            url = to_visit.pop(0)
-            if url in visited:
-                continue
+        # P-06: allocate the event loop ONCE for the entire crawl job.
+        # Creating and tearing down a new loop per page wastes selector init overhead N times.
+        import time
+        loop = asyncio.new_event_loop()
+        try:
+            while to_visit and pages_crawled < max_pages:
+                url = to_visit.pop(0)
+                if url in visited:
+                    continue
 
-            import time
+                screenshot_filename = f"deep_leak_{tenant_id}_{int(time.time())}.png"
+                screenshot_path = os.path.join(tempfile.gettempdir(), screenshot_filename)
 
-            screenshot_filename = f"deep_leak_{tenant_id}_{int(time.time())}.png"
-            screenshot_path = os.path.join(tempfile.gettempdir(), screenshot_filename)
-
-            content = asyncio.run(stealth_browser.get_content_with_screenshot(url, screenshot_path))
-            visited.add(url)
+                content = loop.run_until_complete(stealth_browser.get_content_with_screenshot(url, screenshot_path))
+                visited.add(url)
 
             if content:
+                # Limita la dimensione del contenuto per prevenire OOM del worker (G-07)
+                # Una pagina onion malevola da >1MB verrebbe troncata prima di essere
+                # passata alla pipeline AI e indicizzata.
+                MAX_CONTENT_BYTES = 1 * 1024 * 1024  # 1 MB
+                if len(content) > MAX_CONTENT_BYTES:
+                    logger.warning(f"[DEEP CRAWL] Content truncated for {url} ({len(content)} bytes > {MAX_CONTENT_BYTES})")
+                    content = content[:MAX_CONTENT_BYTES]
+
                 pages_crawled += 1
                 logger.info(f"[DEEP CRAWL] Scanned {url} ({pages_crawled}/{max_pages})")
 
@@ -68,6 +79,8 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                     if urlparse(full_url).netloc == urlparse(root_url).netloc:
                         if full_url not in visited and full_url not in to_visit:
                             to_visit.append(full_url)
+        finally:
+            loop.close()
 
         return f"Deep crawl complete for {root_url}. Scanned {pages_crawled} pages."
 
@@ -89,7 +102,11 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
         screenshot_filename = f"leak_{tenant_id}_{int(time.time())}.png"
         screenshot_path = os.path.join(tempfile.gettempdir(), screenshot_filename)
 
-        content = asyncio.run(stealth_browser.get_content_with_screenshot(onion_url, screenshot_path))
+        loop = asyncio.new_event_loop()
+        try:
+            content = loop.run_until_complete(stealth_browser.get_content_with_screenshot(onion_url, screenshot_path))
+        finally:
+            loop.close()
 
         if content:
             logger.info(

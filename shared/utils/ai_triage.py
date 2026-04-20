@@ -32,6 +32,8 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
     Implementa Graceful Degradation (#15): se l'AI fallisce dopo i retry,
     il sistema declassa il leak ma non blocca la pipeline.
     """
+    # P-09: truncation is the caller's responsibility (raw_content[:2500] in pipeline.py).
+    # Receiving an already-trimmed snippet here avoids allocating a 1MB string argument.
     prompt = f"""
     ANALISI FORENSE NASO v1.0
     Ruolo: Esperto Threat Intelligence & Data Breach Analyst
@@ -50,7 +52,7 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
     MOTIVAZIONE: Breve spiegazione tecnica.
     
     CONTENUTO:
-    {content_snippet[:2500]}
+    {content_snippet}
     """
     messages = [{"role": "user", "content": prompt}]
 
@@ -64,7 +66,8 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
         full_response = response.json()["choices"][0]["message"]["content"]
         thought = ""
         answer = full_response
-        thought_match = re.search(r"<\|think\|>(.*?)<turn|>", full_response, re.DOTALL)
+        # Match Gemma/Qwen thinking tags: <|think|>...</|think|>
+        thought_match = re.search(r"<\|think\|>(.*?)<\|/think\|>", full_response, re.DOTALL)
         if thought_match:
             thought = thought_match.group(1).strip()
             answer = full_response.replace(thought_match.group(0), "").strip()

@@ -1,14 +1,17 @@
 import logging
-import sentry_sdk
-from fastapi.responses import JSONResponse
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse, ORJSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
-if os.environ.get("SENTRY_DSN"):
+# Sentry: importato solo se SENTRY_DSN è configurato — evita init inconsistente (G-14)
+_sentry_enabled = bool(os.environ.get("SENTRY_DSN"))
+if _sentry_enabled:
     import sentry_sdk
 
     sentry_sdk.init(
@@ -22,6 +25,8 @@ from shared.config import settings
 from shared.database import engine
 
 from .api.endpoints import ai, auth, identities, keywords, leaks, system, tenants, users, yara
+from .infrastructure.rabbitmq import rabbitmq_pool
+from .limiter import limiter
 
 # Configurazione Logging Professionale
 logging.basicConfig(
@@ -36,6 +41,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"System {settings.PROJECT_NAME} starting up with Async Core...")
     yield
     # Shutdown
+    await rabbitmq_pool.close()
     await engine.dispose()
     logger.info("System safely shut down. Async resources released.")
 
@@ -51,13 +57,20 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+# Rate limiter: esponi come stato app e registra handler 429
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global Exception Caught: {exc}")
-    sentry_sdk.capture_exception(exc)
+    if _sentry_enabled:
+        import sentry_sdk  # noqa: PLC0415 — cached import, always free after first load
+
+        sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=500,
         content={"detail": "A critical system error occurred. Telemetry has logged the payload."},
@@ -80,7 +93,15 @@ app.add_middleware(
     allow_origins=[origin.strip() for origin in settings.ALLOWED_CORS_ORIGINS.split(",")],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    # Header espliciti: wildcard "*" accetta qualsiasi header custom bypassando WAF e proxy (G-05)
+    allow_headers=[
+        "Accept",
+        "Authorization",
+        "Content-Type",
+        "X-Requested-With",
+        "X-CSRF-Token",
+        "Cache-Control",
+    ],
 )
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api"])

@@ -1,23 +1,27 @@
 # ruff: noqa: E402
 import asyncio
 import hashlib
+import httpx
 import io
 import json
 import logging
 import os
-from datetime import datetime
+import time
+import uuid
+from datetime import datetime, timezone
 
 from elasticsearch import AsyncElasticsearch
 from minio import Minio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from shared.celery_app import celery_app
 from shared.config import settings
 from shared.domain.services.correlation import IdentityCorrelationService
 from shared.domain.services.cti_adapters import CTIAdapters
-from shared.models import YaraRule
+from shared.models import LeakHit, YaraRule
 from shared.utils.ai_triage import analyze_leak_with_gemma_thinking
 from shared.utils.analyzer import analyzer
 from shared.utils.babel_node import babel_node
@@ -46,18 +50,27 @@ else:
     minio_client = None
 
 # Engine per i worker (Command Side)
+# NullPool: ogni task crea e chiude la propria connessione.
+# Il pool standard erediterebbe fd e socket dal processo padre (Celery prefork)
+# causando corruzione del pool — NullPool previene completamente questo problema (G-11).
 engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_timeout=10,
-    pool_recycle=1800,
+    poolclass=NullPool,
     pool_pre_ping=True,
-    connect_args={"prepared_statement_cache_size": 250, "statement_cache_size": 500},
+    connect_args={"prepared_statement_cache_size": 0, "statement_cache_size": 0},
     echo=False,
 )
 setup_worker_tracing(engine)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+# P-01: throttle YARA DB refresh — at most once every 60s per worker process.
+# Recompiling YARA on every task wastes CPU proportional to task throughput.
+_YARA_REFRESH_INTERVAL: float = 60.0
+_last_yara_refresh: float = 0.0
+
+# P-05: persistent async HTTP client for SOAR webhook.
+# Re-creating a client per alert pays TCP+TLS setup cost every time.
+_soar_client = httpx.AsyncClient(timeout=3.0)
 
 
 def generate_idempotency_key(content: str):
@@ -75,14 +88,19 @@ def process_potential_leak(self, hit_data, raw_content):
     hit_data["idempotency_key"] = idempotency_key
 
     async def _run_async_pipeline():
-        # 0. Refresh Dynamic YARA Rules (#25)
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(YaraRule).where(YaraRule.is_active))
-                rules = result.scalars().all()
-                analyzer.refresh_dynamic_rules(rules)
-        except Exception as e:
-            logger.error(f"Failed to refresh YARA rules: {e}")
+        # 0. Refresh Dynamic YARA Rules — time-gated, max once per 60s (P-01)
+        # Avoids recompiling the full YARA ruleset on every single task invocation.
+        global _last_yara_refresh
+        _now = time.monotonic()
+        if _now - _last_yara_refresh >= _YARA_REFRESH_INTERVAL:
+            try:
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(select(YaraRule).where(YaraRule.is_active))
+                    rules = result.scalars().all()
+                    analyzer.refresh_dynamic_rules(rules)  # no-op if ruleset unchanged (P-01)
+                _last_yara_refresh = _now
+            except Exception as e:
+                logger.error(f"Failed to refresh YARA rules: {e}")
 
         # 1. Babel Node Pre-Processing (NLP & NER)
         try:
@@ -116,7 +134,7 @@ def process_potential_leak(self, hit_data, raw_content):
 
         # 2. AI Thinking con Circuit Breaker e Graceful Degradation
         try:
-            ai_result = await analyze_leak_with_gemma_thinking(raw_content)
+            ai_result = await analyze_leak_with_gemma_thinking(raw_content[:2500])  # P-09: truncate at call site
             hit_data["severity_score"] = 100 if ai_result["is_valid"] else 10
             hit_data["metadata_json"]["ai_analysis"] = ai_result
         except Exception as e:
@@ -150,10 +168,8 @@ def process_potential_leak(self, hit_data, raw_content):
             try:
                 webhook_url = os.getenv("SOAR_WEBHOOK_URL")
                 if webhook_url:
-                    import requests
-
                     stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
-                    requests.post(webhook_url, json=stix_payload, timeout=3)
+                    await _soar_client.post(webhook_url, json=stix_payload)  # P-05: async, no thread blocking
                     logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
                 else:
                     logger.info("[SOAR] SOAR_WEBHOOK_URL not configured, skipping webhook dispatch")
@@ -169,14 +185,22 @@ def process_potential_leak(self, hit_data, raw_content):
 
         return hit_data["severity_score"]
 
-    # Eseguiamo tutto in un singolo evento loop per evitare deadlocks
-    return asyncio.run(_run_async_pipeline())
+    # Creiamo sempre un loop fresco per evitare deadlock con il pool prefork di Celery.
+    # asyncio.run() può riutilizzare loop ereditati dal processo padre causando blocchi.
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_run_async_pipeline())
+    finally:
+        loop.close()
 
 
 async def store_and_index(hit_data, raw_content):
     """
     Salvataggio e indicizzazione protetti da Circuit Breaker (#2).
     """
+    # P-15: encode once, reuse bytes in both MinIO upload and avoid double-encoding
+    content_bytes = raw_content.encode("utf-8")
+
     # 1. MinIO Storage (Raw Content + Screenshot)
     bucket_name = f"tenant-{hit_data['tenant_id']}"
     object_name = f"{hit_data['idempotency_key']}.txt"
@@ -185,23 +209,22 @@ async def store_and_index(hit_data, raw_content):
     async def upload_to_minio():
         if not minio_client:
             raise Exception("MinIO client is disabled")
-        if not minio_client.bucket_exists(bucket_name):
-            minio_client.make_bucket(bucket_name)
-
-        # Upload Text Content
-        content_bytes = raw_content.encode("utf-8")
-        minio_client.put_object(
-            bucket_name, object_name, io.BytesIO(content_bytes), len(content_bytes), content_type="text/plain"
-        )
-
-        # Upload Screenshot if available (W)
         screenshot_path = hit_data.get("screenshot_tmp")
-        if screenshot_path and os.path.exists(screenshot_path):
-            minio_client.fput_object(bucket_name, screenshot_name, screenshot_path)
-            os.remove(screenshot_path)  # Cleanup tmp
-            return f"minio://{bucket_name}/{object_name}", f"minio://{bucket_name}/{screenshot_name}"
 
-        return f"minio://{bucket_name}/{object_name}", None
+        # P-04: MinIO SDK is synchronous blocking — offload to thread pool to free the event loop
+        def _sync_upload():
+            if not minio_client.bucket_exists(bucket_name):
+                minio_client.make_bucket(bucket_name)
+            minio_client.put_object(
+                bucket_name, object_name, io.BytesIO(content_bytes), len(content_bytes), content_type="text/plain"
+            )
+            if screenshot_path and os.path.exists(screenshot_path):
+                minio_client.fput_object(bucket_name, screenshot_name, screenshot_path)
+                os.remove(screenshot_path)  # Cleanup tmp
+                return f"minio://{bucket_name}/{object_name}", f"minio://{bucket_name}/{screenshot_name}"
+            return f"minio://{bucket_name}/{object_name}", None
+
+        return await asyncio.get_event_loop().run_in_executor(None, _sync_upload)
 
     try:
         txt_path, ss_path = await minio_breaker(upload_to_minio)
@@ -235,15 +258,49 @@ async def store_and_index(hit_data, raw_content):
     else:
         logger.warning(f"ES indexing skipped for tenant {hit_data['tenant_id']} (ES disabled)")
 
-    # 3. Correlazione Identità (Command Side)
-    # Proteggiamo anche il DB se necessario, ma qui l'idempotenza (#1) gestisce i retry
+    # 3. Persisti LeakHit nel DB (idempotente: UUID derivato dall'hash del contenuto)
+    # Usiamo i primi 16 byte del SHA-256 per costruire un UUID stabile e deterministico.
+    stable_id = str(uuid.UUID(bytes=bytes.fromhex(hit_data["idempotency_key"][:32])))
+    async with AsyncSessionLocal() as db:
+        existing = await db.execute(select(LeakHit).where(LeakHit.id == stable_id))
+        leak = existing.scalar_one_or_none()
+        if not leak:
+            leak = LeakHit(
+                id=stable_id,
+                tenant_id=hit_data["tenant_id"],
+                source=hit_data["source"],
+                content_snippet=raw_content[:500],
+                metadata_json=hit_data.get("metadata_json", {}),
+                severity_score=hit_data.get("severity_score", 0),
+                status="new",
+                screenshot_path=hit_data.get("screenshot_path"),
+            )
+            db.add(leak)
+            await db.commit()
+        else:
+            # Aggiorna lo score se migliorato dall'AI in questo run
+            if hit_data.get("severity_score", 0) > (leak.severity_score or 0):
+                leak.severity_score = hit_data["severity_score"]
+                leak.metadata_json = hit_data.get("metadata_json", {})
+                await db.commit()
+    hit_data["id"] = stable_id
+
+    # 4. Correlazione Identità (Command Side)
+    # P-08: pass pre-extracted emails from Babel — skip duplicate full-content regex scan.
+    # P-13: pass severity_score and source directly — skip DB re-query in correlate_leak.
+    _babel_emails: set = set(
+        hit_data.get("metadata_json", {}).get("babel", {}).get("extracted_entities", {}).get("emails", [])
+    )
     async with AsyncSessionLocal() as db:
         await IdentityCorrelationService.correlate_leak(
             db,
-            leak_id=hit_data.get("id"),
+            leak_id=hit_data["id"],
             content=raw_content,
             tenant_id=hit_data["tenant_id"],
             screenshot_path=hit_data.get("screenshot_path"),
+            preextracted_emails=_babel_emails or None,
+            severity_score=hit_data.get("severity_score", 0),
+            leak_source=hit_data.get("source", "unknown"),
         )
 
     logger.info(f"[NASO BATTLE-READY] Identity Correlation complete for tenant {hit_data['tenant_id']}")

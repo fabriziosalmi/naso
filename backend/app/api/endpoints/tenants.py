@@ -1,22 +1,14 @@
-import os
-
-from celery import Celery
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared.celery_app import celery_app
 from shared.database import get_db
 from shared.models import Tenant
 from shared.schemas import Tenant as TenantSchema
 from shared.schemas import TenantCreate
 
 from ..deps import check_admin
-
-RABBITMQ_USER = os.getenv("RABBIT_USER", "naso_broker_admin")
-RABBITMQ_PASS = os.getenv("RABBIT_PASSWORD", "change_me_rigorously")
-RABBITMQ_HOST = os.getenv("RABBIT_HOST", "rabbitmq")
-
-celery_app = Celery(broker=f"pyamqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}//")
 
 from shared.utils.audit import AuditLogger
 

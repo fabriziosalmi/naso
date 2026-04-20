@@ -33,3 +33,6 @@ frontend_startup.log
 # Infrastructure
 infrastructure/tor/data/
 .secrets-mock/
+
+# Local analysis files (not for version control)
+ISSUES.md
