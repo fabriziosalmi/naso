@@ -305,3 +305,148 @@ class TestFacadePreservesLegacyShape:
         assert d["title"] == "T"
         assert d["url"] == "u.onion"
         assert d["description"] == "D"
+
+
+# ─── Cache integration ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+class TestCacheIntegration:
+    async def test_second_search_hits_cache_and_skips_http(self):
+        call_count = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            call_count["n"] += 1
+            return httpx.Response(200, html=_page_html([("T", "u.onion", "D")]))
+
+        client = _client_with_handler(
+            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60)
+        )
+        first = await client.search("same-query")
+        assert first.cached is False
+        assert call_count["n"] == 1
+
+        second = await client.search("same-query")
+        assert second.cached is True
+        # No new HTTP call was made.
+        assert call_count["n"] == 1
+        # Content round-trips.
+        assert len(second.results) == 1
+        assert second.results[0].url == "u.onion"
+
+    async def test_different_queries_do_not_share_cache(self):
+        call_count = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            call_count["n"] += 1
+            q = request.url.params.get("q", "")
+            return httpx.Response(200, html=_page_html([(f"T-{q}", f"u-{q}.onion", "d")]))
+
+        client = _client_with_handler(
+            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60)
+        )
+        await client.search("alpha")
+        await client.search("bravo")
+        assert call_count["n"] == 2
+
+    async def test_ttl_zero_disables_cache(self):
+        call_count = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            call_count["n"] += 1
+            return httpx.Response(200, html=_page_html([("T", "u.onion", "D")]))
+
+        client = _client_with_handler(
+            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=0)
+        )
+        await client.search("qq")
+        await client.search("qq")
+        # No caching — both hit HTTP.
+        assert call_count["n"] == 2
+
+    async def test_empty_result_is_not_cached(self):
+        """A search that produced zero results should be retried — otherwise
+        operators chase down an apparent Ahmia outage after it recovers."""
+        call_count = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            call_count["n"] += 1
+            return httpx.Response(200, html=EMPTY_PAGE)
+
+        client = _client_with_handler(
+            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60)
+        )
+        await client.search("qq")
+        await client.search("qq")
+        assert call_count["n"] == 2
+
+
+# ─── NEWNYM rotation integration ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+class TestCircuitRotationIntegration:
+    async def test_rotation_runs_before_search_when_enabled(self):
+        rotated: list[str] = []
+
+        def fake_rotator(host, port, password):
+            rotated.append(host)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, html=_page_html([("T", "u.onion", "D")]))
+
+        cfg = _fast_config(
+            max_pages=1,
+            cache_ttl_seconds=0,
+        )
+        from shared.domain.services.dark_web.config import DarkWebConfig
+        cfg = DarkWebConfig(
+            **{
+                **cfg.__dict__,
+                "rotate_circuit_per_query": True,
+                "tor_control_hosts": ("t1", "t2", "t3"),
+                "tor_control_password": "pw",
+            }
+        )
+
+        transport = httpx.MockTransport(handler)
+        http = httpx.AsyncClient(transport=transport)
+        client = AhmiaClient(
+            config=cfg,
+            http_client=http,
+            token_bucket=TokenBucket(cfg.rate_tokens_per_second, cfg.rate_burst),
+            breaker=CircuitBreaker(
+                failure_threshold=cfg.failure_threshold,
+                recovery_timeout=cfg.recovery_timeout,
+            ),
+            rotator=fake_rotator,
+        )
+        report = await client.search("breach")
+
+        assert sorted(rotated) == ["t1", "t2", "t3"]
+        assert report.rotation_report == {"t1": "ok", "t2": "ok", "t3": "ok"}
+
+    async def test_rotation_noop_when_disabled(self):
+        rotated: list[str] = []
+
+        def fake_rotator(host, port, password):
+            rotated.append(host)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, html=_page_html([("T", "u.onion", "D")]))
+
+        # Default config has rotate_circuit_per_query=False.
+        cfg = _fast_config(max_pages=1, cache_ttl_seconds=0)
+        transport = httpx.MockTransport(handler)
+        http = httpx.AsyncClient(transport=transport)
+        client = AhmiaClient(
+            config=cfg,
+            http_client=http,
+            token_bucket=TokenBucket(cfg.rate_tokens_per_second, cfg.rate_burst),
+            breaker=CircuitBreaker(
+                failure_threshold=cfg.failure_threshold,
+                recovery_timeout=cfg.recovery_timeout,
+            ),
+            rotator=fake_rotator,
+        )
+        report = await client.search("breach")
+        assert rotated == []
+        assert report.rotation_report == {}

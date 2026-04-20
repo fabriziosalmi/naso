@@ -3,23 +3,26 @@ NASO AI Co-Analyst Endpoint
 ────────────────────────────
 Integrates with any OpenAI-compatible local LLM (LM Studio, Ollama, etc.)
 via the AI_ENDPOINT setting. Supports:
-  - SSE streaming chat with tool calling
-  - Server-side tool dispatch (search_identities, get_leaks, dark_web_probe, etc.)
+  - SSE streaming chat with **agentic** tool calling (multi-round ReAct loop)
+  - Server-side tool dispatch via ``shared.domain.services.ai_toolkit``
   - Investigation plan and task CRUD
+
+The tool dispatcher and agent loop live in ``shared.domain.services`` so
+they can be unit-tested directly against a real AsyncSession without
+standing up FastAPI — see ``tests/test_ai_toolkit.py`` and
+``tests/test_ai_agent_loop.py``.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 from collections.abc import AsyncGenerator
-from typing import Any
-import hashlib
-import orjson
-from shared.core.jwt_manager import jwt_blacklist
 
 import httpx
+import orjson
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -28,9 +31,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from shared.config import settings
-from shared.database import get_db
-from shared.domain.services.darkweb_search import DarkWebSearchService
-from shared.models import Identity, InvestigationPlan, InvestigationTask, LeakHit
+from shared.core.jwt_manager import jwt_blacklist
+from shared.database import AsyncSessionLocal, get_db
+from shared.domain.services.ai_agent import DEFAULT_MAX_ITERATIONS, run_agent_loop
+from shared.domain.services.ai_toolkit import NASO_TOOLS
+from shared.models import InvestigationPlan, InvestigationTask
 from shared.utils.audit import AuditLogger
 
 from ..deps import get_current_user
@@ -74,329 +79,53 @@ class PlanUpdate(BaseModel):
     status: str | None = None
 
 
-# ─────────────────────────── Tool definitions ───────────────────────────────
-
-NASO_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_identities",
-            "description": "Search monitored identities in NASO by identifier string or risk level. Use this to find specific people or accounts under investigation.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "identifier": {"type": "string", "description": "Email, username, or name fragment to search for"},
-                    "min_risk": {"type": "integer", "description": "Minimum risk score (0-100) to filter by"},
-                    "type": {"type": "string", "description": "Identity type: person, email, username, phone, domain"},
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_leaks",
-            "description": "Retrieve data breach records from NASO database. Filter by source platform, minimum severity, or status.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "Source platform, e.g. 'github', 'telegram', 'darkweb'",
-                    },
-                    "min_severity": {"type": "integer", "description": "Minimum severity score (0-100)"},
-                    "status": {"type": "string", "description": "Leak status: new, reviewing, resolved"},
-                    "limit": {"type": "integer", "description": "Max results to return (default 10)"},
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "dark_web_probe",
-            "description": "Execute a real-time Dark Web search via Ahmia onion search engine. Use for fresh intelligence gathering.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query to probe the dark web for"},
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_identity_insights",
-            "description": "Get detailed forensic analysis of a specific monitored identity by its ID. Returns full breach history, risk timeline, and merged aliases.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "identity_id": {"type": "string", "description": "The UUID of the identity to analyze"},
-                },
-                "required": ["identity_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_task",
-            "description": "Add a structured investigation task to the current investigation plan. Use this to track findings and next steps.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "content": {"type": "string", "description": "Description of the task or finding"},
-                    "plan_id": {"type": "string", "description": "ID of the investigation plan to add the task to"},
-                },
-                "required": ["content"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "flag_critical",
-            "description": "Update the status of a specific data leak for triage. Use to mark findings as reviewing or resolved.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "leak_id": {"type": "string", "description": "UUID of the leak to update"},
-                    "status": {"type": "string", "description": "New status: reviewing, resolved, escalated"},
-                },
-                "required": ["leak_id", "status"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "toggle_identity_vip",
-            "description": "Protect an identity by marking it as VIP (is_protected = true/false). Use this when an analyst requests to protect an identity.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "identity_id": {"type": "string", "description": "UUID of the identity"},
-                    "is_protected": {"type": "boolean", "description": "True to protect, False to unprotect"},
-                },
-                "required": ["identity_id", "is_protected"],
-            },
-        },
-    },
-]
-
 SYSTEM_PROMPT = """You are NASO Co-Analyst, an expert AI forensic intelligence analyst embedded in the NASO Forensic Engine — a professional threat intelligence and breach investigation platform.
 
 ## Your Mission
 Assist security analysts investigate data breaches, correlate digital identities, interpret threat intelligence signals, and build structured investigation workflows.
 
 ## Available Tools
-You can call the following tools to fetch real-time NASO data:
-- search_identities — find monitored identities by name or risk level
-- get_leaks — retrieve breach records filtered by source, severity, or status
-- dark_web_probe — run a live Dark Web search via Ahmia
-- get_identity_insights — deep analysis of a specific identity (breach history, aliases)
-- create_task — add a task or finding to the active investigation plan
-- flag_critical — triage / update status of a specific breach record
-- toggle_identity_vip — directly set an identity as VIP Protected (is_protected) in the backend.
+
+### Discovery & triage
+- `search_identities` — find monitored identities by name or risk level
+- `get_leaks` — retrieve breach records filtered by source, severity, status
+- `get_identity_insights` — deep analysis of a specific identity (breach history, aliases)
+- `dark_web_probe` — run a live Ahmia search over the Tor-backed dark-web pipeline
+
+### Correlation engine (v2) — prefer these when investigating provenance
+- `get_merge_cluster` — the full merge tree rooted at an identity (master + every transitively-merged slave + recent merge events)
+- `propose_merges_preview` — DRY-RUN the evidence-based auto-merger; returns candidate pairs with confidence scores, NOTHING is merged
+- `get_merge_events_history` — reverse-chronological merges involving an identity; reveals "how did X end up merged under Y?"
+- `find_near_duplicates` — SimHash fingerprint a content blob and return existing leaks within Hamming distance 5
+
+### Ledger integrity
+- `verify_audit_chain` — walks the tenant's hash-chained audit log and reports if it verifies
+
+### Mutations (use sparingly, always after discovery)
+- `create_task` — add a task or finding to the active investigation plan
+- `flag_critical` — update status of a specific breach record (reviewing / resolved / escalated)
+- `toggle_identity_vip` — set an identity as VIP Protected
 
 ## Investigation Protocol
-When starting an investigation:
-1. Clarify the objective with the analyst
-2. Create a structured plan — call create_task for each step
-3. Execute evidence-gathering with search tools
-4. Synthesize findings precisely
-5. Recommend concrete next actions
+1. **Clarify** the objective with the analyst
+2. **Plan** — call `create_task` for each step
+3. **Gather evidence** with the discovery tools; chain calls freely — you can call more tools after seeing results (the loop will keep running until you stop requesting tools, up to a bounded number of iterations)
+4. **Synthesize** findings precisely, citing every non-obvious claim by evidence ID
+5. **Recommend** concrete next actions
 
 ## Communication Style
 - Forensic, precise, and professional
 - Use proper security terminology (TTP, IOC, PII, etc.)
-- Always cite evidence by ID (leak IDs, identity IDs)
+- Always cite evidence by ID (leak IDs, identity IDs, merge event IDs)
 - Flag critical findings clearly: ⚠️ CRITICAL
 - Structure responses with clear sections for readability
 - Be concise — analysts need actionable insights, not walls of text"""
 
 
-# ─────────────────────────── Tool executor ───────────────────────────────────
-
-
-async def execute_tool(
-    tool_name: str, tool_args: dict, db: AsyncSession, current_user, investigation_id: str | None
-) -> dict[str, Any]:
-    """Execute a tool call and return structured result."""
-    try:
-        if tool_name == "search_identities":
-            q = select(Identity)
-            if current_user.role != "admin":
-                q = q.where(Identity.tenant_id == current_user.tenant_id)
-            if tool_args.get("identifier"):
-                q = q.where(Identity.identifier.ilike(f"%{tool_args['identifier']}%"))
-            if tool_args.get("min_risk") is not None:
-                q = q.where(Identity.risk_score >= tool_args["min_risk"])
-            if tool_args.get("type"):
-                q = q.where(Identity.type == tool_args["type"])
-            result = await db.execute(q.order_by(Identity.risk_score.desc()).limit(15))
-            identities = result.scalars().all()
-            return {
-                "tool": "search_identities",
-                "count": len(identities),
-                "data": [
-                    {
-                        "id": i.id,
-                        "identifier": i.identifier,
-                        "type": i.type,
-                        "risk_score": i.risk_score,
-                        "is_protected": i.is_protected,
-                    }
-                    for i in identities
-                ],
-            }
-
-        elif tool_name == "get_leaks":
-            q = select(LeakHit)
-            if current_user.role != "admin":
-                q = q.where(LeakHit.tenant_id == current_user.tenant_id)
-            if tool_args.get("source"):
-                q = q.where(LeakHit.source.ilike(f"%{tool_args['source']}%"))
-            if tool_args.get("min_severity") is not None:
-                q = q.where(LeakHit.severity_score >= tool_args["min_severity"])
-            if tool_args.get("status"):
-                q = q.where(LeakHit.status == tool_args["status"])
-            limit = min(int(tool_args.get("limit", 10)), 25)
-            result = await db.execute(q.order_by(LeakHit.severity_score.desc()).limit(limit))
-            leaks = result.scalars().all()
-            return {
-                "tool": "get_leaks",
-                "count": len(leaks),
-                "data": [
-                    {
-                        "id": l.id,
-                        "source": l.source,
-                        "severity": l.severity_score,
-                        "status": l.status,
-                        "discovered_at": l.discovered_at.isoformat(),
-                        "snippet": (l.content_snippet or "")[:120],
-                    }
-                    for l in leaks
-                ],
-            }
-
-        elif tool_name == "dark_web_probe":
-            query = tool_args.get("query", "")
-            if not query:
-                return {"tool": "dark_web_probe", "error": "Query required"}
-            results = await DarkWebSearchService.search_onion_links(query)
-            await AuditLogger.log(
-                db,
-                user_id=current_user.id,
-                tenant_id=current_user.tenant_id,
-                action="AI_DARK_WEB_PROBE",
-                details={"query": query, "count": len(results)},
-            )
-            await db.commit()
-            return {"tool": "dark_web_probe", "query": query, "count": len(results), "data": results[:10]}
-
-        elif tool_name == "get_identity_insights":
-            identity_id = tool_args.get("identity_id", "")
-            result = await db.execute(
-                select(Identity).options(selectinload(Identity.leaks)).where(Identity.id == identity_id)
-            )
-            identity = result.scalar_one_or_none()
-            if not identity:
-                return {"tool": "get_identity_insights", "error": f"Identity {identity_id} not found"}
-            leaks = sorted(identity.leaks, key=lambda x: x.discovered_at, reverse=True)
-            return {
-                "tool": "get_identity_insights",
-                "identity": {
-                    "id": identity.id,
-                    "identifier": identity.identifier,
-                    "type": identity.type,
-                    "risk_score": identity.risk_score,
-                    "is_protected": identity.is_protected,
-                },
-                "total_leaks": len(leaks),
-                "highest_severity": max([l.severity_score for l in leaks]) if leaks else 0,
-                "recent_leaks": [
-                    {
-                        "id": l.id,
-                        "source": l.source,
-                        "severity": l.severity_score,
-                        "discovered_at": l.discovered_at.isoformat(),
-                    }
-                    for l in leaks[:5]
-                ],
-            }
-
-        elif tool_name == "create_task":
-            plan_id = tool_args.get("plan_id") or investigation_id
-            content = tool_args.get("content", "")
-            if not content:
-                return {"tool": "create_task", "error": "content required"}
-            task = InvestigationTask(plan_id=plan_id, content=content, status="pending", created_by="ai")
-            if plan_id:
-                db.add(task)
-                await db.commit()
-                await db.refresh(task)
-                return {"tool": "create_task", "task_id": task.id, "content": content, "status": "created"}
-            return {"tool": "create_task", "content": content, "status": "no_plan_selected"}
-
-        elif tool_name == "flag_critical":
-            leak_id = tool_args.get("leak_id", "")
-            new_status = tool_args.get("status", "reviewing")
-            result = await db.execute(select(LeakHit).where(LeakHit.id == leak_id))
-            leak = result.scalar_one_or_none()
-            if not leak:
-                return {"tool": "flag_critical", "error": f"Leak {leak_id} not found"}
-            old_status = leak.status
-            leak.status = new_status
-            await AuditLogger.log(
-                db,
-                user_id=current_user.id,
-                tenant_id=current_user.tenant_id,
-                action="AI_FLAG_LEAK",
-                resource_type="leak",
-                resource_id=leak_id,
-                details={"old_status": old_status, "new_status": new_status},
-            )
-            await db.commit()
-            return {"tool": "flag_critical", "leak_id": leak_id, "old_status": old_status, "new_status": new_status}
-
-        elif tool_name == "toggle_identity_vip":
-            identity_id = tool_args.get("identity_id", "")
-            is_protected = tool_args.get("is_protected", True)
-            result = await db.execute(select(Identity).where(Identity.id == identity_id))
-            identity = result.scalar_one_or_none()
-            if not identity:
-                return {"tool": "toggle_identity_vip", "error": f"Identity {identity_id} not found"}
-
-            old_state = identity.is_protected
-            identity.is_protected = is_protected
-            await AuditLogger.log(
-                db,
-                user_id=current_user.id,
-                tenant_id=current_user.tenant_id,
-                action="AI_TOGGLE_VIP",
-                resource_type="identity",
-                resource_id=identity_id,
-                details={"old": old_state, "new": is_protected},
-            )
-            await db.commit()
-            return {
-                "tool": "toggle_identity_vip",
-                "identity_id": identity_id,
-                "is_protected": is_protected,
-                "status": "success",
-            }
-
-        else:
-            return {"error": f"Unknown tool: {tool_name}"}
-
-    except Exception as e:
-        logger.error(f"Tool {tool_name} failed: {e}")
-        return {"tool": tool_name, "error": str(e)}
+# The tool dispatcher lives in shared.domain.services.ai_toolkit so it can
+# be unit-tested against a real AsyncSession without FastAPI / httpx. The
+# agentic ReAct loop is in shared.domain.services.ai_agent. This file now
+# only wires HTTP → loop → SSE.
 
 
 # ─────────────────────────── Chat endpoint ───────────────────────────────────
@@ -427,127 +156,80 @@ async def ai_chat(
 
     async def generate() -> AsyncGenerator[str, None]:
         redis_client = await jwt_blacklist.get_client()
-        # Semantic Caching ID (SHA-256)
+        # Semantic cache key — collapses identical question+history under
+        # one LLM roundtrip. Bypasses both the LLM and the agent loop on
+        # hits, so cached responses return in a single SSE chunk.
         semantic_string = orjson.dumps(
-            [{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)]
+            [{"r": m["role"], "c": m["content"]} for m in messages[1:]]
+            + [str(current_user.tenant_id)]
         )
         cache_key = f"ai_cache:{hashlib.sha256(semantic_string).hexdigest()}"
 
         cached_response = await redis_client.get(cache_key)
         if cached_response:
-            logger.info(f"⚡ [AI SEMANTIC CACHE HIT] Bypassing LM Studio for {cache_key}")
+            logger.info("⚡ [AI SEMANTIC CACHE HIT] bypassing LLM for %s", cache_key)
             yield f"data: {json.dumps({'type': 'text', 'content': cached_response})}\n\n"
             yield "data: [DONE]\n\n"
             return
 
+        # Build an httpx-backed llm_call that the agent loop can iterate
+        # against. The agent loop is stateless w.r.t. HTTP — we give it the
+        # call function and it drives the conversation.
         async with httpx.AsyncClient(timeout=120.0) as client:
-            # ─── Phase 1: Non-streaming call to detect tool calls ───
-            try:
-                resp = await client.post(
-                    f"{settings.AI_ENDPOINT}/chat/completions",
-                    json={
-                        "model": settings.AI_MODEL,
-                        "messages": messages,
-                        "tools": NASO_TOOLS,
-                        "tool_choice": "auto",
-                        "temperature": 0.3,
-                        "stream": False,
-                    },
-                    headers={"Content-Type": "application/json"},
-                )
-                resp.raise_for_status()
-                completion = resp.json()
-            except httpx.ConnectError:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'AI engine offline — check LM Studio at ' + settings.AI_ENDPOINT})}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-                yield "data: [DONE]\n\n"
-                return
 
-            choice = completion["choices"][0]
-            message = choice["message"]
-
-            # ─── Tool calling phase ───
-            if choice.get("finish_reason") == "tool_calls" or message.get("tool_calls"):
-                tool_calls = message.get("tool_calls", [])
-                messages.append(message)
-
-                for tc in tool_calls:
-                    tc_id = tc.get("id", f"call_{tc['function']['name']}")
-                    tc_name = tc["function"]["name"]
-                    try:
-                        tc_args = json.loads(tc["function"].get("arguments", "{}"))
-                    except json.JSONDecodeError:
-                        tc_args = {}
-
-                    # Emit tool_call event to frontend
-                    yield f"data: {json.dumps({'type': 'tool_call', 'id': tc_id, 'name': tc_name, 'args': tc_args})}\n\n"
-
-                    # Execute the tool
-                    tool_result = await execute_tool(tc_name, tc_args, db, current_user, body.investigation_id)
-
-                    # Emit tool_result event
-                    yield f"data: {json.dumps({'type': 'tool_result', 'id': tc_id, 'name': tc_name, 'data': tool_result})}\n\n"
-
-                    # Append to messages for second LLM call
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "name": tc_name,
-                            "content": json.dumps(tool_result),
-                        }
-                    )
-
-                # ─── Phase 2: Streaming call for final response ───
+            async def llm_call(msgs: list[dict]) -> dict:
                 try:
-                    full_response = ""
-                    async with client.stream(
-                        "POST",
+                    resp = await client.post(
                         f"{settings.AI_ENDPOINT}/chat/completions",
                         json={
                             "model": settings.AI_MODEL,
-                            "messages": messages,
+                            "messages": msgs,
+                            "tools": NASO_TOOLS,
+                            "tool_choice": "auto",
                             "temperature": 0.3,
-                            "stream": True,
+                            "stream": False,
                         },
                         headers={"Content-Type": "application/json"},
-                    ) as stream_resp:
-                        async for line in stream_resp.aiter_lines():
-                            if line.startswith("data: "):
-                                data = line[6:].strip()
-                                if data == "[DONE]":
-                                    break
-                                try:
-                                    chunk = json.loads(data)
-                                    delta = chunk["choices"][0].get("delta", {})
-                                    content = delta.get("content")
-                                    if content:
-                                        full_response += content
-                                        yield f"data: {json.dumps({'type': 'text', 'content': content})}\n\n"
-                                except (json.JSONDecodeError, KeyError, IndexError):
-                                    pass
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+                except httpx.ConnectError as exc:
+                    raise RuntimeError(
+                        f"AI engine offline — check LM Studio at {settings.AI_ENDPOINT}"
+                    ) from exc
 
-                    if full_response.strip():
-                        await redis_client.setex(cache_key, 7200, full_response)
-
-                except Exception as e:
-                    yield f"data: {json.dumps({'type': 'error', 'message': f'Stream error: {e}'})}\n\n"
-
-            else:
-                # ─── No tool calls — stream the direct response ───
-                content = message.get("content", "")
-                if content:
-                    # Simulate streaming by yielding in chunks
-                    chunk_size = 4
+            full_text = ""
+            async for event in run_agent_loop(
+                messages,
+                db=db,
+                current_user=current_user,
+                investigation_id=body.investigation_id,
+                llm_call=llm_call,
+                max_iterations=DEFAULT_MAX_ITERATIONS,
+                # Enable parallel tool execution: every tool in a multi-
+                # tool round opens its own session via AsyncSessionLocal.
+                # Audit-chain writes are serialized per-tenant inside
+                # ``write_audit`` so the hash chain stays intact.
+                session_factory=AsyncSessionLocal,
+            ):
+                if event["type"] == "text":
+                    # Chunk the final text so the UI gets a streaming feel
+                    # even though the LLM call itself was non-streaming.
+                    content = event["content"]
+                    full_text += content
                     words = content.split(" ")
+                    chunk_size = 4
                     for i in range(0, len(words), chunk_size):
-                        chunk = " ".join(words[i : i + chunk_size])
+                        piece = " ".join(words[i : i + chunk_size])
                         if i + chunk_size < len(words):
-                            chunk += " "
-                        yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
+                            piece += " "
+                        yield f"data: {json.dumps({'type': 'text', 'content': piece})}\n\n"
+                else:
+                    # tool_call / tool_result / error pass through unchanged.
+                    yield f"data: {json.dumps(event)}\n\n"
+
+            if full_text.strip():
+                await redis_client.setex(cache_key, 7200, full_text)
 
         yield "data: [DONE]\n\n"
 

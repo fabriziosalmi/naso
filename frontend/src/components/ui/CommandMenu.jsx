@@ -3,10 +3,11 @@ import { Command } from 'cmdk';
 import {
   Search, Compass, Book, ShieldAlert, Cpu, UserPlus, LayoutDashboard,
   Fingerprint, Flame, ScrollText, Zap, Download, BellOff, Brain, Workflow,
-  Database, Globe, Code2, MessageSquare
+  Database, Globe, Code2, MessageSquare, GitMerge, ShieldCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useNasoStore from '@/store/useNasoStore';
+import { toast } from '@/store/useToastStore';
 
 export default function CommandMenu() {
   const [open, setOpen] = useState(false);
@@ -19,6 +20,8 @@ export default function CommandMenu() {
   const exportMassiveDossier = useNasoStore(s => s.exportMassiveDossier);
   const triggerIdentityMerging = useNasoStore(s => s.triggerIdentityMerging);
   const fetchAuditLogs = useNasoStore(s => s.fetchAuditLogs);
+  const fetchMergePreview = useNasoStore(s => s.fetchMergePreview);
+  const verifyAuditChain = useNasoStore(s => s.verifyAuditChain);
 
   useEffect(() => {
     const down = (e) => {
@@ -134,6 +137,35 @@ export default function CommandMenu() {
               </Item>
               <Item icon={Workflow} onSelect={() => { close(); triggerIdentityMerging(); }}>
                 Run auto-merge across identities
+              </Item>
+              <Item
+                icon={GitMerge}
+                iconClass="text-[#0A84FF]"
+                keywords={["merge", "preview", "dry-run", "candidates"]}
+                onSelect={async () => {
+                  close();
+                  const preview = await fetchMergePreview();
+                  if (!preview) return;
+                  const n = preview.count ?? 0;
+                  if (n === 0) {
+                    toast.info('Merge preview ready', 'No merge candidates found.');
+                  } else {
+                    toast.info(
+                      'Merge preview ready',
+                      `${n} candidate${n === 1 ? '' : 's'} clear the confidence threshold — review on the Identities page before triggering.`
+                    );
+                  }
+                }}
+              >
+                Preview auto-merge candidates
+              </Item>
+              <Item
+                icon={ShieldCheck}
+                iconClass="text-[#32D74B]"
+                keywords={["audit", "verify", "chain", "integrity", "tamper"]}
+                onSelect={() => { close(); verifyAuditChain(); }}
+              >
+                Verify audit chain integrity
               </Item>
               <Item icon={BellOff} onSelect={() => { close(); acknowledgeAllLeaks(); }}>
                 Acknowledge all critical alerts

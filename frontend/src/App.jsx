@@ -17,6 +17,7 @@ import ProgressBar from './components/ui/ProgressBar';
 import ShortcutsOverlay from './components/ui/ShortcutsOverlay';
 import NotificationsSheet from './components/layout/NotificationsSheet';
 import RouteFallback from './components/ui/RouteFallback';
+import MergeHistorySection from './components/MergeHistorySection';
 import { Input, Select, Label } from './components/ui/Input';
 import useTabAwareness from './lib/useTabAwareness';
 import { toast } from './store/useToastStore';
@@ -342,6 +343,8 @@ export default function App() {
                     </Button>
                   </div>
                 </div>
+
+                <MergeHistorySection identityId={selectedIdentityInsights.identity.id} />
 
                 {selectedIdentityInsights.merged_identities.length > 0 && (
                   <div className="space-y-3">

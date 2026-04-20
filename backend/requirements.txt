@@ -28,6 +28,11 @@ ruff
 slowapi>=0.1.9
 aio-pika>=9.3.0
 orjson>=3.9.15
+# stem: Tor control-port client used by shared.domain.services.dark_web.tor_control
+# to issue NEWNYM circuit-rotation signals. Imported lazily so clearnet-only
+# deployments don't pay the import cost, but required when
+# NASO_DARKWEB_ROTATE_CIRCUIT is on.
+stem>=1.8.2
 bandit
 tenacity==8.2.3
 pytest

@@ -95,20 +95,40 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
 
 @router.get("/recon/darkweb")
 async def darkweb_recon(q: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    """Ahmia dark-web search with full provenance report.
+
+    Response shape:
+        {
+          "results": [ { title, url, description, fetched_at, page,
+                         source, via_tor } ... ],
+          "pages_fetched": int,
+          "duplicates_dropped": int,
+          "elapsed_seconds": float,
+          "cached": bool,             # served from the 5-min result cache
+          "rotation": {host: status}, # NEWNYM broadcast outcome per Tor node
+          "query": str,
+        }
+
+    The frontend renders ``cached`` as a "From cache" badge, the
+    ``rotation`` dict as a tooltip on the Tor pill, and the per-result
+    ``via_tor`` + ``page`` as chips on each card.
     """
-    Esegue una ricerca profonda (AA) nel Dark Web tramite Ahmia API.
-    """
-    results = await DarkWebSearchService.search_onion_links(q)
+    report = await DarkWebSearchService.search_with_report(q)
 
     await AuditLogger.log(
         db,
         user_id=current_user.id,
         tenant_id=current_user.tenant_id,
         action="DARK_WEB_RECON",
-        details={"query": q, "results_count": len(results)},
+        details={
+            "query": q,
+            "results_count": len(report.results),
+            "cached": report.cached,
+            "pages_fetched": report.pages_fetched,
+        },
     )
     await db.commit()
-    return results
+    return report.as_dict()
 
 
 @router.get("/recon/shodan")

@@ -62,13 +62,34 @@ class DarkWebConfig:
     # the local Tor cluster. None = clearnet (default for tests).
     tor_proxy_url: str | None = None
 
-    # Tor ControlPort for NEWNYM signal (circuit rotation). None disables.
-    tor_control_host: str | None = None
+    # Tor ControlPort for NEWNYM signal (circuit rotation). Empty list
+    # disables rotation; otherwise every host receives the signal in
+    # parallel before a probe. HAProxy balances SOCKS round-robin across
+    # the cluster, so rotating only one instance is a no-op whenever the
+    # next request lands on an un-rotated peer — broadcast is the only
+    # correct policy.
+    tor_control_hosts: tuple[str, ...] = ()
     tor_control_port: int = 9051
 
+    # ``HashedControlPassword`` plaintext counterpart; set to ``None`` if
+    # your torrc has no password (not recommended outside dev).
+    tor_control_password: str | None = None
+
     # Issue a NEWNYM before each top-level query when True. Requires
-    # ``tor_control_host`` to be set.
+    # ``tor_control_hosts`` to be non-empty.
     rotate_circuit_per_query: bool = False
+
+    # ─── Result cache ────────────────────────────────────────────────────
+    # Seconds a successful search report lives in cache before it expires.
+    # 0 disables caching entirely. Five minutes is a good default: long
+    # enough to save operators from repeated typo corrections, short
+    # enough that fresh intel wins over stale.
+    cache_ttl_seconds: int = 300
+
+    # Hard ceiling on the number of distinct queries held in memory.
+    # Prevents a pathological workload (e.g. a scripted fuzzer) from
+    # chewing unbounded heap.
+    cache_max_size: int = 1024
 
     # ─── Query sanitization ──────────────────────────────────────────────
     # Queries longer than this are rejected up front — Ahmia truncates
@@ -121,6 +142,10 @@ class DarkWebConfig:
 
         max_pages = min(_int("NASO_DARKWEB_MAX_PAGES", cls.max_pages), 20)
 
+        # Comma-separated list: ``naso-tor-1,naso-tor-2,naso-tor-3,...``
+        raw_hosts = os.getenv("NASO_DARKWEB_TOR_CONTROL_HOSTS", "")
+        hosts_tuple = tuple(h.strip() for h in raw_hosts.split(",") if h.strip())
+
         return cls(
             ahmia_base_url=os.getenv("NASO_DARKWEB_AHMIA_URL", cls.ahmia_base_url),
             max_pages=max_pages,
@@ -134,11 +159,14 @@ class DarkWebConfig:
             rate_tokens_per_second=_float("NASO_DARKWEB_RATE_TPS", cls.rate_tokens_per_second),
             rate_burst=_int("NASO_DARKWEB_RATE_BURST", cls.rate_burst),
             tor_proxy_url=os.getenv("NASO_DARKWEB_TOR_PROXY") or None,
-            tor_control_host=os.getenv("NASO_DARKWEB_TOR_CONTROL_HOST") or None,
+            tor_control_hosts=hosts_tuple,
             tor_control_port=_int("NASO_DARKWEB_TOR_CONTROL_PORT", cls.tor_control_port),
+            tor_control_password=os.getenv("NASO_DARKWEB_TOR_CONTROL_PASSWORD") or None,
             rotate_circuit_per_query=_bool(
                 "NASO_DARKWEB_ROTATE_CIRCUIT", cls.rotate_circuit_per_query
             ),
+            cache_ttl_seconds=_int("NASO_DARKWEB_CACHE_TTL", cls.cache_ttl_seconds),
+            cache_max_size=_int("NASO_DARKWEB_CACHE_MAX_SIZE", cls.cache_max_size),
             max_query_length=_int("NASO_DARKWEB_MAX_QUERY_LEN", cls.max_query_length),
             user_agent=os.getenv("NASO_DARKWEB_USER_AGENT", cls.user_agent),
         )

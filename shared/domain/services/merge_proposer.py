@@ -39,10 +39,10 @@ from shared.models import Identity, identity_leaks
 # ``MIN_CONFIDENCE = 0.5`` in entity_resolution, a single shared leak
 # (aggregate = 0.7) already clears the gate — which matches the operator
 # intuition that one unambiguous co-occurrence is strong evidence.
-_SHARED_LEAK_STRENGTH = 0.7
+SHARED_LEAK_STRENGTH = 0.7
 
 
-async def _gather_shared_leak_pairs(
+async def gather_shared_leak_pairs(
     db: AsyncSession, tenant_id: str
 ) -> dict[tuple[str, str], list[str]]:
     """Return a ``{(id_a, id_b): [shared_leak_id, ...]}`` map for every
@@ -83,7 +83,7 @@ async def _gather_shared_leak_pairs(
     return pairs
 
 
-def _choose_master(a: Identity, b: Identity) -> tuple[Identity, Identity]:
+def choose_master(a: Identity, b: Identity) -> tuple[Identity, Identity]:
     """Return ``(master, slave)``. Higher risk wins; tie-break by earliest
     ``first_seen``; last resort: lexicographic id (stable, deterministic).
     """
@@ -113,7 +113,7 @@ async def propose_and_merge(
     *promote* by default) or the confidence gate are reported but not
     merged.
     """
-    pair_to_leaks = await _gather_shared_leak_pairs(db, tenant_id)
+    pair_to_leaks = await gather_shared_leak_pairs(db, tenant_id)
     if not pair_to_leaks:
         return {"merged_count": 0, "skipped_weak": 0, "skipped_invariant": 0, "pairs": []}
 
@@ -131,9 +131,9 @@ async def propose_and_merge(
         if a.master_identity_id is not None or b.master_identity_id is not None:
             continue
 
-        master, slave = _choose_master(a, b)
+        master, slave = choose_master(a, b)
         evidence = [
-            {"type": "shared_leak", "leak_id": lid, "strength": _SHARED_LEAK_STRENGTH}
+            {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
             for lid in shared_leaks
         ]
         try:
@@ -173,4 +173,9 @@ async def propose_and_merge(
     }
 
 
-__all__ = ["propose_and_merge"]
+__all__ = [
+    "propose_and_merge",
+    "gather_shared_leak_pairs",
+    "choose_master",
+    "SHARED_LEAK_STRENGTH",
+]

@@ -26,6 +26,7 @@ Public surface:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from dataclasses import dataclass
@@ -37,6 +38,36 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import AuditLog
+
+
+# ─── In-process per-tenant serialization ─────────────────────────────────────
+# The Postgres advisory lock covers the production deployment, but under
+# SQLite (used by the test suite and by single-worker dev setups) the hook
+# is a no-op. Two coroutines writing audit entries for the same tenant
+# concurrently could both read the same chain head, producing a forked
+# chain. This guards the read-then-write sequence with a per-tenant
+# ``asyncio.Lock`` so the invariant holds regardless of backend.
+#
+# The map is lazy — lock instances are only created for tenants that
+# actually see audit traffic, and they live for the process lifetime (a
+# few hundred bytes each, bounded by the tenant count).
+_TENANT_LOCKS: dict[str, asyncio.Lock] = {}
+_TENANT_LOCKS_GUARD = asyncio.Lock()
+
+
+async def _tenant_lock(tenant_id: str | None) -> asyncio.Lock:
+    """Return the ``asyncio.Lock`` scoped to *tenant_id*, creating it on
+    first use. Null tenants get a single shared ``_system`` lock — system
+    audit rows (boot events, cross-tenant admin actions) are rare enough
+    that serializing them all together is fine.
+    """
+    key = tenant_id or "_system"
+    async with _TENANT_LOCKS_GUARD:
+        lock = _TENANT_LOCKS.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _TENANT_LOCKS[key] = lock
+    return lock
 
 
 # ─── Result object ───────────────────────────────────────────────────────────
@@ -138,29 +169,48 @@ async def write_audit(
         queries in the same session. Default ``False`` commits, which is
         what one-shot audit writes want.
     """
-    await _acquire_tenant_lock(db, tenant_id)
+    # Serialize the read-then-write sequence against any other coroutine
+    # appending to the same tenant's chain. Under SQLite this is the only
+    # mechanism preventing a fork; under Postgres the advisory_xact_lock
+    # below handles cross-process serialization as well, so having both
+    # is belt-and-braces.
+    lock = await _tenant_lock(tenant_id)
+    async with lock:
+        await _acquire_tenant_lock(db, tenant_id)
 
-    # Fetch the current chain head for this tenant. We order by
-    # ``(timestamp DESC, id DESC)`` so concurrent writes with the same
-    # timestamp still pick a deterministic tail; ``verify_chain`` walks in
-    # the reverse of this order so the two agree.
-    head_stmt = (
-        select(AuditLog.self_hash)
-        .where(AuditLog.tenant_id == tenant_id)
-        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
-        .limit(1)
-    )
-    prev_hash = (await db.execute(head_stmt)).scalar_one_or_none()
+        # Fetch the current chain head for this tenant. We order by
+        # ``(timestamp DESC, id DESC)`` so concurrent writes with the
+        # same timestamp still pick a deterministic tail; ``verify_chain``
+        # walks in the reverse of this order so the two agree.
+        head_stmt = (
+            select(AuditLog.self_hash)
+            .where(AuditLog.tenant_id == tenant_id)
+            .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+            .limit(1)
+        )
+        prev_hash = (await db.execute(head_stmt)).scalar_one_or_none()
 
-    # Naive UTC matches the convention used in identity_upsert /
-    # entity_resolution so the same value round-trips across SQLite and
-    # Postgres without triggering the aware/naive comparison trap.
-    timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
-    row_id = str(uuid.uuid4())
+        # Naive UTC matches the convention used in identity_upsert /
+        # entity_resolution so the same value round-trips across SQLite
+        # and Postgres without triggering the aware/naive comparison trap.
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+        row_id = str(uuid.uuid4())
 
-    self_hash = _sha256_hex(
-        _canonical_payload(
-            prev_hash=prev_hash,
+        self_hash = _sha256_hex(
+            _canonical_payload(
+                prev_hash=prev_hash,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action=action,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                details=details,
+                timestamp=timestamp,
+            )
+        )
+
+        row = AuditLog(
+            id=row_id,
             tenant_id=tenant_id,
             user_id=user_id,
             action=action,
@@ -168,29 +218,17 @@ async def write_audit(
             resource_id=resource_id,
             details=details,
             timestamp=timestamp,
+            ip_address=ip_address,
+            prev_hash=prev_hash,
+            self_hash=self_hash,
         )
-    )
-
-    row = AuditLog(
-        id=row_id,
-        tenant_id=tenant_id,
-        user_id=user_id,
-        action=action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        details=details,
-        timestamp=timestamp,
-        ip_address=ip_address,
-        prev_hash=prev_hash,
-        self_hash=self_hash,
-    )
-    db.add(row)
-    if flush_only:
-        await db.flush()
-    else:
-        await db.commit()
-        await db.refresh(row)
-    return row
+        db.add(row)
+        if flush_only:
+            await db.flush()
+        else:
+            await db.commit()
+            await db.refresh(row)
+        return row
 
 
 async def verify_chain(

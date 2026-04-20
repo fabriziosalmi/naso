@@ -40,9 +40,11 @@ from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 
+from .cache import AhmiaCache, InMemoryTTLCache
 from .circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from .config import DEFAULT_CONFIG, DarkWebConfig
 from .rate_limiter import TokenBucket
+from .tor_control import HostRotator, rotate_circuits
 
 logger = logging.getLogger("naso-darkweb-ahmia")
 
@@ -90,6 +92,13 @@ class AhmiaSearchReport:
     pages_fetched: int = 0
     duplicates_dropped: int = 0
     elapsed_seconds: float = 0.0
+    # True when this report came from the result cache rather than a fresh
+    # fetch. The per-result ``fetched_at`` still reflects the original
+    # fetch time, so the UI can show "pulled 2 minutes ago from cache".
+    cached: bool = False
+    # Summary of the NEWNYM broadcast that preceded this search, if any.
+    # ``{host: "ok" | "error: ..."}``; empty dict when rotation is disabled.
+    rotation_report: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {
@@ -98,6 +107,8 @@ class AhmiaSearchReport:
             "pages_fetched": self.pages_fetched,
             "duplicates_dropped": self.duplicates_dropped,
             "elapsed_seconds": round(self.elapsed_seconds, 3),
+            "cached": self.cached,
+            "rotation": self.rotation_report,
         }
 
 
@@ -149,6 +160,8 @@ class AhmiaClient:
         http_client: Optional[httpx.AsyncClient] = None,
         token_bucket: Optional[TokenBucket] = None,
         breaker: Optional[CircuitBreaker] = None,
+        cache: Optional[AhmiaCache] = None,
+        rotator: Optional[HostRotator] = None,
     ) -> None:
         self._config = config or DEFAULT_CONFIG
         self._http = http_client or self._build_default_client(self._config)
@@ -161,6 +174,17 @@ class AhmiaClient:
             recovery_timeout=self._config.recovery_timeout,
         )
         self._via_tor = bool(self._config.tor_proxy_url)
+        # Cache is opt-out: build the default in-memory one if the caller
+        # did not inject a replacement and TTL > 0. Passing ``cache=None``
+        # at both construction and config TTL=0 disables caching entirely.
+        if cache is not None:
+            self._cache = cache
+        elif self._config.cache_ttl_seconds > 0:
+            self._cache = InMemoryTTLCache(max_size=self._config.cache_max_size)
+        else:
+            self._cache = None
+        # Injected host rotator (for tests); production falls back to stem.
+        self._rotator = rotator
 
     @staticmethod
     def _build_default_client(config: DarkWebConfig) -> httpx.AsyncClient:
@@ -204,6 +228,18 @@ class AhmiaClient:
 
         Each page fetch goes through rate limit → circuit breaker → retry
         loop. Pages stop early if ``stop_on_all_duplicates`` triggers.
+
+        Cache: if an unexpired entry exists for this sanitized query, it is
+        returned immediately with ``report.cached = True`` — no HTTP, no
+        rate-limit debit, no circuit rotation. The per-result
+        ``fetched_at`` still reflects the original fetch time so the UI
+        can tell the difference.
+
+        NEWNYM: when ``rotate_circuit_per_query=True`` and
+        ``tor_control_hosts`` is non-empty, the client broadcasts the
+        signal to every Tor instance in the cluster before the first page
+        fetch. Failures are recorded in ``report.rotation_report`` but do
+        not abort the search.
         """
         query = sanitize_query(
             raw_query,
@@ -211,8 +247,38 @@ class AhmiaClient:
             max_len=self._config.max_query_length,
         )
 
+        # ── Cache hit — short-circuit everything ─────────────────────────
+        if self._cache is not None:
+            cached = await self._cache.get(query)
+            if cached is not None:
+                # Return a shallow copy so the caller mutating the report
+                # can't poison the cached object for future hits.
+                cached_report = AhmiaSearchReport(
+                    query=cached.query,
+                    results=list(cached.results),
+                    pages_fetched=cached.pages_fetched,
+                    duplicates_dropped=cached.duplicates_dropped,
+                    elapsed_seconds=cached.elapsed_seconds,
+                    cached=True,
+                    rotation_report=dict(cached.rotation_report),
+                )
+                return cached_report
+
+        # ── Optional NEWNYM broadcast before the first fetch ─────────────
+        rotation_report: dict = {}
+        if (
+            self._config.rotate_circuit_per_query
+            and self._config.tor_control_hosts
+        ):
+            rotation_report = await rotate_circuits(
+                self._config.tor_control_hosts,
+                port=self._config.tor_control_port,
+                password=self._config.tor_control_password,
+                rotator=self._rotator,
+            )
+
         started = asyncio.get_event_loop().time()
-        report = AhmiaSearchReport(query=query)
+        report = AhmiaSearchReport(query=query, rotation_report=rotation_report)
         seen_urls: set[str] = set()
 
         for page in range(1, self._config.max_pages + 1):
@@ -238,6 +304,16 @@ class AhmiaClient:
                 break
 
         report.elapsed_seconds = asyncio.get_event_loop().time() - started
+
+        # Populate the cache on success. We deliberately cache *partial*
+        # reports too (e.g. 2 pages out of 5 because Ahmia 500'd on page 3)
+        # — the analyst wanting a do-over can force-refresh; the default
+        # is to avoid re-hammering a degraded service.
+        if self._cache is not None and report.results:
+            await self._cache.set(
+                query, report, ttl_seconds=self._config.cache_ttl_seconds
+            )
+
         return report
 
     # ─── Internals ───────────────────────────────────────────────────────

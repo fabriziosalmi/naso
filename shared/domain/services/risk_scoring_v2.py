@@ -57,7 +57,7 @@ def _score_from_severities(severities: list[int]) -> int:
 
 # ─── Merge cluster traversal ─────────────────────────────────────────────────
 
-async def _gather_merged_cluster(db: AsyncSession, root_id: str) -> set[str]:
+async def gather_merged_cluster(db: AsyncSession, root_id: str) -> set[str]:
     """Return ``{root_id}`` ∪ every descendant linked via
     ``Identity.master_identity_id``.
 
@@ -93,7 +93,7 @@ async def compute_risk_for_identity(db: AsyncSession, identity_id: str) -> int:
     Returns an integer in [0, 100]. Does NOT read or write
     ``risk_score`` / ``risk_score_dirty`` on any row.
     """
-    cluster = await _gather_merged_cluster(db, identity_id)
+    cluster = await gather_merged_cluster(db, identity_id)
     if not cluster:
         return 0
 
@@ -172,6 +172,7 @@ async def recompute_dirty(db: AsyncSession, tenant_id: str, *, limit: int | None
 
 __all__ = [
     "compute_risk_for_identity",
+    "gather_merged_cluster",
     "mark_dirty",
     "recompute_dirty",
 ]

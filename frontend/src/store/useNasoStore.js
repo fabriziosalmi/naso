@@ -356,22 +356,117 @@ const useNasoStore = create((set, get) => ({
     }
   },
 
-  // Dark Web Search (AA)
+  // Dark Web Search (AA) — now receives the full report shape:
+  // { results, pages_fetched, duplicates_dropped, elapsed_seconds, cached, rotation, query }
+  darkWebReport: null,
   searchDarkWeb: async (query) => {
     const { isAuthenticated } = get();
     if (!isAuthenticated) return set({ error: 'Authentication required' });
     if (!query || !query.trim()) return set({ error: 'Enter a search query before launching probe' });
-    set({ isLoading: true, error: null, darkWebResults: [] });
+    set({ isLoading: true, error: null, darkWebResults: [], darkWebReport: null });
     try {
       const response = await axios.get('/leaks/recon/darkweb', { params: { q: query.trim() } });
-      set({ darkWebResults: response.data, isLoading: false });
+      const report = response.data ?? {};
+      const results = Array.isArray(report) ? report : report.results ?? [];
+      set({
+        darkWebResults: results,
+        darkWebReport: Array.isArray(report) ? null : report,
+        isLoading: false,
+      });
       get().fetchAuditLogs();
-      const n = response.data?.length ?? 0;
-      if (n > 0) toast.success('Probe complete', `${n} artifact${n === 1 ? '' : 's'} intercepted.`);
-      else toast.info('Probe complete', 'No dark-web matches for this signature.');
+      const n = results.length;
+      if (n > 0) {
+        const suffix = report.cached ? ' (from cache)' : '';
+        toast.success('Probe complete', `${n} artifact${n === 1 ? '' : 's'} intercepted${suffix}.`);
+      } else {
+        toast.info('Probe complete', 'No dark-web matches for this signature.');
+      }
     } catch (err) {
       set({ error: 'Dark Web probe failed — check backend connectivity', isLoading: false });
       toast.error('Probe failed', 'Tor circuit or Ahmia gateway unreachable.');
+    }
+  },
+
+  // ── Correlation engine v2: merges + audit verify ──────────────────────
+  mergeEvents: [],
+  mergePreview: null,
+  identityMergeHistory: {},  // map: identity_id → list of events
+
+  fetchRecentMerges: async (limit = 50) => {
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
+    try {
+      const res = await axios.get('/identities/merges', { params: { limit } });
+      set({ mergeEvents: res.data });
+      return res.data;
+    } catch (err) {
+      set({ error: 'Failed to load merge history' });
+    }
+  },
+
+  fetchIdentityMergeHistory: async (identityId) => {
+    const { isAuthenticated } = get();
+    if (!isAuthenticated || !identityId) return;
+    try {
+      const res = await axios.get(`/identities/${identityId}/merges`);
+      set(state => ({
+        identityMergeHistory: { ...state.identityMergeHistory, [identityId]: res.data },
+      }));
+      return res.data;
+    } catch (err) {
+      set({ error: 'Failed to load identity merge history' });
+    }
+  },
+
+  fetchMergePreview: async () => {
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
+    set({ isLoading: true });
+    try {
+      const res = await axios.get('/identities/merge/preview');
+      set({ mergePreview: res.data, isLoading: false });
+      return res.data;
+    } catch (err) {
+      set({ error: 'Failed to load merge preview', isLoading: false });
+      toast.error('Preview failed', 'Could not compute merge candidates.');
+    }
+  },
+
+  reverseMerge: async (eventId, reason) => {
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
+    if (!reason || !reason.trim()) return toast.error('Reason required', 'Provide a reason for the reversal.');
+    try {
+      await axios.post(`/identities/merges/${eventId}/reverse`, { reason: reason.trim() });
+      toast.success('Merge reversed', 'Slave identity restored to independent.');
+      // Refresh any merge-history view we might be showing.
+      get().fetchRecentMerges();
+      const current = get().selectedIdentityInsights?.identity?.id;
+      if (current) {
+        get().fetchIdentityInsights(current);
+        get().fetchIdentityMergeHistory(current);
+      }
+      get().fetchIdentities();
+    } catch (err) {
+      const msg = err?.response?.data?.detail ?? 'Reverse failed';
+      toast.error('Reverse failed', msg);
+    }
+  },
+
+  verifyAuditChain: async () => {
+    const { isAuthenticated } = get();
+    if (!isAuthenticated) return;
+    try {
+      const res = await axios.get('/system/audit/verify');
+      const { ok, broken_at, reason, total } = res.data;
+      if (ok) {
+        toast.success('Audit chain intact', `${total} entries verified · hash chain valid.`);
+      } else {
+        toast.error('Audit chain broken', `Row ${broken_at}: ${reason ?? 'integrity mismatch'}`);
+      }
+      return res.data;
+    } catch (err) {
+      toast.error('Verification failed', 'Could not reach audit verification endpoint.');
     }
   },
 

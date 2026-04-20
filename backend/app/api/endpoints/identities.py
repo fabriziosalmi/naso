@@ -1,15 +1,25 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import bindparam as sa_bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from shared.database import get_db
+from shared.domain.services.entity_resolution import (
+    aggregate_confidence,
+    reverse_merge,
+)
 from shared.domain.services.identity_upsert import upsert_identity
-from shared.domain.services.merge_proposer import propose_and_merge
+from shared.domain.services.merge_proposer import (
+    SHARED_LEAK_STRENGTH,
+    choose_master,
+    gather_shared_leak_pairs,
+    propose_and_merge,
+)
 from shared.domain.services.risk_scoring_v2 import mark_dirty
-from shared.models import Identity, LeakHit
+from shared.models import Identity, LeakHit, MergeEvent
 from shared.schemas import Identity as IdentitySchema
 from shared.schemas import IdentityInsights, IdentityUpdate
 from shared.utils.audit import AuditLogger
@@ -17,6 +27,10 @@ from shared.utils.audit import AuditLogger
 from ..deps import get_current_user
 
 router = APIRouter()
+
+
+class ReverseMergeBody(BaseModel):
+    reason: str
 
 # ── BUG FIX: /graph MUST be declared before /{identity_id} routes ──
 # FastAPI routes are matched in declaration order. A literal path like /graph
@@ -114,6 +128,220 @@ async def get_identity_graph(
         # the cap is reached without an extra round trip to COUNT(*).
         "truncated": len(identities) == limit,
     }
+
+
+@router.get("/merges")
+async def list_recent_merges(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Most recent merge events for the operator's tenant.
+
+    Analysts use this to answer "what auto-merged in the last hour?" or
+    to spot an unexpected merge they want to reverse. Non-admins see only
+    their own tenant; the cap is hard-bounded server-side.
+    """
+    limit = max(1, min(int(limit), 200))
+    stmt = select(MergeEvent)
+    if current_user.role != "admin":
+        stmt = stmt.where(MergeEvent.tenant_id == current_user.tenant_id)
+    stmt = stmt.order_by(MergeEvent.performed_at.desc()).limit(limit)
+    events = (await db.execute(stmt)).scalars().all()
+
+    # Fetch identifier strings for the master/slave pairs in one batch so
+    # the UI can show "alice@example.com ← bob@example.com" without N+1.
+    all_ids = {e.master_id for e in events} | {e.slave_id for e in events}
+    if all_ids:
+        rows = (
+            await db.execute(select(Identity).where(Identity.id.in_(all_ids)))
+        ).scalars().all()
+        ident_map = {i.id: i for i in rows}
+    else:
+        ident_map = {}
+
+    def _brief(ident: Identity | None):
+        if ident is None:
+            return None
+        return {
+            "id": ident.id,
+            "identifier": ident.identifier,
+            "type": ident.type,
+            "is_protected": ident.is_protected,
+        }
+
+    return [
+        {
+            "id": e.id,
+            "master": _brief(ident_map.get(e.master_id)),
+            "slave": _brief(ident_map.get(e.slave_id)),
+            "confidence": round(e.confidence, 3),
+            "performed_at": e.performed_at.isoformat() if e.performed_at else None,
+            "reversed_at": e.reversed_at.isoformat() if e.reversed_at else None,
+            "reverse_reason": e.reverse_reason,
+            "evidence_count": len(e.evidence or []),
+            "is_active": e.reversed_at is None,
+        }
+        for e in events
+    ]
+
+
+@router.get("/merge/preview")
+async def preview_auto_merges(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Dry-run the evidence-based auto-merger.
+
+    Returns the same kind of pair report that ``POST /identities/merge``
+    would produce, but **does not commit** any merge. Lets analysts review
+    candidates and their confidence scores before triggering.
+    """
+    pairs = await gather_shared_leak_pairs(db, current_user.tenant_id)
+    preview: list[dict] = []
+    for (id_a, id_b), shared_leaks in list(pairs.items())[:50]:
+        a = await db.get(Identity, id_a)
+        b = await db.get(Identity, id_b)
+        if a is None or b is None:
+            continue
+        if a.master_identity_id is not None or b.master_identity_id is not None:
+            continue
+        master, slave = choose_master(a, b)
+        evidence = [
+            {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
+            for lid in shared_leaks
+        ]
+        conf = aggregate_confidence(evidence)
+        preview.append(
+            {
+                "master": {
+                    "id": master.id,
+                    "identifier": master.identifier,
+                    "risk_score": master.risk_score,
+                    "is_protected": master.is_protected,
+                },
+                "slave": {
+                    "id": slave.id,
+                    "identifier": slave.identifier,
+                    "risk_score": slave.risk_score,
+                    "is_protected": slave.is_protected,
+                },
+                "confidence": round(conf, 3),
+                "shared_leak_count": len(shared_leaks),
+            }
+        )
+    preview.sort(key=lambda p: p["confidence"], reverse=True)
+    return {"count": len(preview), "pairs": preview[:20]}
+
+
+@router.post("/merges/{event_id}/reverse")
+async def reverse_merge_event(
+    event_id: str,
+    body: ReverseMergeBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Soft-reverse a merge event.
+
+    Marks ``MergeEvent.reversed_at`` so the ledger stays append-only,
+    restores the slave's independence (``master_identity_id = NULL``) and
+    flips both master and slave to ``risk_score_dirty`` so the next
+    recompute tick refreshes their scores.
+
+    Fails with 403 cross-tenant, 404 if the event is not found, 409 if
+    the event is already reversed (caller can re-check history).
+    """
+    event = (
+        await db.execute(select(MergeEvent).where(MergeEvent.id == event_id))
+    ).scalar_one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Merge event not found")
+    if current_user.role != "admin" and event.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if event.reversed_at is not None:
+        raise HTTPException(status_code=409, detail="Merge event already reversed")
+
+    await reverse_merge(db, event, reason=body.reason, reversed_by=current_user.id)
+
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=event.tenant_id,
+        action="REVERSE_MERGE",
+        resource_type="merge_event",
+        resource_id=event_id,
+        details={
+            "reason": body.reason,
+            "master_id": event.master_id,
+            "slave_id": event.slave_id,
+        },
+    )
+    await db.commit()
+    return {"status": "reversed", "event_id": event_id}
+
+
+@router.get("/{identity_id}/merges")
+async def identity_merge_history(
+    identity_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """All merge events (active + reversed) involving a specific identity,
+    either as master or slave. Used by the Identity Insights modal's
+    'Merge history' tab.
+    """
+    # Tenant gate first — protect against existence-probing across tenants.
+    ident = (
+        await db.execute(select(Identity).where(Identity.id == identity_id))
+    ).scalar_one_or_none()
+    if ident is None:
+        raise HTTPException(status_code=404, detail="Identity not found")
+    if current_user.role != "admin" and ident.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Identity not found")
+
+    stmt = (
+        select(MergeEvent)
+        .where(
+            MergeEvent.tenant_id == ident.tenant_id,
+            (MergeEvent.master_id == identity_id)
+            | (MergeEvent.slave_id == identity_id),
+        )
+        .order_by(MergeEvent.performed_at.desc())
+        .limit(100)
+    )
+    events = (await db.execute(stmt)).scalars().all()
+
+    counterpart_ids = {
+        (e.slave_id if e.master_id == identity_id else e.master_id) for e in events
+    }
+    counterpart_rows = (
+        await db.execute(select(Identity).where(Identity.id.in_(counterpart_ids)))
+    ).scalars().all() if counterpart_ids else []
+    counter_map = {i.id: i for i in counterpart_rows}
+
+    return [
+        {
+            "id": e.id,
+            "role": "master" if e.master_id == identity_id else "slave",
+            "counterpart": (
+                {
+                    "id": c.id,
+                    "identifier": c.identifier,
+                    "type": c.type,
+                    "is_protected": c.is_protected,
+                }
+                if (c := counter_map.get(e.slave_id if e.master_id == identity_id else e.master_id))
+                else None
+            ),
+            "confidence": round(e.confidence, 3),
+            "performed_at": e.performed_at.isoformat() if e.performed_at else None,
+            "reversed_at": e.reversed_at.isoformat() if e.reversed_at else None,
+            "reverse_reason": e.reverse_reason,
+            "evidence_count": len(e.evidence or []),
+            "is_active": e.reversed_at is None,
+        }
+        for e in events
+    ]
 
 
 @router.get("/{identity_id}/insights", response_model=IdentityInsights)

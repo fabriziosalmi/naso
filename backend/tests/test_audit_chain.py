@@ -134,3 +134,51 @@ class TestVerification:
 
         result = await verify_chain(corr_db, tenant_id=tenant.id)
         assert result.ok is False
+
+
+class TestConcurrentWrites:
+    """Writes happening in parallel sessions must not fork the chain.
+
+    Guarded by the per-tenant ``asyncio.Lock`` in ``audit_chain`` — without
+    it, two coroutines could read the same ``prev_hash`` before either
+    committed, resulting in two rows sharing the same link target and an
+    irrecoverable chain break.
+    """
+
+    async def test_parallel_writes_keep_chain_intact(
+        self, corr_session_factory, tenant, user
+    ):
+        import asyncio as _asyncio
+
+        # One write per task, 8 tasks, each on its own session to simulate
+        # the parallel-tool execution path the agent loop will use.
+        async def _one(idx: int):
+            async with corr_session_factory() as session:
+                await write_audit(
+                    session,
+                    tenant_id=tenant.id,
+                    user_id=user.id,
+                    action=f"PAR_{idx}",
+                    resource_type="r",
+                    resource_id=str(idx),
+                    details={"i": idx},
+                )
+
+        await _asyncio.gather(*(_one(i) for i in range(8)))
+
+        # Verify via a fresh session so we read committed rows only.
+        async with corr_session_factory() as verify_session:
+            result = await verify_chain(verify_session, tenant_id=tenant.id)
+            assert result.ok is True, (
+                f"chain broke under concurrent writes: reason={result.reason}, "
+                f"at={result.broken_at}"
+            )
+
+            from shared.models import AuditLog
+            from sqlalchemy import select as _select
+            rows = (
+                await verify_session.execute(
+                    _select(AuditLog).where(AuditLog.tenant_id == tenant.id)
+                )
+            ).scalars().all()
+            assert len(rows) == 8

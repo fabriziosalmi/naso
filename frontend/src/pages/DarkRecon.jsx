@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Radar, ShieldAlert, ExternalLink, Loader2, Copy, Check, Globe } from 'lucide-react';
+import { Radar, ShieldAlert, ExternalLink, Loader2, Copy, Check, Globe, Database, Zap } from 'lucide-react';
 import useNasoStore from '../store/useNasoStore';
 import { toast } from '../store/useToastStore';
 import { Input } from '../components/ui/Input';
@@ -74,7 +74,7 @@ function ResultCard({ result }) {
 }
 
 export default function DarkRecon({ reconQuery, setReconQuery }) {
-  const { darkWebResults, searchDarkWeb, isLoading, error } = useNasoStore();
+  const { darkWebResults, darkWebReport, searchDarkWeb, isLoading, error } = useNasoStore();
   const [hasSearched, setHasSearched] = useState(false);
   const [stageIndex, setStageIndex] = useState(0);
 
@@ -193,11 +193,43 @@ export default function DarkRecon({ reconQuery, setReconQuery }) {
 
       {darkWebResults.length > 0 && (
           <div className="space-y-4">
-              <div className="flex items-center justify-between pb-4 border-b border-white/[0.06]">
-                  <h3 className="text-[14px] font-semibold text-white flex items-center gap-2">
-                      <ShieldAlert size={16} className="text-[#FF453A]" strokeWidth={1.5} /> Intercepted Intel ({darkWebResults.length})
-                  </h3>
-                  <Button variant="ghost" onClick={() => useNasoStore.setState({ darkWebResults: [] })} className="text-[12px] font-medium text-zinc-500 hover:text-white h-8 rounded-full px-3">Clear Results</Button>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-[14px] font-semibold text-white flex items-center gap-2">
+                          <ShieldAlert size={16} className="text-[#FF453A]" strokeWidth={1.5} /> Intercepted Intel ({darkWebResults.length})
+                      </h3>
+                      {/* Provenance chips — surfaced from the backend report so
+                          operators know if results came from cache, how many
+                          Ahmia pages we paged through, and whether Tor circuits
+                          were rotated for this probe. */}
+                      {darkWebReport?.cached && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#FFD60A]/10 border border-[#FFD60A]/20 text-[10px] font-medium text-[#FFD60A]">
+                              <Database size={10} strokeWidth={2} /> From cache
+                          </span>
+                      )}
+                      {darkWebReport?.pages_fetched > 0 && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-[10px] font-medium text-zinc-400">
+                              {darkWebReport.pages_fetched} page{darkWebReport.pages_fetched === 1 ? '' : 's'}
+                              {darkWebReport.duplicates_dropped > 0 && (
+                                <span className="text-zinc-600"> · −{darkWebReport.duplicates_dropped} dup</span>
+                              )}
+                          </span>
+                      )}
+                      {darkWebReport?.rotation && Object.keys(darkWebReport.rotation).length > 0 && (
+                          <span
+                            title={Object.entries(darkWebReport.rotation).map(([h, s]) => `${h}: ${s}`).join('\n')}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#0A84FF]/10 border border-[#0A84FF]/20 text-[10px] font-medium text-[#0A84FF] cursor-help"
+                          >
+                              <Zap size={10} strokeWidth={2} /> {Object.keys(darkWebReport.rotation).length} circuits rotated
+                          </span>
+                      )}
+                      {typeof darkWebReport?.elapsed_seconds === 'number' && !darkWebReport.cached && (
+                          <span className="text-[10px] font-mono text-zinc-600">
+                              {darkWebReport.elapsed_seconds.toFixed(2)}s
+                          </span>
+                      )}
+                  </div>
+                  <Button variant="ghost" onClick={() => useNasoStore.setState({ darkWebResults: [], darkWebReport: null })} className="text-[12px] font-medium text-zinc-500 hover:text-white h-8 rounded-full px-3 self-start sm:self-auto">Clear Results</Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {darkWebResults.map((res, i) => <ResultCard key={i} result={res} />)}

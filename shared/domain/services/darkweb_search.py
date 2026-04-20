@@ -24,6 +24,7 @@ import logging
 
 from .dark_web.ahmia_client import (
     AhmiaClient,
+    AhmiaSearchReport,
     AhmiaUnavailable,
     InvalidQuery,
 )
@@ -72,3 +73,19 @@ class DarkWebSearchService:
         # Return the legacy dict shape; callers who want provenance fields
         # can inspect them — they are present but unadvertised.
         return [r.as_dict() for r in report.results]
+
+    @classmethod
+    async def search_with_report(cls, query: str) -> AhmiaSearchReport:
+        """Same search as :meth:`search_onion_links` but returns the full
+        :class:`AhmiaSearchReport` — including ``cached``, ``pages_fetched``,
+        ``duplicates_dropped``, ``rotation_report``. Use this from code
+        paths that can surface that metadata to the UI (the DarkRecon page
+        renders a "from cache" badge and a Tor rotation status chip).
+        """
+        try:
+            async with AhmiaClient() as client:
+                return await client.search(query)
+        except InvalidQuery as exc:
+            raise ValueError(f"Dark Web search failed: {exc}") from exc
+        except AhmiaUnavailable as exc:
+            raise ValueError(f"Dark Web node unreachable: {exc}") from exc

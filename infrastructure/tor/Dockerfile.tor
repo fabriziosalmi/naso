@@ -1,18 +1,39 @@
 FROM alpine:latest
 
-# Use http mirror to avoid TLS issues during build in some environments
+# Use http mirror to avoid TLS issues during build in some environments.
 RUN sed -i 's/https/http/g' /etc/apk/repositories && \
     apk add --no-cache tor curl
 
-# Configurazione Tor Hardened
-RUN echo "SocksPort 0.0.0.0:9050" > /etc/tor/torrc && \
-    echo "DataDirectory /var/lib/tor" >> /etc/tor/torrc && \
-    echo "ControlPort 9051" >> /etc/tor/torrc && \
-    echo "CookieAuthentication 0" >> /etc/tor/torrc && \
-    echo "DnsPort 5353" >> /etc/tor/torrc && \
-    echo "AutomapHostsOnResolve 1" >> /etc/tor/torrc && \
-    echo "StrictNodes 0" >> /etc/tor/torrc && \
-    echo "ExcludeExitNodes {ua},{ru},{by},{ir},{cn}" >> /etc/tor/torrc
+# ── Tor control-port authentication ─────────────────────────────────────────
+# NEWNYM circuit rotation requires an authenticated control channel. We
+# compute a ``HashedControlPassword`` at build time from the build arg so
+# the plaintext never lands in an image layer and each deployment can set
+# its own password without a custom Dockerfile.
+#
+# Default ``naso-dev`` matches the worker's
+# ``NASO_DARKWEB_TOR_CONTROL_PASSWORD`` default — override both in
+# production via:
+#     --build-arg TOR_CONTROL_PASSWORD=<strong-pw>
+#     and env var NASO_DARKWEB_TOR_CONTROL_PASSWORD=<strong-pw>
+ARG TOR_CONTROL_PASSWORD=naso-dev
+
+RUN set -eu; \
+    TOR_PW_HASH="$(tor --hash-password "${TOR_CONTROL_PASSWORD}" | tail -1)"; \
+    { \
+        echo "SocksPort 0.0.0.0:9050"; \
+        echo "ControlPort 0.0.0.0:9051"; \
+        echo "DataDirectory /var/lib/tor"; \
+        echo "DnsPort 5353"; \
+        echo "AutomapHostsOnResolve 1"; \
+        echo "StrictNodes 0"; \
+        echo "ExcludeExitNodes {ua},{ru},{by},{ir},{cn}"; \
+        # Cookie auth is disabled intentionally — the cluster is 5+ Tor
+        # instances and sharing a cookie file via Docker volume would
+        # couple them unnecessarily. Password auth is per-instance and
+        # works over the internal ``naso-net`` bridge.
+        echo "CookieAuthentication 0"; \
+        echo "HashedControlPassword ${TOR_PW_HASH}"; \
+    } > /etc/tor/torrc
 
 EXPOSE 9050 9051
 
