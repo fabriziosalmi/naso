@@ -2,44 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 
+/*
 ======================================================
-1. CORE VARIABLES (Apple-style dark mode)
+1. CORE TOKENS — Apple-dark calibrated
 ======================================================
 */
 @layer base {
   :root {
-    /* Palette FAANG Premium: Deep Zinc & Indigo Glow */
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 4.5%;
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 5%;
     --popover-foreground: 0 0% 98%;
-    
-    /* Primary (Accent) and Secondary (Muted layout) */
-    --primary: 235 86% 65%; /* Indigo vivo */
+
+    --primary: 235 86% 65%;
     --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 240 4% 10%;
     --secondary-foreground: 0 0% 98%;
-    
-    /* Utility colors */
+
     --muted: 240 5% 15%;
     --muted-foreground: 240 5% 65%;
     --accent: 250 84% 60%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    
+
     --border: 240 5% 14%;
     --input: 240 5% 16%;
     --ring: 235 86% 65%;
-    
-    --radius: 0.75rem; /* Rounding più dolce Apple-style */
+
+    --radius: 0.75rem;
+
+    /* NASO signature palette — used across components */
+    --naso-blue: #0A84FF;
+    --naso-blue-hi: #007AFF;
+    --naso-green: #32D74B;
+    --naso-yellow: #FFD60A;
+    --naso-orange: #FF9F0A;
+    --naso-red: #FF453A;
+
+    /* Motion tokens */
+    --ease-apple: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+    --dur-fast: 160ms;
+    --dur-base: 240ms;
+    --dur-slow: 420ms;
   }
 }
 
-/* 
+/*
 ======================================================
 2. GLOBAL DEFAULTS
 ======================================================
@@ -51,45 +63,99 @@
   body {
     @apply bg-naso-dark text-zinc-100 antialiased;
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
   }
+
+  /* Uniform accessible focus ring — overrides default outline globally.
+     Applied via :focus-visible so mouse clicks don't get the halo. */
+  :focus { outline: none; }
+  :focus-visible {
+    outline: 2px solid rgba(10, 132, 255, 0.65);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Selection styling to match brand */
+  ::selection {
+    background: rgba(10, 132, 255, 0.35);
+    color: #fff;
+  }
 }
 
-/* 
+/*
 ======================================================
-3. MODULAR COMPONENTS (Glassmorphism & Panels)
+3. COMPONENT CLASSES
 ======================================================
 */
 @layer components {
-  /* FAANG Glassmorphism Card base */
   .lux-glass-panel {
     @apply bg-naso-panel/60 backdrop-blur-xl border border-white/5 shadow-2xl rounded-2xl;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 
-  /* Input form fields premium */
   .lux-input {
     @apply bg-naso-panel/80 border border-white/10 rounded-lg text-sm transition-all text-white placeholder-zinc-500;
     @apply focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 outline-none;
   }
-  
-  /* Buttons Premium */
+
   .lux-btn-primary {
     @apply bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 transition-all font-medium rounded-lg;
   }
+
+  /* Skeleton primitive — animated shimmer over a neutral base.
+     Intentionally cheap: no JS, just CSS gradient sweeping. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06),
+      transparent
+    );
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
+  }
+
+  /* Custom scrollbar — visible but elegant. Opt-in via .scrollbar-thin. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
 }
 
-/* 
+/*
 ======================================================
-4. MODULAR UTILITIES (Animations & Aesthetic FX)
+4. UTILITIES — Aesthetics & animations
 ======================================================
 */
 @layer utilities {
-  /* Dynamic Vercel-like background grid */
   .bg-grid-pattern {
-    background-image: 
+    background-image:
       linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
     background-size: 3rem 3rem;
@@ -97,7 +163,6 @@
     -webkit-mask-image: radial-gradient(circle at center, black, transparent 80%);
   }
 
-  /* Sfondo radiale animato (Nasconde gli angoli duri) */
   .ambient-glow-mesh {
     position: absolute;
     width: 60vw;
@@ -110,19 +175,73 @@
     z-index: -1;
     filter: blur(60px);
   }
-  
-  /* Testo Shimmer stile Apple */
+
   .shimmer-text {
     @apply bg-[linear-gradient(110deg,#a1a1aa,45%,#ffffff,55%,#a1a1aa)] bg-[length:200%_100%] bg-clip-text text-transparent;
     animation: shimmer 2.5s linear infinite;
   }
+
+  /* Content-hidden scroller (used by chat / sheets that want no chrome) */
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Route transition — brief fade + lift; the wrapping div uses animation-route. */
+  .animate-route {
+    animation: route-enter 420ms var(--ease-out-soft) both;
+  }
+
+  /* Signature pulse — a ring that expands and fades. Used on new-leak events. */
+  .signature-pulse {
+    position: relative;
+  }
+  .signature-pulse::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid rgba(10, 132, 255, 0.6);
+    animation: signature-pulse 1.6s var(--ease-out-soft) 2;
+    pointer-events: none;
+  }
 }
 
-/* Scrollbar invisibile modulare */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
+/*
+======================================================
+5. KEYFRAMES
+======================================================
+*/
+@keyframes skeleton-sweep {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
 }
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+
+@keyframes route-enter {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes signature-pulse {
+  0%   { opacity: 0.9; transform: scale(1); }
+  80%  { opacity: 0;   transform: scale(1.12); }
+  100% { opacity: 0;   transform: scale(1.12); }
+}
+
+/*
+======================================================
+6. MOTION ACCESSIBILITY
+Respect the OS-level motion preference. Users with
+vestibular disorders (or those who simply prefer calm)
+see instant transitions while keeping structural changes.
+======================================================
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

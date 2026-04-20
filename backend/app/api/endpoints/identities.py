@@ -1,12 +1,14 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import bindparam as sa_bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from shared.database import get_db
-from shared.domain.services.identity_merging import IdentityMergingService
+from shared.domain.services.identity_upsert import upsert_identity
+from shared.domain.services.merge_proposer import propose_and_merge
+from shared.domain.services.risk_scoring_v2 import mark_dirty
 from shared.models import Identity, LeakHit
 from shared.schemas import Identity as IdentitySchema
 from shared.schemas import IdentityInsights, IdentityUpdate
@@ -22,45 +24,68 @@ router = APIRouter()
 
 
 @router.get("/graph")
-async def get_identity_graph(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_identity_graph(
+    limit: int = 500,
+    min_risk: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Paginated identity topology for the frontend force-graph.
+
+    The legacy implementation pulled every identity + every link for the
+    tenant, which collapses under real-tenant scale (10k identities, 100k
+    links). We now cap the node set:
+
+      * Select the top ``limit`` identities ordered by ``risk_score DESC``
+        (hard bound, defaults to 500 — force-graph-2d performance cliff).
+      * Optionally filter by ``min_risk`` to focus on the riskier slice.
+      * Only fetch links whose endpoint identity is in the selected set,
+        so the resulting subgraph is closed.
+      * Fetch the leak nodes reached by those links, not the universe.
+
+    Admins can still request a cross-tenant view; non-admins are pinned to
+    their own tenant.
     """
-    Query Side (CQRS #5): Visualizzazione ultra-veloce del grafo potenziata (DD).
-    """
-    # 1. Recupera Nodi Identità
-    if current_user.role == "admin":
-        identities_query = text("SELECT id, identifier, risk_score, type, is_protected FROM identities")
-        ident_result = await db.execute(identities_query)
+    # Sanitize bounds. Server-side clamp guards against accidental DoS from
+    # a UI that forgot to cap the param.
+    limit = max(1, min(int(limit), 2000))
+    min_risk = max(0, min(int(min_risk), 100))
 
-        # 2. Recupera Archi (Connessioni)
-        edges_query = text("SELECT identity_id as source, leak_id as target FROM identity_leaks")
-        edge_result = await db.execute(edges_query)
-    else:
-        identities_query = text("""
-            SELECT id, identifier, risk_score, type, is_protected 
-            FROM identities 
-            WHERE tenant_id = :tenant_id
-        """)
-        ident_result = await db.execute(identities_query, {"tenant_id": current_user.tenant_id})
+    # 1. Top-N identities (paginated, risk-ordered).
+    ident_stmt = select(
+        Identity.id,
+        Identity.identifier,
+        Identity.risk_score,
+        Identity.type,
+        Identity.is_protected,
+    ).where(Identity.risk_score >= min_risk)
+    if current_user.role != "admin":
+        ident_stmt = ident_stmt.where(Identity.tenant_id == current_user.tenant_id)
+    ident_stmt = ident_stmt.order_by(Identity.risk_score.desc(), Identity.id).limit(limit)
+    identities = (await db.execute(ident_stmt)).mappings().all()
 
-        # 2. Recupera Archi (Connessioni)
-        edges_query = text("""
-            SELECT il.identity_id as source, il.leak_id as target
-            FROM identity_leaks il
-            JOIN identities i ON il.identity_id = i.id
-            WHERE i.tenant_id = :tenant_id
-        """)
-        edge_result = await db.execute(edges_query, {"tenant_id": current_user.tenant_id})
+    if not identities:
+        return {"nodes": [], "links": [], "truncated": False}
 
-    identities = ident_result.mappings().all()
-    edges = edge_result.mappings().all()
+    # 2. Links scoped to the selected identity set — using text SQL here
+    # preserves the original query shape for parity with cached views.
+    ident_ids = [i["id"] for i in identities]
+    edges_stmt = text("""
+        SELECT identity_id AS source, leak_id AS target
+          FROM identity_leaks
+         WHERE identity_id IN :ids
+    """).bindparams(sa_bindparam("ids", expanding=True))
+    edges = (
+        await db.execute(edges_stmt, {"ids": ident_ids})
+    ).mappings().all()
 
-    # 3. Recupera Metadata Leak per i nodi del grafo
-    leak_ids = list(set([e["target"] for e in edges]))
+    # 3. Leak nodes reached by the filtered link set.
+    leak_ids = list({e["target"] for e in edges})
     leaks = []
     if leak_ids:
-        leak_query = select(LeakHit).where(LeakHit.id.in_(leak_ids))
-        l_result = await db.execute(leak_query)
-        leaks = l_result.scalars().all()
+        leaks = (
+            await db.execute(select(LeakHit).where(LeakHit.id.in_(leak_ids)))
+        ).scalars().all()
 
     nodes = [
         {
@@ -73,11 +98,22 @@ async def get_identity_graph(db: AsyncSession = Depends(get_db), current_user=De
         }
         for i in identities
     ]
+    for lk in leaks:
+        nodes.append({
+            "id": lk.id,
+            "label": lk.source,
+            "type": "leak",
+            "risk": lk.severity_score,
+            "status": lk.status,
+        })
 
-    for l in leaks:
-        nodes.append({"id": l.id, "label": l.source, "type": "leak", "risk": l.severity_score, "status": l.status})
-
-    return {"nodes": nodes, "links": [{"source": e["source"], "target": e["target"]} for e in edges]}
+    return {
+        "nodes": nodes,
+        "links": [{"source": e["source"], "target": e["target"]} for e in edges],
+        # Client-visible flag so the UI can show "showing top N of M" when
+        # the cap is reached without an extra round trip to COUNT(*).
+        "truncated": len(identities) == limit,
+    }
 
 
 @router.get("/{identity_id}/insights", response_model=IdentityInsights)
@@ -147,11 +183,42 @@ async def toggle_identity_protection(
 
 @router.post("/merge")
 async def trigger_auto_merge(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    """Identity merging v2 — evidence-based.
+
+    Scans the tenant for pairs of active master identities that share one or
+    more ``LeakHit`` rows, builds an evidence set per pair, and runs each
+    pair through :func:`merge_identities`. Pairs whose aggregate confidence
+    falls below the configured threshold are skipped (reported in
+    ``skipped_weak``); pairs blocked by the VIP invariant are reported in
+    ``skipped_invariant``.
+
+    Masters whose risk cluster changed are flipped to ``risk_score_dirty``
+    by the merge engine; this handler also issues a single ``mark_dirty``
+    sweep over every resulting master so the next ``recompute_dirty`` tick
+    refreshes scores deterministically.
     """
-    Identity Merging (V): Esegue l'algoritmo di unione automatica.
-    """
-    merged_count = await IdentityMergingService.auto_merge_identities(db, current_user.tenant_id)
-    return {"status": "success", "merged_count": merged_count}
+    report = await propose_and_merge(
+        db, current_user.tenant_id, performed_by=current_user.id
+    )
+    if report["merged_count"]:
+        master_ids = [p["master_id"] for p in report["pairs"]]
+        await mark_dirty(db, master_ids)
+
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="RUN_AUTO_MERGE",
+        resource_type="identity",
+        details={
+            "merged_count": report["merged_count"],
+            "skipped_weak": report["skipped_weak"],
+            "skipped_invariant": report["skipped_invariant"],
+        },
+    )
+    await db.commit()
+
+    return {"status": "success", **report}
 
 
 @router.get("/")
@@ -192,13 +259,18 @@ async def search_identities(
 async def create_identity(
     identifier: str, type: str = "person", db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
+    """Create — or re-observe — a monitored identity.
+
+    Routed through :func:`upsert_identity` so the canonical form
+    (normalized_identifier) is always populated, repeat creates by different
+    analysts converge on the same row, and concurrent requests cannot race
+    into duplicate rows (the UNIQUE constraint makes the INSERT ... ON
+    CONFLICT DO NOTHING path deterministic).
     """
-    Create a new monitored identity.
-    """
-    new_identity = Identity(
-        identifier=identifier, type=type, tenant_id=current_user.tenant_id, risk_score=0, is_protected=False
-    )
-    db.add(new_identity)
+    try:
+        identity = await upsert_identity(db, current_user.tenant_id, identifier, type)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     await AuditLogger.log(
         db,
@@ -206,9 +278,8 @@ async def create_identity(
         tenant_id=current_user.tenant_id,
         action="CREATE_IDENTITY",
         resource_type="identity",
+        resource_id=identity.id,
         details={"identifier": identifier, "type": type},
     )
-
     await db.commit()
-    await db.refresh(new_identity)
-    return new_identity
+    return identity

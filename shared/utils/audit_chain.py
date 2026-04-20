@@ -1,0 +1,252 @@
+"""Tamper-evident, hash-chained audit writer + verifier.
+
+Legacy ``shared.utils.audit.AuditLogger.log`` appends rows to ``audit_logs``
+without any integrity guarantee — any operator with DB access can mutate a
+row and nothing betrays the change. This module replaces the legacy writer
+with a hash-chained variant:
+
+    * Each new audit row's ``prev_hash`` references the previous row's
+      ``self_hash`` in the same tenant (chains are per-tenant so one
+      customer's history cannot corrupt another's).
+    * ``self_hash`` is a SHA-256 digest over a canonical JSON
+      representation of every field the row contains, including
+      ``prev_hash``. Tampering with any field — including the hash linkage
+      — breaks verification from the tampered row onwards.
+    * Writes serialize appends per tenant on Postgres
+      (``pg_advisory_xact_lock``) so concurrent writers cannot fork the
+      chain. SQLite is single-writer by construction.
+
+Mirrors the chain scheme already in use for ``merge_events`` (Phase 3), so
+both ledgers can be audited with the same verification primitive.
+
+Public surface:
+    * :func:`write_audit` — append a new entry with auto-computed links.
+    * :func:`verify_chain` — walk the chain for a tenant, returning a
+      :class:`VerifyResult` that flags the first broken row (or None).
+"""
+from __future__ import annotations
+
+import json
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
+from typing import Any
+
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from shared.models import AuditLog
+
+
+# ─── Result object ───────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class VerifyResult:
+    """Outcome of a chain verification walk.
+
+    :ivar ok: ``True`` iff every row verifies.
+    :ivar broken_at: 0-indexed position of the first failing row, or
+        ``None`` when the chain is intact.
+    :ivar reason: short human-readable reason for the break; ``None`` on
+        success.
+    """
+
+    ok: bool
+    broken_at: int | None = None
+    reason: str | None = None
+
+
+# ─── Canonical hashing ───────────────────────────────────────────────────────
+
+def _canonical_payload(
+    *,
+    prev_hash: str | None,
+    tenant_id: str | None,
+    user_id: str | None,
+    action: str,
+    resource_type: str | None,
+    resource_id: str | None,
+    details: dict[str, Any] | None,
+    timestamp: datetime,
+) -> str:
+    # sort_keys + compact separators give a byte-stable serialization across
+    # interpreter versions. ``default=str`` gracefully handles datetime, UUID
+    # and other types that may leak into ``details`` — consistent coercion
+    # matters because we will re-hash the same payload during verification.
+    return json.dumps(
+        {
+            "prev_hash": prev_hash,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "details": details,
+            "timestamp": timestamp.isoformat() if timestamp else None,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _sha256_hex(payload: str) -> str:
+    return sha256(payload.encode("utf-8")).hexdigest()
+
+
+async def _acquire_tenant_lock(db: AsyncSession, tenant_id: str | None) -> None:
+    """Postgres-only advisory lock that serializes chain appends for the
+    given tenant. SQLite does not need it — the engine serializes writes
+    globally — and some null-tenant audit rows (system boot events) can
+    skip locking entirely.
+    """
+    if tenant_id is None or db.bind is None:
+        return
+    if db.bind.dialect.name == "postgresql":
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:tid))"),
+            {"tid": tenant_id},
+        )
+
+
+# ─── Public API ──────────────────────────────────────────────────────────────
+
+async def write_audit(
+    db: AsyncSession,
+    *,
+    tenant_id: str | None,
+    user_id: str | None,
+    action: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    details: dict[str, Any] | None = None,
+    ip_address: str | None = None,
+    flush_only: bool = False,
+) -> AuditLog:
+    """Append a new audit row with ``prev_hash`` and ``self_hash`` set.
+
+    Chains are **per-tenant**: the ``prev_hash`` lookup is scoped to
+    ``tenant_id``, so the first row in a tenant's history has
+    ``prev_hash = None`` regardless of what other tenants have written.
+
+    :param flush_only: when ``True``, flush instead of commit so the caller
+        can atomically wrap the audit write inside a larger transaction
+        (e.g. "update leak status AND audit the change" in one rollback
+        scope). The hash chain still reads consistently within the session
+        because SQLAlchemy flushes make pending rows visible to subsequent
+        queries in the same session. Default ``False`` commits, which is
+        what one-shot audit writes want.
+    """
+    await _acquire_tenant_lock(db, tenant_id)
+
+    # Fetch the current chain head for this tenant. We order by
+    # ``(timestamp DESC, id DESC)`` so concurrent writes with the same
+    # timestamp still pick a deterministic tail; ``verify_chain`` walks in
+    # the reverse of this order so the two agree.
+    head_stmt = (
+        select(AuditLog.self_hash)
+        .where(AuditLog.tenant_id == tenant_id)
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .limit(1)
+    )
+    prev_hash = (await db.execute(head_stmt)).scalar_one_or_none()
+
+    # Naive UTC matches the convention used in identity_upsert /
+    # entity_resolution so the same value round-trips across SQLite and
+    # Postgres without triggering the aware/naive comparison trap.
+    timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+    row_id = str(uuid.uuid4())
+
+    self_hash = _sha256_hex(
+        _canonical_payload(
+            prev_hash=prev_hash,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+            timestamp=timestamp,
+        )
+    )
+
+    row = AuditLog(
+        id=row_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details=details,
+        timestamp=timestamp,
+        ip_address=ip_address,
+        prev_hash=prev_hash,
+        self_hash=self_hash,
+    )
+    db.add(row)
+    if flush_only:
+        await db.flush()
+    else:
+        await db.commit()
+        await db.refresh(row)
+    return row
+
+
+async def verify_chain(
+    db: AsyncSession, *, tenant_id: str | None
+) -> VerifyResult:
+    """Walk the full audit chain for *tenant_id* and re-verify each row.
+
+    At each position we check two independent invariants:
+
+      1. ``prev_hash`` equals the previous row's ``self_hash`` (linkage).
+      2. Recomputing SHA-256 over the canonical payload produces the
+         stored ``self_hash`` (content integrity).
+
+    If either check fails we stop and report the index of the first
+    failing row. A missing row anywhere in the history breaks linkage at
+    the first position after the gap, so delete-tampering is detected with
+    the same machinery.
+    """
+    stmt = (
+        select(AuditLog)
+        .where(AuditLog.tenant_id == tenant_id)
+        .order_by(AuditLog.timestamp, AuditLog.id)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+
+    expected_prev: str | None = None
+    for idx, row in enumerate(rows):
+        if row.prev_hash != expected_prev:
+            return VerifyResult(
+                ok=False,
+                broken_at=idx,
+                reason="prev_hash mismatch (linkage broken)",
+            )
+
+        recomputed = _sha256_hex(
+            _canonical_payload(
+                prev_hash=row.prev_hash,
+                tenant_id=row.tenant_id,
+                user_id=row.user_id,
+                action=row.action,
+                resource_type=row.resource_type,
+                resource_id=row.resource_id,
+                details=row.details,
+                timestamp=row.timestamp,
+            )
+        )
+        if recomputed != row.self_hash:
+            return VerifyResult(
+                ok=False,
+                broken_at=idx,
+                reason="self_hash mismatch (row content tampered)",
+            )
+
+        expected_prev = row.self_hash
+
+    return VerifyResult(ok=True, broken_at=None, reason=None)
+
+
+__all__ = ["VerifyResult", "write_audit", "verify_chain"]

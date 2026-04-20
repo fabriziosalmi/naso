@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import time
-import uuid
 from datetime import datetime, timezone
 
 from elasticsearch import AsyncElasticsearch
@@ -21,7 +20,8 @@ from shared.celery_app import celery_app
 from shared.config import settings
 from shared.domain.services.correlation import IdentityCorrelationService
 from shared.domain.services.cti_adapters import CTIAdapters
-from shared.models import LeakHit, YaraRule
+from shared.domain.services.leak_ingest import ingest_leak
+from shared.models import YaraRule
 from shared.utils.ai_triage import analyze_leak_with_gemma_thinking
 from shared.utils.analyzer import analyzer
 from shared.utils.babel_node import babel_node
@@ -258,32 +258,27 @@ async def store_and_index(hit_data, raw_content):
     else:
         logger.warning(f"ES indexing skipped for tenant {hit_data['tenant_id']} (ES disabled)")
 
-    # 3. Persisti LeakHit nel DB (idempotente: UUID derivato dall'hash del contenuto)
-    # Usiamo i primi 16 byte del SHA-256 per costruire un UUID stabile e deterministico.
-    stable_id = str(uuid.UUID(bytes=bytes.fromhex(hit_data["idempotency_key"][:32])))
+    # 3. Persisti il LeakHit via la nuova ingest con fuzzy-dedup.
+    # ingest_leak:
+    #   * popola normalized_content + simhash64 a ogni scrittura,
+    #   * collassa su una riga esistente se il Hamming ≤ 3 (near-duplicate
+    #     di un leak già visto, anche se arriva da una sorgente diversa o
+    #     con formatting leggermente differente),
+    #   * bumpa la severity in modo monotono (mai downgrade).
+    # Sostituisce il pattern a stable_id=SHA-256(content) che catturava solo
+    # i duplicati byte-identici.
     async with AsyncSessionLocal() as db:
-        existing = await db.execute(select(LeakHit).where(LeakHit.id == stable_id))
-        leak = existing.scalar_one_or_none()
-        if not leak:
-            leak = LeakHit(
-                id=stable_id,
-                tenant_id=hit_data["tenant_id"],
-                source=hit_data["source"],
-                content_snippet=raw_content[:500],
-                metadata_json=hit_data.get("metadata_json", {}),
-                severity_score=hit_data.get("severity_score", 0),
-                status="new",
-                screenshot_path=hit_data.get("screenshot_path"),
-            )
-            db.add(leak)
-            await db.commit()
-        else:
-            # Aggiorna lo score se migliorato dall'AI in questo run
-            if hit_data.get("severity_score", 0) > (leak.severity_score or 0):
-                leak.severity_score = hit_data["severity_score"]
-                leak.metadata_json = hit_data.get("metadata_json", {})
-                await db.commit()
-    hit_data["id"] = stable_id
+        leak = await ingest_leak(
+            db,
+            tenant_id=hit_data["tenant_id"],
+            source=hit_data["source"],
+            content=raw_content,
+            severity_score=hit_data.get("severity_score", 0),
+            status="new",
+            metadata_json=hit_data.get("metadata_json", {}),
+            screenshot_path=hit_data.get("screenshot_path"),
+        )
+    hit_data["id"] = leak.id
 
     # 4. Correlazione Identità (Command Side)
     # P-08: pass pre-extracted emails from Babel — skip duplicate full-content regex scan.

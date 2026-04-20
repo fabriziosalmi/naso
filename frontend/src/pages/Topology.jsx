@@ -1,18 +1,60 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Radar, X, AlertTriangle, Fingerprint, Database, Calendar, Shield, Cpu, ExternalLink } from 'lucide-react';
+import { Radar, X, AlertTriangle, Fingerprint, Database, Calendar, Shield, Cpu, ExternalLink, Download, Copy, Check, ZoomIn, ZoomOut, Maximize2, Search } from 'lucide-react';
 import NetworkGraphPro from '../components/NetworkGraph';
+import GraphMinimap from '../components/ui/GraphMinimap';
 import useNasoStore from '../store/useNasoStore';
+import { toast } from '../store/useToastStore';
+import { Input } from '../components/ui/Input';
 
 // --- Node Inspector Component ---
 const NodeInspector = ({ node, onClose }) => {
+  const [copied, setCopied] = useState(false);
+
   if (!node) return null;
   const isLeak = node.type === 'leak';
   const colorRing = isLeak ? (node.risk >= 80 ? 'border-[#FF453A]/30' : 'border-[#FF9F0A]/30') : (node.isProtected ? 'border-[#FFD60A]/30' : 'border-[#0A84FF]/30');
   const Icon = isLeak ? Database : (node.isProtected ? Shield : Fingerprint);
 
+  // Serializable snapshot — strip circular refs (ForceGraph mutates nodes with x/y/vx/vy + neighbors back-refs).
+  const serializable = () => ({
+    id: node.id,
+    type: node.type,
+    label: node.label,
+    risk: node.risk ?? null,
+    degree: node.degree ?? 0,
+    isProtected: !!node.isProtected,
+    source: node.source ?? null,
+    neighbors: (node.neighbors ?? []).map(n => ({ id: n.id, label: n.label, type: n.type })),
+    exported_at: new Date().toISOString(),
+  });
+
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(serializable(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `node-${String(node.id).slice(0, 8)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success('Node exported', `node-${String(node.id).slice(0, 8)}.json`);
+  };
+
+  const copyJson = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(serializable(), null, 2));
+      setCopied(true);
+      toast.success('Node JSON copied to clipboard');
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
   return (
-    <div className="w-[340px] flex-shrink-0 bg-[#1C1C1E] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden flex flex-col animate-in slide-in-from-right-8 duration-300">
+    <div className="absolute top-4 right-4 bottom-4 w-[340px] max-w-[calc(100%-2rem)] z-20 bg-[#1C1C1E]/95 backdrop-blur-2xl border border-white/[0.10] rounded-2xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.6)] overflow-hidden flex flex-col animate-in slide-in-from-right-8 duration-300">
       {/* Header */}
       <div className="px-5 py-4 border-b border-white/[0.05] flex items-start justify-between relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-white/[0.02] to-transparent pointer-events-none" />
@@ -93,20 +135,78 @@ const NodeInspector = ({ node, onClose }) => {
         )}
       </div>
 
-       <div className="p-4 border-t border-white/[0.05]">
-          <Button variant="outline" className="w-full text-[12px] h-9 bg-black/20 hover:bg-black/40 border-white/[0.1] text-zinc-300">
-             <ExternalLink size={14} className="mr-2" />
-             View Full Details
+       <div className="p-3 border-t border-white/[0.05] grid grid-cols-2 gap-2">
+          <Button
+            onClick={copyJson}
+            variant="outline"
+            className="text-[12px] h-9 bg-black/20 hover:bg-black/40 border-white/[0.1] text-zinc-300"
+          >
+            {copied ? <Check size={13} className="mr-1.5 text-[#32D74B]" /> : <Copy size={13} className="mr-1.5" />}
+            {copied ? 'Copied' : 'Copy JSON'}
+          </Button>
+          <Button
+            onClick={exportJson}
+            variant="outline"
+            className="text-[12px] h-9 bg-black/20 hover:bg-black/40 border-white/[0.1] text-zinc-300"
+          >
+            <Download size={13} className="mr-1.5" />
+            Export
           </Button>
        </div>
     </div>
   );
 };
 
+const FILTERS = [
+  { value: 'all',      label: 'All' },
+  { value: 'identity', label: 'Identities' },
+  { value: 'leak',     label: 'Leaks' },
+  { value: 'vip',      label: 'VIP only' },
+  { value: 'critical', label: 'Critical' },
+];
+
 // --- Main Page ---
 export default function Topology() {
-  const { graphData, fetchGraphData, isLoading } = useNasoStore();
+  const { graphData, fetchGraphData, isLoading, leaks } = useNasoStore();
   const [selectedNode, setSelectedNode] = useState(null);
+  const [pulse, setPulse] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [searchHit, setSearchHit] = useState(null);
+  const graphRef = useRef(null);
+
+  // Filtered view of graphData. Keep links only when both endpoints survive.
+  const filteredData = useMemo(() => {
+    const src = graphData || { nodes: [], links: [] };
+    if (filter === 'all') return src;
+
+    const keep = new Set(
+      src.nodes
+        .filter((n) => {
+          if (filter === 'identity') return n.type !== 'leak';
+          if (filter === 'leak') return n.type === 'leak';
+          if (filter === 'vip') return n.isProtected;
+          if (filter === 'critical') return n.type === 'leak' && (n.risk ?? 0) >= 80;
+          return true;
+        })
+        .map((n) => n.id)
+    );
+    return {
+      nodes: src.nodes.filter((n) => keep.has(n.id)),
+      links: src.links.filter((l) => {
+        const sid = l.source?.id ?? l.source;
+        const tid = l.target?.id ?? l.target;
+        return keep.has(sid) && keep.has(tid);
+      }),
+    };
+  }, [graphData, filter]);
+
+  // Search within visible nodes by label — first hit wins.
+  const searchMatches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return filteredData.nodes.filter((n) => n.label?.toLowerCase().includes(q)).slice(0, 6);
+  }, [query, filteredData]);
 
   // If graph data changes, close inspector if selected node is no longer there
   React.useEffect(() => {
@@ -117,31 +217,109 @@ export default function Topology() {
     }
   }, [graphData]);
 
+  // Signature pulse: when a new critical leak arrives, briefly pulse the graph frame.
+  const prevCriticalRef = React.useRef(null);
+  React.useEffect(() => {
+    const count = (leaks || []).filter(l => l.severity_score >= 80).length;
+    if (prevCriticalRef.current !== null && count > prevCriticalRef.current) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 1700);
+      prevCriticalRef.current = count;
+      return () => clearTimeout(t);
+    }
+    prevCriticalRef.current = count;
+  }, [leaks]);
+
+  const jumpTo = (node) => {
+    setSearchHit(node.id);
+    setSelectedNode(node);
+    graphRef.current?.centerOn(node);
+  };
+
   return (
-    <div className="h-[calc(100vh-110px)] flex flex-col gap-5">
+    <div className="h-[calc(100vh-110px)] flex flex-col gap-4">
       {/* Header */}
-      <div className="flex justify-between items-center shrink-0">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 shrink-0">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-white">Intelligence Topology</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">Interactive Relationship Map</p>
+          <p className="text-[13px] text-zinc-500 mt-0.5">Interactive relationship map · {filteredData.nodes.length} of {graphData?.nodes?.length ?? 0} nodes</p>
         </div>
-        <Button onClick={() => fetchGraphData()} disabled={isLoading} className="h-9 px-5 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm">
-          {isLoading ? <Cpu size={15} className="mr-2 animate-spin" /> : <Radar size={15} className="mr-2" strokeWidth={2} />} 
+        <Button onClick={() => fetchGraphData()} disabled={isLoading} className="h-9 px-5 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm self-start sm:self-auto">
+          {isLoading ? <Cpu size={15} className="mr-2 animate-spin" /> : <Radar size={15} className="mr-2" strokeWidth={2} />}
           Re-Analyze
         </Button>
       </div>
 
-      {/* Main Content Area: Graph + Inspector */}
-      <div className="flex-1 flex gap-5 min-h-0 relative">
-        <div className={`transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${selectedNode ? 'w-[calc(100%-360px)]' : 'w-full'}`}>
-           <NetworkGraphPro 
-              data={graphData} 
-              isLoading={isLoading} 
-              onNodeClick={setSelectedNode}
-           />
+      {/* Toolbar: filter chips + search + zoom controls */}
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center shrink-0">
+        <div className="inline-flex items-center gap-1 p-1 rounded-full bg-black/40 border border-white/[0.06]" role="tablist" aria-label="Node filter">
+          {FILTERS.map(f => (
+            <button
+              key={f.value}
+              role="tab"
+              aria-selected={filter === f.value}
+              onClick={() => setFilter(f.value)}
+              className={`h-7 px-3 rounded-full text-[11px] font-medium transition-colors ${
+                filter === f.value ? 'bg-white/[0.08] text-white shadow-sm' : 'text-zinc-500 hover:text-white'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
-        {/* Side Panel */}
+        <div className="relative flex-1 min-w-0 max-w-xl">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" strokeWidth={1.8} />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSearchHit(null); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchMatches[0]) jumpTo(searchMatches[0]);
+            }}
+            placeholder="Jump to node by label…"
+            aria-label="Search nodes"
+            className="pl-9 py-2 text-[13px]"
+          />
+          {query && searchMatches.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full bg-[#1C1C1E]/95 backdrop-blur-2xl border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden">
+              {searchMatches.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => jumpTo(m)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/[0.05] transition-colors"
+                >
+                  <span className="text-[12px] text-white truncate">{m.label}</span>
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase">{m.type}{m.risk ? ` · ${m.risk}` : ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="inline-flex items-center gap-1 p-1 rounded-full bg-black/40 border border-white/[0.06] shrink-0">
+          <button onClick={() => graphRef.current?.zoomBy(1/1.3)} aria-label="Zoom out" className="h-7 w-7 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors">
+            <ZoomOut size={13} />
+          </button>
+          <button onClick={() => graphRef.current?.fit()} aria-label="Fit to view" className="h-7 w-7 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors">
+            <Maximize2 size={13} />
+          </button>
+          <button onClick={() => graphRef.current?.zoomBy(1.3)} aria-label="Zoom in" className="h-7 w-7 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors">
+            <ZoomIn size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className={`flex-1 min-h-0 relative rounded-2xl ${pulse ? 'signature-pulse' : ''}`}>
+        <NetworkGraphPro
+          ref={graphRef}
+          data={filteredData}
+          isLoading={isLoading}
+          onNodeClick={(n) => { setSelectedNode(n); setSearchHit(n?.id || null); }}
+          highlightNodeId={searchHit}
+        />
+        {!isLoading && <GraphMinimap graphData={filteredData} forceGraphRef={graphRef} />}
         {selectedNode && (
           <NodeInspector node={selectedNode} onClose={() => setSelectedNode(null)} />
         )}

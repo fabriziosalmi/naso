@@ -76,13 +76,28 @@ export default {
         gradientShift: {
           '0%, 100%': { backgroundPosition: '0% 50%' },
           '50%': { backgroundPosition: '100% 50%' },
-        }
+        },
+        toastIn: {
+          '0%':   { opacity: 0, transform: 'translateY(12px) scale(0.98)' },
+          '100%': { opacity: 1, transform: 'translateY(0) scale(1)' },
+        },
+        toastOut: {
+          '0%':   { opacity: 1, transform: 'translateY(0) scale(1)' },
+          '100%': { opacity: 0, transform: 'translateY(12px) scale(0.98)' },
+        },
+        sheetIn: {
+          '0%':   { opacity: 0, transform: 'translateY(100%)' },
+          '100%': { opacity: 1, transform: 'translateY(0)' },
+        },
       },
       animation: {
         'radar': 'radar 4s linear infinite',
         'shimmer': 'shimmer 2.5s linear infinite',
         'pulse-glow': 'pulseGlow 3s ease-in-out infinite',
         'gradient-shift': 'gradientShift 8s ease infinite',
+        'toast-in': 'toastIn 220ms cubic-bezier(0.16,1,0.3,1) both',
+        'toast-out': 'toastOut 180ms cubic-bezier(0.4,0,1,1) both',
+        'sheet-in': 'sheetIn 260ms cubic-bezier(0.16,1,0.3,1) both',
       },
     },
   },

@@ -1,6 +1,20 @@
 import uuid
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
@@ -85,6 +99,15 @@ class LeakHit(Base):
     acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     acknowledged_by = Column(String, ForeignKey("users.id"), nullable=True)
 
+    # ── Fuzzy-dedup fields (near-duplicate detection; see shared/domain/normalization.py) ──
+    # Canonicalized content: lowercased, whitespace-collapsed, punctuation-stripped.
+    # Used as the input to SimHash and as a secondary exact-match key.
+    normalized_content = Column(Text, nullable=True)
+    # 64-bit SimHash of normalized_content, stored signed (bigint). Similar contents
+    # will have Hamming distance <= 3; we index it so LSH-style lookups can fan out
+    # by prefix buckets when the table grows.
+    simhash64 = Column(BigInteger, nullable=True, index=True)
+
     tenant = relationship("Tenant", back_populates="leak_hits")
     identities = relationship("Identity", secondary=identity_leaks, back_populates="leaks")
     mitre_techniques = relationship("MitreTechnique", secondary=mitre_leaks)
@@ -96,11 +119,74 @@ class Identity(Base):
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
     identifier = Column(String, nullable=False, index=True)
     type = Column(String, nullable=False)  # e.g., "email", "username"
+    # Canonicalized identifier used as the uniqueness key. Computed by
+    # shared.domain.normalization.normalize_identifier — handles Gmail dot/plus
+    # aliases, domain lowercasing, phone digit extraction, etc. Populated at
+    # upsert time; legacy rows are backfilled by the correlation-engine migration.
+    normalized_identifier = Column(String, nullable=True, index=True)
+    # How confident we are that this identifier actually belongs to its master
+    # entity. 1.0 for directly observed, <1.0 for inferred/merged. Used by
+    # risk propagation and by the AI co-analyst to weight reasoning.
+    confidence = Column(Float, nullable=False, default=1.0)
+    first_seen = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen = Column(DateTime(timezone=True), server_default=func.now())
     risk_score = Column(Integer, default=0, index=True)
+    # Lazy recompute marker: flipped to True whenever a linked leak or merge
+    # mutates. A periodic worker drains dirty rows and updates risk_score.
+    risk_score_dirty = Column(Boolean, nullable=False, default=False, index=True)
     is_protected = Column(Boolean, default=False)
-    master_identity_id = Column(String, ForeignKey("identities.id"), nullable=True, index=True)  # Identity Merging (V)
+    master_identity_id = Column(String, ForeignKey("identities.id"), nullable=True, index=True)
 
     leaks = relationship("LeakHit", secondary=identity_leaks, back_populates="identities")
+
+    __table_args__ = (
+        # Prevents duplicate identifier rows from concurrent ingestion races.
+        # Together with INSERT ... ON CONFLICT in the upsert path this makes
+        # identity creation idempotent under arbitrary concurrency.
+        UniqueConstraint(
+            "tenant_id", "type", "normalized_identifier",
+            name="uq_identities_normalized",
+        ),
+    )
+
+
+class MergeEvent(Base):
+    """Append-only ledger of every master↔slave identity merge.
+
+    Replaces the previous strategy of mutating ``Identity.master_identity_id``
+    in place with no audit trail. Every merge is a first-class event with:
+
+      - ``evidence``  — JSON array of signals that justified the merge
+        (e.g. ``{"type": "shared_leak", "leak_id": "...", "strength": 0.8}``);
+      - ``confidence`` — aggregate strength in [0, 1];
+      - ``reversed_at`` — non-null when the merge has been undone (soft
+        reversal so the ledger stays append-only).
+
+    Rows also carry a hash-chain (`prev_hash` / `self_hash`) so the full merge
+    history for a tenant is tamper-evident, matching the audit chain we will
+    extend across ``audit_logs`` in a subsequent phase.
+    """
+
+    __tablename__ = "merge_events"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
+    master_id = Column(String, ForeignKey("identities.id"), nullable=False, index=True)
+    slave_id = Column(String, ForeignKey("identities.id"), nullable=False, index=True)
+    evidence = Column(JSON, nullable=False)
+    confidence = Column(Float, nullable=False)
+    performed_by = Column(String, ForeignKey("users.id"), nullable=True)
+    performed_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    reversed_at = Column(DateTime(timezone=True), nullable=True)
+    reversed_by = Column(String, ForeignKey("users.id"), nullable=True)
+    reverse_reason = Column(Text, nullable=True)
+    # Hash-chain linkage — same semantics we will use for audit_logs.
+    prev_hash = Column(String, nullable=True)
+    self_hash = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("ix_merge_events_pair", "tenant_id", "master_id", "slave_id"),
+        Index("ix_merge_events_active_slave", "tenant_id", "slave_id", "reversed_at"),
+    )
 
 
 class Webhook(Base):
@@ -126,6 +212,18 @@ class AuditLog(Base):
     details = Column(JSON)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     ip_address = Column(String)
+    # Tamper-evident chain. Each new entry for a given tenant references the
+    # previous entry's ``self_hash`` and is itself hashed; any later tampering
+    # with a middle row breaks verification from that row onward. The chain
+    # writer ensures serial append under a row-level lock on the tenant head.
+    prev_hash = Column(String, nullable=True)
+    self_hash = Column(String, nullable=True, index=True)
+
+    __table_args__ = (
+        # Speeds up the "fetch current chain head for tenant" query that every
+        # audit write performs, and the verification walk that exports use.
+        Index("ix_audit_tenant_time", "tenant_id", "timestamp"),
+    )
 
 
 class YaraRule(Base):

@@ -1,60 +1,37 @@
-import React, { useEffect, useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import useNasoStore from './store/useNasoStore';
-import { ShieldCheck, Zap, X, ShieldAlert, ImageIcon, Lock, Unlock, Users, Fingerprint, Clock, Workflow, UserPlus, Globe, History, Download, Loader2 } from 'lucide-react';
+import { X, ShieldAlert, ImageIcon, Lock, Unlock, Users, Fingerprint, Clock, Workflow, UserPlus, Globe, History, Download, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 // Layout & Components
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
-import AiAssistant from './components/AiAssistant';
-import DocsView from './components/DocsView';
 import CommandMenu from './components/ui/CommandMenu';
 import OnboardingTour from './components/layout/OnboardingTour';
+import Toaster from './components/ui/Toaster';
+import ErrorBoundary from './components/ui/ErrorBoundary';
+import ProgressBar from './components/ui/ProgressBar';
+import ShortcutsOverlay from './components/ui/ShortcutsOverlay';
+import NotificationsSheet from './components/layout/NotificationsSheet';
+import RouteFallback from './components/ui/RouteFallback';
+import { Input, Select, Label } from './components/ui/Input';
+import useTabAwareness from './lib/useTabAwareness';
+import { toast } from './store/useToastStore';
 
-// Pages
+// Pages — eager on the critical render path, lazy for heavy/secondary views.
+// Dashboard + Login + Identities are the cold-start fast paths.
 import Dashboard from './pages/Dashboard';
-import Topology from './pages/Topology';
 import Identities from './pages/Identities';
-import DarkRecon from './pages/DarkRecon';
-import Audit from './pages/Audit';
 import Login from './pages/Login';
 
-const NotificationItem = ({ alert, onAck }) => (
-  <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all cursor-pointer relative overflow-hidden">
-    <div className="flex gap-4">
-      <div className={`p-2 rounded-lg ${alert.severity_score >= 80 ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}`}>
-        {alert.severity_score >= 80 ? <ShieldAlert size={16} /> : <Zap size={16} />}
-      </div>
-      <div className="flex-1 space-y-1">
-        <div className="flex justify-between items-start">
-          <p className={`text-xs font-semibold ${alert.severity_score >= 80 ? 'text-red-400' : 'text-blue-400'}`}>
-            {alert.severity_score >= 80 ? 'Critical Breach' : 'Intelligence Match'}
-          </p>
-          {alert.acknowledged_at ? (
-            <span className="text-[10px] text-zinc-600">Acknowledged</span>
-          ) : (
-            <span className="text-[10px] text-zinc-500">{new Date(alert.discovered_at).toLocaleTimeString()}</span>
-          )}
-        </div>
-        <p className="text-xs text-zinc-400">
-          Artifact identified from <span className="text-zinc-200 font-medium">{alert.source}</span>.
-        </p>
-      </div>
-    </div>
-    {!alert.acknowledged_at && (
-      <button
-        onClick={(e) => { e.stopPropagation(); onAck(alert.id); }}
-        className="mt-2 w-full py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[11px] text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-all text-center"
-      >
-        Acknowledge
-      </button>
-    )}
-  </div>
-);
+const Topology    = lazy(() => import('./pages/Topology'));
+const DarkRecon   = lazy(() => import('./pages/DarkRecon'));
+const Audit       = lazy(() => import('./pages/Audit'));
+const AiAssistant = lazy(() => import('./components/AiAssistant'));
+const DocsView    = lazy(() => import('./components/DocsView'));
 
 const ScreenshotLightbox = ({ leakId, leaks, onClose }) => {
   const { fetchScreenshot } = useNasoStore();
@@ -132,17 +109,19 @@ export default function App() {
     auditLogs, fetchAuditLogs,
     selectedIdentityInsights, clearSelectedIdentity,
     toggleIdentityProtection,
-    isLoading, systemStatus, fetchSystemStatus, error, clearError,
+    isLoading, systemStatus, fetchSystemStatus,
     addIdentity, updateProfile,
     graphData, fetchGraphData,
     isAuthenticated, logout
   } = useNasoStore();
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [viewingScreenshotId, setViewingScreenshotId] = useState(null);
   const [reconQuery, setReconQuery] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // UI state for modals
   const [isAddIdentityOpen, setIsAddIdentityOpen] = useState(false);
@@ -151,6 +130,84 @@ export default function App() {
 
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [editProfileEmailState, setEditProfileEmailState] = useState('');
+  const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  const unacknowledgedCritical = leaks.filter(l => l.severity_score >= 80 && !l.acknowledged_at).length;
+
+  useTabAwareness({ unacknowledged: unacknowledgedCritical, online });
+
+  // Connection-state banner + toast. Fires once on transition, not per event.
+  useEffect(() => {
+    const handleOnline = () => { setOnline(true); toast.success('Connection restored', 'Intelligence feed resumed.'); };
+    const handleOffline = () => { setOnline(false); toast.warning('Connection lost', 'NASO is operating from cached data.'); };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Close the mobile sidebar when the route changes (tap-through from drawer).
+  useEffect(() => { setIsSidebarOpen(false); }, [location.pathname]);
+
+  // Allow deep-link triggers from the command palette and insight chips.
+  useEffect(() => {
+    const onAddIdentity = () => setIsAddIdentityOpen(true);
+    const onOpenNotifications = () => setIsNotificationsOpen(true);
+    window.addEventListener('naso:add-identity', onAddIdentity);
+    window.addEventListener('naso:open-notifications', onOpenNotifications);
+    return () => {
+      window.removeEventListener('naso:add-identity', onAddIdentity);
+      window.removeEventListener('naso:open-notifications', onOpenNotifications);
+    };
+  }, []);
+
+  // Power-user keyboard shortcuts. G-prefix Vim-style (g d → /, g t → /topology),
+  // plus N for notifications. Ignored while typing in an input.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let gPending = false;
+    let gTimer = null;
+
+    const clearG = () => {
+      gPending = false;
+      if (gTimer) { clearTimeout(gTimer); gTimer = null; }
+    };
+
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+
+      const k = e.key.toLowerCase();
+
+      if (gPending) {
+        const ROUTES = { d: '/', t: '/topology', i: '/identities', r: '/dark-search', a: '/audit' };
+        const target = ROUTES[k];
+        if (target) {
+          e.preventDefault();
+          navigate(target);
+        }
+        clearG();
+        return;
+      }
+
+      if (k === 'g') {
+        gPending = true;
+        gTimer = setTimeout(clearG, 900);
+        return;
+      }
+
+      if (k === 'n') {
+        e.preventDefault();
+        setIsNotificationsOpen(v => !v);
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); clearG(); };
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     fetchLeaks();
@@ -180,70 +237,69 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-black text-zinc-100 overflow-hidden font-sans relative">
+      {/* Skip link — visible only on keyboard focus, jumps past chrome to main content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-[#0A84FF] focus:text-white focus:font-medium focus:text-[13px] focus:shadow-xl"
+      >
+        Skip to main content
+      </a>
+
       <OnboardingTour />
       <CommandMenu />
-      <Sidebar onEditProfile={() => setIsEditProfileOpen(true)} />
+      <Sidebar
+        onEditProfile={() => setIsEditProfileOpen(true)}
+        open={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
-      <main className="flex-1 flex flex-col relative overflow-hidden bg-black">
-        <Header systemStatus={systemStatus} onOpenNotifications={() => setIsNotificationsOpen(true)} />
+      <main id="main-content" role="main" aria-label="Main content" className="flex-1 flex flex-col relative overflow-hidden bg-black min-w-0">
+        <Header
+          systemStatus={systemStatus}
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          onOpenSidebar={() => setIsSidebarOpen(true)}
+          onOpenCommandMenu={() => window.dispatchEvent(new CustomEvent('naso:open-command'))}
+          online={online}
+        />
 
         {isFullHeightView ? (
           <div className="flex-1 overflow-hidden">
-            <Routes>
-              <Route path="/ai-analyst" element={<AiAssistant />} />
-              <Route path="/docs" element={<DocsView />} />
-            </Routes>
+            <ErrorBoundary label={location.pathname === '/ai-analyst' ? 'AI Co-Analyst' : 'Docs'}>
+              <Suspense fallback={<div className="p-8"><RouteFallback /></div>}>
+                <Routes>
+                  <Route path="/ai-analyst" element={<AiAssistant />} />
+                  <Route path="/docs" element={<DocsView />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-8 relative scrollbar-hide">
-            <div className="max-w-[1600px] mx-auto">
-              <Routes>
-                <Route path="/" element={<Dashboard setViewingScreenshotId={setViewingScreenshotId} />} />
-                <Route path="/topology" element={<Topology />} />
-                <Route path="/identities" element={<Identities openAddModal={() => setIsAddIdentityOpen(true)} />} />
-                <Route path="/dark-search" element={<DarkRecon reconQuery={reconQuery} setReconQuery={setReconQuery} />} />
-                <Route path="/audit" element={<Audit />} />
-              </Routes>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 relative scrollbar-hide">
+            <div key={location.pathname} className="max-w-[1600px] mx-auto animate-route">
+              <ErrorBoundary label={`Route ${location.pathname}`}>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard setViewingScreenshotId={setViewingScreenshotId} />} />
+                    <Route path="/topology" element={<ErrorBoundary label="Neural Topology"><Topology /></ErrorBoundary>} />
+                    <Route path="/identities" element={<Identities openAddModal={() => setIsAddIdentityOpen(true)} />} />
+                    <Route path="/dark-search" element={<DarkRecon reconQuery={reconQuery} setReconQuery={setReconQuery} />} />
+                    <Route path="/audit" element={<Audit />} />
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
             </div>
           </div>
         )}
       </main>
 
       {/* Side Sheets & Dialogs */}
-      <Sheet open={isNotificationsOpen} onOpenChange={setIsNotificationsOpen}>
-        <SheetContent className="w-[400px] sm:w-[480px] bg-[#1C1C1E]/95 backdrop-blur-3xl border-l border-white/[0.08] p-0 shadow-2xl">
-          <SheetHeader className="p-6 border-b border-white/[0.08]">
-            <div className="flex items-center justify-between">
-                <SheetTitle className="text-[17px] font-semibold tracking-tight text-white flex items-center gap-3">
-                  <div className="p-1.5 bg-[#FF453A]/10 rounded-lg"><Zap className="text-[#FF453A]" size={16} strokeWidth={1.5} /></div>
-                  Intelligence Alerts
-                </SheetTitle>
-                <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-[#FF453A]/10">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#FF453A] animate-pulse"></div>
-                    <span className="text-[11px] font-medium text-[#FF453A]">Live</span>
-                </div>
-            </div>
-            <SheetDescription className="text-[12px] text-zinc-500 mt-1">Critical artifacts identified in the last 24h.</SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto p-5 space-y-3 scrollbar-hide">
-            {leaks.filter(l => l.severity_score >= 80).map(alert => <NotificationItem key={alert.id} alert={alert} onAck={acknowledgeLeak} />)}
-            {leaks.filter(l => l.severity_score >= 80).length === 0 && (
-                 <div className="h-48 flex flex-col items-center justify-center text-zinc-600 gap-4">
-                    <ShieldCheck size={36} className="text-[#32D74B]" strokeWidth={1.5} />
-                    <p className="text-[13px] font-medium text-zinc-500">No critical threats identified</p>
-                 </div>
-            )}
-          </div>
-          <div className="p-5 border-t border-white/[0.08]">
-            <Button
-              className="w-full h-10 font-medium text-[13px] bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full"
-              onClick={() => acknowledgeAllLeaks()}
-            >
-              Mark All as Resolved
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <NotificationsSheet
+        open={isNotificationsOpen}
+        onOpenChange={setIsNotificationsOpen}
+        leaks={leaks}
+        acknowledgeLeak={acknowledgeLeak}
+        acknowledgeAllLeaks={acknowledgeAllLeaks}
+      />
 
       <Dialog open={!!selectedIdentityInsights} onOpenChange={clearSelectedIdentity}>
         <DialogContent className="max-w-3xl bg-[#1C1C1E]/95 backdrop-blur-3xl border-white/[0.08] overflow-hidden p-0 rounded-2xl shadow-2xl">
@@ -344,27 +400,27 @@ export default function App() {
           </DialogHeader>
           <div className="p-6 space-y-5">
             <div>
-              <label className="text-[12px] font-medium text-zinc-400 block mb-2">Identifier / Keyword</label>
-              <input 
-                type="text" 
+              <Label htmlFor="id-identifier">Identifier / Keyword</Label>
+              <Input
+                id="id-identifier"
                 value={newIdentityIdentifier}
                 onChange={e => setNewIdentityIdentifier(e.target.value)}
                 placeholder="e.g. j.doe@corp.com or handle123"
-                className="w-full bg-black/40 border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white placeholder:text-zinc-600 focus:border-[#0A84FF]/50 focus:outline-none transition-colors"
+                autoFocus
               />
             </div>
             <div>
-              <label className="text-[12px] font-medium text-zinc-400 block mb-2">Asset Type</label>
-              <select 
+              <Label htmlFor="id-type">Asset Type</Label>
+              <Select
+                id="id-type"
                 value={newIdentityType}
                 onChange={e => setNewIdentityType(e.target.value)}
-                className="w-full bg-black/40 border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:border-[#0A84FF]/50 focus:outline-none transition-colors appearance-none"
               >
                 <option value="person">Person (Email / Name)</option>
                 <option value="organization">Organization (Domain)</option>
                 <option value="crypto">Cryptocurrency Wallet</option>
                 <option value="credential">Infrastructure Credential</option>
-              </select>
+              </Select>
             </div>
           </div>
           <div className="flex justify-end gap-3 px-6 pb-6">
@@ -392,12 +448,14 @@ export default function App() {
           </DialogHeader>
           <div className="p-6 space-y-5">
             <div>
-              <label className="text-[12px] font-medium text-zinc-400 block mb-2">Email Address</label>
-              <input 
-                type="email" 
+              <Label htmlFor="profile-email">Email Address</Label>
+              <Input
+                id="profile-email"
+                type="email"
                 value={editProfileEmailState}
                 onChange={e => setEditProfileEmailState(e.target.value)}
-                className="w-full bg-black/40 border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:border-[#0A84FF]/50 focus:outline-none transition-colors"
+                autoFocus
+                autoComplete="email"
               />
             </div>
           </div>
@@ -417,20 +475,9 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Error Toast ── */}
-      {error && (
-        <div className="fixed bottom-6 right-6 p-4 pr-10 rounded-lg bg-red-950/80 border border-red-500/20 shadow-lg flex items-center gap-3 animate-fade-in z-50">
-          <ShieldAlert className="text-red-400 shrink-0" size={16} />
-          <span className="text-[12px] font-medium text-red-200">{error}</span>
-          <button 
-            onClick={clearError}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-          >
-            <X size={13} />
-          </button>
-        </div>
-      )}
-
+      <ProgressBar />
+      <ShortcutsOverlay />
+      <Toaster />
     </div>
   );
 }

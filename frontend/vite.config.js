@@ -13,6 +13,36 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Keep React + router in one stable chunk.
+          react: ['react', 'react-dom', 'react-router-dom'],
+          // Heavy viz libs — loaded with their respective routes.
+          graph: ['react-force-graph-2d'],
+          charts: ['recharts'],
+          // Radix primitives cluster.
+          radix: [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-scroll-area',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-avatar',
+            '@radix-ui/react-slot',
+          ],
+          markdown: ['react-markdown'],
+          // react-syntax-highlighter pulls in Prism + grammars; keep it isolated
+          // so it only ships when the AI Co-Analyst renders a fenced code block.
+          syntax: ['react-syntax-highlighter'],
+          tour: ['react-joyride'],
+        },
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{js,jsx}"],

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import axios from 'axios';
+import { toast } from './useToastStore';
 
 // Tutti i request axios inviano automaticamente il cookie httpOnly naso_access_token
 axios.defaults.withCredentials = true;
@@ -7,6 +8,7 @@ axios.defaults.withCredentials = true;
 const useNasoStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
+  token: null,
   leaks: [],
   identities: [],
   auditLogs: [],
@@ -257,7 +259,8 @@ const useNasoStore = create((set, get) => ({
     try {
       await axios.post('/auth/logout'); // Il backend cancella il cookie
     } catch { /* ignora errori di rete — il logout locale avviene sempre */ }
-    set({ user: null, isAuthenticated: false, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
+    set({ user: null, isAuthenticated: false, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
+    toast.info('Signed out', 'Session terminated.');
   },
 
   // Leaks Actions
@@ -284,8 +287,10 @@ const useNasoStore = create((set, get) => ({
       get().fetchIdentities();
       get().fetchAuditLogs();
       set({ isLoading: false });
+      toast.success('Identity registered', `${identifier} is now monitored.`);
     } catch (err) {
       set({ error: 'Failed to register identity', isLoading: false });
+      toast.error('Registration failed', 'Could not add identity to the ledger.');
     }
   },
   
@@ -310,8 +315,11 @@ const useNasoStore = create((set, get) => ({
       get().fetchIdentities();
       get().fetchAuditLogs();
       get().fetchGraphData();
+      set({ isLoading: false });
+      toast.success('Auto-merge complete', 'Identity graph reconciled.');
     } catch (err) {
       set({ error: 'Auto-merge failed. Check logs.', isLoading: false });
+      toast.error('Auto-merge failed', 'Correlation engine returned an error.');
     }
   },
 
@@ -338,8 +346,13 @@ const useNasoStore = create((set, get) => ({
       if (get().selectedIdentityInsights?.identity.id === identityId) {
         get().fetchIdentityInsights(identityId);
       }
+      toast.success(
+        isProtected ? 'Marked as VIP' : 'VIP protection removed',
+        isProtected ? 'Asset escalated to protected tier.' : 'Asset returned to standard tier.'
+      );
     } catch (err) {
       set({ error: 'Failed to update identity protection' });
+      toast.error('Update failed', 'Could not change protection tier.');
     }
   },
 
@@ -353,8 +366,12 @@ const useNasoStore = create((set, get) => ({
       const response = await axios.get('/leaks/recon/darkweb', { params: { q: query.trim() } });
       set({ darkWebResults: response.data, isLoading: false });
       get().fetchAuditLogs();
+      const n = response.data?.length ?? 0;
+      if (n > 0) toast.success('Probe complete', `${n} artifact${n === 1 ? '' : 's'} intercepted.`);
+      else toast.info('Probe complete', 'No dark-web matches for this signature.');
     } catch (err) {
       set({ error: 'Dark Web probe failed — check backend connectivity', isLoading: false });
+      toast.error('Probe failed', 'Tor circuit or Ahmia gateway unreachable.');
     }
   },
 
@@ -403,8 +420,10 @@ const useNasoStore = create((set, get) => ({
       document.body.appendChild(link);
       link.click();
       get().fetchAuditLogs();
+      toast.success('Dossier exported', 'NASO-FULL-DOSSIER.pdf downloaded.');
     } catch (err) {
       set({ error: 'Dossier export failed' });
+      toast.error('Export failed', 'Could not compile the forensic dossier.');
     }
   },
 
@@ -417,8 +436,10 @@ const useNasoStore = create((set, get) => ({
       await axios.put('/users/me', { email });
       get().fetchAuditLogs();
       set({ isLoading: false });
+      toast.success('Profile updated', 'Operator credentials saved.');
     } catch (err) {
       set({ error: 'Profile update failed', isLoading: false });
+      toast.error('Update failed', 'Could not save profile changes.');
     }
   },
 
@@ -500,8 +521,10 @@ const useNasoStore = create((set, get) => ({
           l.id === leakId ? { ...l, acknowledged_at: new Date().toISOString() } : l
         )
       }));
+      toast.success('Alert acknowledged');
     } catch {
       set({ error: 'Failed to acknowledge alert' });
+      toast.error('Acknowledge failed');
     }
   },
 
@@ -521,9 +544,12 @@ const useNasoStore = create((set, get) => ({
           acknowledgedIds.has(l.id) ? { ...l, acknowledged_at: now } : l
         )
       }));
-      return res.data.acknowledged_count;
+      const n = res.data?.acknowledged_count ?? acknowledgedIds.size;
+      toast.success('Alerts resolved', `${n} critical alert${n === 1 ? '' : 's'} acknowledged.`);
+      return n;
     } catch {
       set({ error: 'Failed to acknowledge alerts' });
+      toast.error('Bulk acknowledge failed');
     }
   },
 

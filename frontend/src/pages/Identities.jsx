@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Fingerprint, UserPlus, Workflow } from 'lucide-react';
 import useNasoStore from '../store/useNasoStore';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 const IdentityRow = ({ identity, onDetails }) => (
   <TableRow className="border-b border-white/[0.05] hover:bg-white/[0.03] transition-colors cursor-pointer" onClick={onDetails}>
@@ -74,19 +75,12 @@ export default function Identities({ openAddModal }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {identities.map((id) => (
+            {isLoading && identities.length === 0 ? (
+              <SkeletonTable rows={5} columns={4} widths={['w-40', 'w-20', 'w-48', 'w-20']} />
+            ) : identities.map((id) => (
               <IdentityRow key={id.id} identity={id} onDetails={() => fetchIdentityInsights(id.id)} />
             ))}
-            {isLoading ? (
-                <TableRow>
-                    <TableCell colSpan={4} className="h-40 text-center text-zinc-500 font-mono text-xs uppercase tracking-[0.3em]">
-                       <div className="flex items-center justify-center gap-3">
-                         <div className="w-2 h-2 bg-[#0A84FF] rounded-full animate-ping"></div>
-                         Syncing Identities...
-                       </div>
-                    </TableCell>
-                </TableRow>
-            ) : identities.length === 0 && (
+            {!isLoading && identities.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={4} className="h-48">
                          <div className="flex flex-col items-center justify-center text-zinc-500 gap-4">

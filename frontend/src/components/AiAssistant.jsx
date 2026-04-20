@@ -1,12 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import useNasoStore from '../store/useNasoStore';
+import { toast } from '../store/useToastStore';
+import CodeBlock from './ui/CodeBlock';
+
+// Shared across all ChatBubble renders to avoid re-creating the component map.
+const MARKDOWN_COMPONENTS = { code: CodeBlock };
 import {
   Brain, Plus, Trash2, CheckCircle2, Circle, Clock, ChevronRight,
   Send, Loader2, Zap, Search, Database, Globe, AlertTriangle,
   FileText, X, ChevronDown, ChevronUp, Cpu, Wifi, WifiOff,
-  MoreVertical, Archive, Target, Activity, Shield, Info,
-  ClipboardList, Sparkles, Server, MessageSquare
+  MoreVertical, Archive, Target, Activity, Shield, Info, Copy, Check,
+  ClipboardList, Sparkles, Server, MessageSquare, PanelLeft
 } from 'lucide-react';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,11 +89,24 @@ function ToolCallBadge({ call, result }) {
 
 function ChatBubble({ msg }) {
   const isUser = msg.role === 'user';
-  const isAssistant = msg.role === 'assistant';
   const hasCalls = msg.toolCalls?.length > 0;
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(msg.content || '');
+      setCopied(true);
+      toast.success('Copied to clipboard');
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
+  const showActions = !isUser && !msg.isError && msg.content;
 
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} mb-4`}>
+    <div className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} mb-4`}>
       {/* Avatar */}
       <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold ${
         isUser
@@ -122,7 +140,7 @@ function ChatBubble({ msg }) {
             {isUser || msg.isError ? (
                 msg.content
             ) : (
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <ReactMarkdown components={MARKDOWN_COMPONENTS}>{msg.content}</ReactMarkdown>
             )}
             {msg.role === 'assistant' && !msg.content && !hasCalls && (
               <span className="inline-flex gap-0.5 ml-1">
@@ -131,6 +149,20 @@ function ChatBubble({ msg }) {
                 <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </span>
             )}
+          </div>
+        )}
+
+        {/* Actions — surfaced on hover */}
+        {showActions && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <button
+              onClick={copy}
+              aria-label="Copy message"
+              className="flex items-center gap-1 px-2 h-6 rounded-md text-[10px] text-zinc-500 hover:text-white hover:bg-white/[0.06] transition-colors"
+            >
+              {copied ? <Check size={10} className="text-[#32D74B]" /> : <Copy size={10} strokeWidth={1.8} />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
           </div>
         )}
       </div>
@@ -376,10 +408,12 @@ export default function AiAssistant() {
     chatHistory, sendAiMessage, isAiStreaming, clearChatHistory,
     investigations, fetchInvestigations, activeInvestigationId,
     checkAiHealth, aiStatus, evidencePanel, clearEvidencePanel,
+    leaks, identities,
   } = useNasoStore();
 
   const [input, setInput] = useState('');
   const [showEvidence, setShowEvidence] = useState(true);
+  const [mobilePanel, setMobilePanel] = useState(null); // 'plans' | 'evidence' | null
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const activePlan = investigations.find(p => p.id === activeInvestigationId);
@@ -407,18 +441,40 @@ export default function AiAssistant() {
     }
   };
 
-  const STARTERS = [
-    'Find all critical breaches discovered this week',
-    'Investigate identity john@example.com',
-    'Search dark web for leaked credentials',
-    'Create an investigation plan for a phishing campaign',
-  ];
+  // Contextual starters: promote the most useful prompts given current state.
+  // If there are unacknowledged critical leaks, suggest triage first.
+  // If a high-risk VIP exists, suggest deep-diving it.
+  const STARTERS = useMemo(() => {
+    const unackCrit = (leaks || []).filter(l => l.severity_score >= 80 && !l.acknowledged_at);
+    const highRiskVip = (identities || []).find(i => i.is_protected && (i.risk_score ?? 0) >= 70);
+    const topSource = (() => {
+      if (!leaks?.length) return null;
+      const counts = {};
+      leaks.forEach(l => { const k = (l.source || '').split(':')[0]; if (k) counts[k] = (counts[k] || 0) + 1; });
+      const entry = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      return entry ? entry[0] : null;
+    })();
+
+    const out = [];
+    if (unackCrit.length > 0) {
+      out.push(`Triage the ${unackCrit.length} unacknowledged critical breach${unackCrit.length === 1 ? '' : 'es'}`);
+    }
+    if (highRiskVip) {
+      out.push(`Deep-scan VIP asset "${highRiskVip.identifier}" — risk ${highRiskVip.risk_score}`);
+    }
+    if (topSource) {
+      out.push(`Summarize leak activity from ${topSource} this week`);
+    }
+    out.push('Probe the dark web for newly leaked credentials');
+    out.push('Create an investigation plan for a phishing campaign');
+    return out.slice(0, 4);
+  }, [leaks, identities]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden relative">
 
-      {/* ── Left: Investigation Plans ─────────────────────────────── */}
-      <div className="w-[240px] flex-shrink-0 border-r border-white/[0.06] flex flex-col">
+      {/* ── Left: Investigation Plans — hidden below lg ─────────────── */}
+      <div className="hidden lg:flex w-[240px] flex-shrink-0 border-r border-white/[0.06] flex-col">
         <InvestigationPanel />
       </div>
 
@@ -426,14 +482,22 @@ export default function AiAssistant() {
       <div className="flex-1 flex flex-col min-w-0">
 
         {/* Chat header */}
-        <div className="px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded-xl bg-[#0A84FF]/10 border border-[#0A84FF]/20">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0 gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Mobile: plans toggle */}
+            <button
+              onClick={() => setMobilePanel('plans')}
+              aria-label="Open investigations"
+              className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <PanelLeft size={16} strokeWidth={1.8} />
+            </button>
+            <div className="p-1.5 rounded-xl bg-[#0A84FF]/10 border border-[#0A84FF]/20 shrink-0">
               <Brain size={16} strokeWidth={1.5} className="text-[#0A84FF]" />
             </div>
-            <div>
-              <p className="text-[14px] font-semibold text-white">NASO Co-Analyst</p>
-              <div className="flex items-center gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold text-white truncate">NASO Co-Analyst</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {aiStatus === 'online'
                   ? <><Wifi size={10} className="text-[#32D74B]" /><span className="text-[10px] text-[#32D74B]">AI online</span></>
                   : aiStatus === 'offline'
@@ -449,18 +513,29 @@ export default function AiAssistant() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
-              onClick={() => setShowEvidence(s => !s)}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06] transition-colors flex items-center gap-1.5"
+              onClick={() => {
+                setShowEvidence(s => !s);
+                setMobilePanel(p => p === 'evidence' ? null : 'evidence');
+              }}
+              className="hidden sm:flex px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06] transition-colors items-center gap-1.5"
             >
               <Activity size={12} strokeWidth={1.5} />
               Evidence {showEvidence ? 'on' : 'off'}
             </button>
             <button
+              onClick={() => setMobilePanel('evidence')}
+              aria-label="Open evidence panel"
+              className="sm:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Activity size={14} strokeWidth={1.8} />
+            </button>
+            <button
               onClick={clearChatHistory}
               className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.06] transition-colors"
               title="Clear chat"
+              aria-label="Clear chat"
             >
               <Trash2 size={13} strokeWidth={1.5} />
             </button>
@@ -538,9 +613,9 @@ export default function AiAssistant() {
         </div>
       </div>
 
-      {/* ── Right: Evidence panel ─────────────────────────────────── */}
+      {/* ── Right: Evidence panel — hidden below sm ───────────────── */}
       {showEvidence && (
-        <div className="w-[260px] flex-shrink-0 border-l border-white/[0.06] flex flex-col">
+        <div className="hidden sm:flex w-[240px] md:w-[260px] flex-shrink-0 border-l border-white/[0.06] flex-col">
           <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity size={14} strokeWidth={1.5} className="text-zinc-400" />
@@ -564,6 +639,52 @@ export default function AiAssistant() {
             ) : (
               evidencePanel.map((item, i) => <EvidenceCard key={i} item={item} />)
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile bottom-sheet overlay for plans / evidence ─────── */}
+      {mobilePanel && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 flex items-end bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobilePanel(null)}
+        >
+          <div
+            className="w-full max-h-[80vh] bg-[#1C1C1E] border-t border-white/[0.08] rounded-t-3xl overflow-hidden flex flex-col animate-sheet-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2">
+                {mobilePanel === 'plans'
+                  ? <><ClipboardList size={14} className="text-zinc-400" /><span className="text-[13px] font-semibold text-white">Investigations</span></>
+                  : <><Activity size={14} className="text-zinc-400" /><span className="text-[13px] font-semibold text-white">Evidence</span></>}
+              </div>
+              <button
+                onClick={() => setMobilePanel(null)}
+                aria-label="Close panel"
+                className="p-1 rounded-md text-zinc-500 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {mobilePanel === 'plans' ? (
+                <InvestigationPanel />
+              ) : (
+                <div className="flex-1 overflow-y-auto p-3">
+                  {evidencePanel.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 gap-3 text-center">
+                      <Database size={20} strokeWidth={1} className="text-zinc-700" />
+                      <p className="text-[11px] text-zinc-600">
+                        Tool results and evidence will appear here as the AI gathers intelligence.
+                      </p>
+                    </div>
+                  ) : (
+                    evidencePanel.map((item, i) => <EvidenceCard key={i} item={item} />)
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

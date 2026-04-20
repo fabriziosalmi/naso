@@ -1,13 +1,35 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { forwardRef, useRef, useEffect, useState, useMemo, useCallback, useImperativeHandle } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 
 const EMPTY_GRAPH = { nodes: [], links: [] };
 
-const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
+const NetworkGraphPro = forwardRef(function NetworkGraphPro({ data, isLoading, onNodeClick, highlightNodeId }, ref) {
   const fgRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [hoverNode, setHoverNode] = useState(null);
+
+  // Expose imperative zoom controls to parent toolbar. We also forward a
+  // lowercase-named `current` field so the minimap can reach centerAt +
+  // screen2GraphCoords without us re-wrapping each method.
+  useImperativeHandle(ref, () => ({
+    zoomBy: (factor) => {
+      const fg = fgRef.current;
+      if (!fg) return;
+      const current = fg.zoom();
+      fg.zoom(current * factor, 280);
+    },
+    fit: () => fgRef.current?.zoomToFit(420, 60),
+    centerOn: (node) => {
+      const fg = fgRef.current;
+      if (!fg || !node || node.x === undefined) return;
+      fg.centerAt(node.x, node.y, 600);
+      fg.zoom(3, 600);
+    },
+    centerAt: (x, y, ms) => fgRef.current?.centerAt(x, y, ms),
+    screen2GraphCoords: (x, y) => fgRef.current?.screen2GraphCoords?.(x, y),
+    graph2ScreenCoords: (x, y) => fgRef.current?.graph2ScreenCoords?.(x, y),
+  }), []);
 
   // Measure container and update on resize
   useEffect(() => {
@@ -40,8 +62,7 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
   // Compute Degree Centrality and Neighbors
   const graphData = useMemo(() => {
     const gData = (data?.nodes?.length > 0) ? data : EMPTY_GRAPH;
-    
-    // Reset properties to avoid stale data between scans
+
     gData.nodes.forEach(node => {
       node.neighbors = [];
       node.links = [];
@@ -51,7 +72,7 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
     gData.links.forEach(link => {
       const a = gData.nodes.find(n => n.id === link.source?.id || n.id === link.source);
       const b = gData.nodes.find(n => n.id === link.target?.id || n.id === link.target);
-      
+
       if (a && b) {
         a.neighbors.push(b);
         b.neighbors.push(a);
@@ -65,27 +86,40 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
     return gData;
   }, [data]);
 
+  // Resolve an external highlight (from search) to a live node so we can center + glow it.
+  const highlightedNode = useMemo(() => {
+    if (!highlightNodeId) return null;
+    return graphData.nodes.find(n => n.id === highlightNodeId) || null;
+  }, [highlightNodeId, graphData]);
+
+  useEffect(() => {
+    if (highlightedNode) {
+      const fg = fgRef.current;
+      if (fg && highlightedNode.x !== undefined) {
+        fg.centerAt(highlightedNode.x, highlightedNode.y, 600);
+        fg.zoom(3, 600);
+      }
+    }
+  }, [highlightedNode]);
+
   const isEmpty = graphData.nodes.length === 0;
 
   // --- Rendering Helpers ---
   const getNodeColorBase = useCallback((node) => {
     if (node.type === 'leak') {
-      return node.risk >= 80 ? '255, 69, 58' : '255, 159, 10'; // Red : Orange
+      return node.risk >= 80 ? '255, 69, 58' : '255, 159, 10';
     }
-    return node.isProtected ? '255, 214, 10' : '10, 132, 255'; // Yellow : Blue
+    return node.isProtected ? '255, 214, 10' : '10, 132, 255';
   }, []);
 
   const getNodeSize = useCallback((node) => {
     const base = node.type === 'leak' ? 5 : 3;
-    // Centrality scaling: +0.5 per connection, max +8
     const scaling = Math.min((node.degree || 0) * 0.5, 8);
     return base + scaling;
   }, []);
 
   const handleNodeHover = useCallback((node) => {
     setHoverNode(node || null);
-    
-    // Change cursor dynamically
     if (containerRef.current) {
       containerRef.current.style.cursor = node ? 'pointer' : 'grab';
     }
@@ -104,7 +138,7 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
       </div>
 
       {/* Color Legend */}
-      <div className="absolute bottom-4 left-5 z-10 flex gap-5 pointer-events-none">
+      <div className="absolute bottom-4 left-5 z-10 flex flex-wrap gap-x-5 gap-y-2 pointer-events-none">
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-[#0A84FF]"></div>
           <span className="text-[11px] font-medium text-zinc-500">Identity</span>
@@ -126,7 +160,7 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
       {/* Node count badge */}
       {!isEmpty && (
         <div className="absolute top-4 right-5 z-10 px-3 py-1 rounded-full bg-white/[0.06] border border-white/[0.08]">
-          <span className="text-[11px] font-medium text-zinc-400">
+          <span className="text-[11px] font-medium text-zinc-400 font-mono">
             {graphData.nodes.length} nodes · {graphData.links.length} links
           </span>
         </div>
@@ -145,7 +179,7 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
           </svg>
           <div className="text-center">
             <p className="text-[14px] font-medium text-zinc-500">No topology data</p>
-            <p className="text-[12px] text-zinc-600 mt-1">Add identities or click Re-Scan to populate the graph</p>
+            <p className="text-[12px] text-zinc-600 mt-1">Adjust the filters or click Re-Scan to populate the graph</p>
           </div>
         </div>
       ) : (
@@ -172,11 +206,13 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
           nodeCanvasObject={(node, ctx, globalScale) => {
             const size = getNodeSize(node);
             const rgb = getNodeColorBase(node);
-            
+
+            const isSearchHit = highlightedNode && node.id === highlightedNode.id;
+
             // Focus mode dynamics
             let opacity = 1.0;
             let isHighlight = false;
-            
+
             if (hoverNode) {
               if (node === hoverNode) {
                 isHighlight = true;
@@ -184,15 +220,17 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
                 isHighlight = true;
                 opacity = 0.8;
               } else {
-                opacity = 0.15; // Dim non-neighbors heavily
+                opacity = 0.15;
               }
             }
 
-            // Glow ring for highlighted or normal nodes
-            if (!hoverNode || isHighlight) {
+            // Glow ring
+            if (!hoverNode || isHighlight || isSearchHit) {
               ctx.beginPath();
-              ctx.arc(node.x, node.y, size + (isHighlight ? 4 : 3), 0, 2 * Math.PI, false);
-              ctx.fillStyle = `rgba(${rgb}, ${isHighlight ? 0.3 : 0.12})`;
+              ctx.arc(node.x, node.y, size + (isSearchHit ? 6 : isHighlight ? 4 : 3), 0, 2 * Math.PI, false);
+              ctx.fillStyle = isSearchHit
+                ? `rgba(255, 255, 255, 0.35)`
+                : `rgba(${rgb}, ${isHighlight ? 0.3 : 0.12})`;
               ctx.fill();
             }
 
@@ -202,14 +240,14 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
             ctx.fillStyle = `rgba(${rgb}, ${opacity})`;
             ctx.fill();
 
-            // Render Labels at specific zoom or if highlighted
-            if (globalScale > 2.5 || isHighlight) {
+            // Labels: render above 1.6× zoom, or if highlighted/search hit
+            if (globalScale > 1.6 || isHighlight || isSearchHit) {
               const label = node.label?.length > 25 ? node.label.slice(0, 25) + '…' : node.label;
-              const fontSize = Math.min(12 / globalScale, isHighlight ? 5 : 4);
-              ctx.font = `${isHighlight ? 'bold ' : ''}${fontSize}px -apple-system, sans-serif`;
+              const fontSize = Math.min(12 / globalScale, isHighlight || isSearchHit ? 6 : 5);
+              ctx.font = `${isHighlight || isSearchHit ? 'bold ' : ''}${fontSize}px -apple-system, sans-serif`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'top';
-              ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.9})`;
+              ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.92})`;
               ctx.fillText(label, node.x, node.y + size + 2);
             }
           }}
@@ -217,6 +255,6 @@ const NetworkGraphPro = ({ data, isLoading, onNodeClick }) => {
       )}
     </div>
   );
-};
+});
 
 export default NetworkGraphPro;
