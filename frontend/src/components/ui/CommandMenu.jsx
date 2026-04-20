@@ -21,6 +21,7 @@ export default function CommandMenu() {
   const triggerIdentityMerging = useNasoStore(s => s.triggerIdentityMerging);
   const fetchAuditLogs = useNasoStore(s => s.fetchAuditLogs);
   const fetchMergePreview = useNasoStore(s => s.fetchMergePreview);
+  const openMergePreviewDrawer = useNasoStore(s => s.openMergePreviewDrawer);
   const verifyAuditChain = useNasoStore(s => s.verifyAuditChain);
 
   useEffect(() => {
@@ -141,20 +142,13 @@ export default function CommandMenu() {
               <Item
                 icon={GitMerge}
                 iconClass="text-[#0A84FF]"
-                keywords={["merge", "preview", "dry-run", "candidates"]}
-                onSelect={async () => {
+                keywords={["merge", "preview", "dry-run", "candidates", "drawer"]}
+                onSelect={() => {
                   close();
-                  const preview = await fetchMergePreview();
-                  if (!preview) return;
-                  const n = preview.count ?? 0;
-                  if (n === 0) {
-                    toast.info('Merge preview ready', 'No merge candidates found.');
-                  } else {
-                    toast.info(
-                      'Merge preview ready',
-                      `${n} candidate${n === 1 ? '' : 's'} clear the confidence threshold — review on the Identities page before triggering.`
-                    );
-                  }
+                  // Opening the drawer kicks off fetchMergePreview inside
+                  // the store action, so the UI shows a spinner then the
+                  // list — no extra toast needed.
+                  openMergePreviewDrawer();
                 }}
               >
                 Preview auto-merge candidates

@@ -329,16 +329,32 @@ async def execute_tool(
             query = tool_args.get("query", "")
             if not query:
                 return {"tool": tool_name, "error": "Query required"}
-            results = await DarkWebSearchService.search_onion_links(query)
+            # Use the report variant so we can surface `cached` and the
+            # NEWNYM rotation outcome to both the audit log and the OTel
+            # span on this tool call. The legacy flat list loses both.
+            report = await DarkWebSearchService.search_with_report(query)
+            results = [r.as_dict() for r in report.results]
             await AuditLogger.log(
                 db,
                 user_id=current_user.id,
                 tenant_id=current_user.tenant_id,
                 action="AI_DARK_WEB_PROBE",
-                details={"query": query, "count": len(results)},
+                details={
+                    "query": query,
+                    "count": len(results),
+                    "cached": report.cached,
+                    "pages_fetched": report.pages_fetched,
+                },
             )
             await db.commit()
-            return {"tool": tool_name, "query": query, "count": len(results), "data": results[:10]}
+            return {
+                "tool": tool_name,
+                "query": query,
+                "count": len(results),
+                "data": results[:10],
+                "cached": report.cached,
+                "pages_fetched": report.pages_fetched,
+            }
 
         # ───── get_identity_insights ──────────────────────────────────────
         if tool_name == "get_identity_insights":

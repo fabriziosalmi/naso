@@ -55,6 +55,7 @@ from typing import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.domain.services.ai_toolkit import NASO_TOOLS, execute_tool
+from shared.utils.tracing import agent_turn_span, annotate_result, tool_span
 
 logger = logging.getLogger("naso-ai-agent")
 
@@ -99,97 +100,115 @@ async def run_agent_loop(
     every tool result, so the caller can inspect the full trace after the
     generator is exhausted.
     """
+    tenant_id = getattr(current_user, "tenant_id", None)
+    user_id = getattr(current_user, "id", None)
+
     for iteration in range(max_iterations):
-        try:
-            completion = await llm_call(messages)
-        except Exception as exc:
-            logger.error("LLM call failed at iteration %d: %s", iteration, exc)
-            yield {"type": "error", "message": f"LLM error: {exc}"}
-            return
-
-        choice = completion.get("choices", [{}])[0]
-        message = choice.get("message", {}) or {}
-        tool_calls = message.get("tool_calls") or []
-
-        # ───── Terminal case: no tool calls → emit final text ────────────
-        if not tool_calls:
-            content = message.get("content", "") or ""
-            if content:
-                yield {"type": "text", "content": content}
-            return
-
-        # ───── Tool-calling case ─────────────────────────────────────────
-        # Add the assistant message (which contains the tool_calls payload)
-        # to the trace before executing. The LLM protocol requires the
-        # assistant message + its tool results to appear in order.
-        messages.append(message)
-
-        prepared: list[tuple[str, str, dict]] = []
-        for tc in tool_calls:
-            tc_id = tc.get("id", f"call_{tc.get('function', {}).get('name', 'unknown')}")
-            tc_name = tc.get("function", {}).get("name", "")
+        # Parent span covering the entire iteration. Tool spans opened
+        # inside `_run_tool_with_span` become children automatically via
+        # the current-span context, so dashboards can query "tool spans
+        # under iteration N for tenant X" in one hop.
+        turn_ctx = agent_turn_span(iteration=iteration, tenant_id=tenant_id)
+        with turn_ctx:
             try:
-                tc_args = json.loads(tc.get("function", {}).get("arguments", "{}") or "{}")
-            except json.JSONDecodeError:
-                tc_args = {}
-            prepared.append((tc_id, tc_name, tc_args))
-            yield {"type": "tool_call", "id": tc_id, "name": tc_name, "args": tc_args}
+                completion = await llm_call(messages)
+            except Exception as exc:
+                logger.error("LLM call failed at iteration %d: %s", iteration, exc)
+                yield {"type": "error", "message": f"LLM error: {exc}"}
+                return
 
-        # Execution strategy:
-        #   * No ``session_factory`` supplied (tests, legacy callers) — run
-        #     sequentially on the shared ``db`` session. Deterministic and
-        #     safe but misses the latency win when the LLM asks for many
-        #     tools at once.
-        #   * ``session_factory`` supplied + ≥2 tools — run in parallel,
-        #     each tool on its own session via ``asyncio.gather``. Audit
-        #     writes are serialized per-tenant by the lock inside
-        #     ``audit_chain.write_audit``; tool-level transactions are
-        #     independent so a partial failure in one does not poison
-        #     the others.
-        #   * ``session_factory`` supplied + 1 tool — no reason to fan
-        #     out for a single call; reuse the shared session.
-        parallelize = session_factory is not None and len(prepared) > 1
+            choice = completion.get("choices", [{}])[0]
+            message = choice.get("message", {}) or {}
+            tool_calls = message.get("tool_calls") or []
 
-        if parallelize:
-            async def _run_one(tc_id: str, tc_name: str, tc_args: dict):
-                async with session_factory() as fresh_db:
+            # ───── Terminal case: no tool calls → emit final text ────────
+            if not tool_calls:
+                content = message.get("content", "") or ""
+                if content:
+                    yield {"type": "text", "content": content}
+                return
+
+            # ───── Tool-calling case ─────────────────────────────────────
+            # The assistant message (which carries the tool_calls payload)
+            # must appear BEFORE its tool-result messages per the LLM
+            # protocol; the completion order is fixed up below via by_id.
+            messages.append(message)
+
+            prepared: list[tuple[str, str, dict]] = []
+            for tc in tool_calls:
+                tc_id = tc.get("id", f"call_{tc.get('function', {}).get('name', 'unknown')}")
+                tc_name = tc.get("function", {}).get("name", "")
+                try:
+                    tc_args = json.loads(tc.get("function", {}).get("arguments", "{}") or "{}")
+                except json.JSONDecodeError:
+                    tc_args = {}
+                prepared.append((tc_id, tc_name, tc_args))
+                yield {"type": "tool_call", "id": tc_id, "name": tc_name, "args": tc_args}
+
+            # Execution strategy:
+            #   * No ``session_factory`` supplied (tests, legacy callers) —
+            #     sequential on the shared ``db`` session. Deterministic
+            #     and safe but misses the latency win when the LLM asks
+            #     for many tools at once.
+            #   * ``session_factory`` + ≥2 tools — parallel via
+            #     asyncio.gather, fresh session per tool. Audit writes are
+            #     serialized per-tenant by the asyncio.Lock inside
+            #     write_audit; tool-level transactions are independent so
+            #     a partial failure in one does not poison the others.
+            #   * ``session_factory`` + 1 tool — no reason to fan out.
+            parallelize = session_factory is not None and len(prepared) > 1
+
+            async def _run_with_span(
+                tc_id: str, tc_name: str, tc_args: dict, session: AsyncSession
+            ) -> tuple[str, str, dict]:
+                with tool_span(
+                    tc_name,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    investigation_id=investigation_id,
+                    parallel=parallelize,
+                    ai_iteration=iteration,
+                ) as span:
                     res = await execute_tool(
-                        tc_name, tc_args, fresh_db, current_user, investigation_id
+                        tc_name, tc_args, session, current_user, investigation_id
                     )
-                return tc_id, tc_name, res
+                    annotate_result(span, res)
+                    return tc_id, tc_name, res
 
-            results = await asyncio.gather(
-                *[_run_one(i, n, a) for i, n, a in prepared]
-            )
-            # Emit in the original (prepared) order so the SSE stream and
-            # the message-trace match the LLM's tool_call order — not the
-            # (nondeterministic) completion order.
-            by_id = {tc_id: (tc_name, result) for tc_id, tc_name, result in results}
-            for tc_id, tc_name, _ in prepared:
-                result = by_id[tc_id][1]
-                yield {"type": "tool_result", "id": tc_id, "name": tc_name, "data": result}
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "name": tc_name,
-                        "content": json.dumps(result),
-                    }
+            if parallelize:
+                async def _one(tc_id: str, tc_name: str, tc_args: dict):
+                    async with session_factory() as fresh_db:
+                        return await _run_with_span(tc_id, tc_name, tc_args, fresh_db)
+
+                results = await asyncio.gather(
+                    *[_one(i, n, a) for i, n, a in prepared]
                 )
-        else:
-            for tc_id, tc_name, tc_args in prepared:
-                result = await execute_tool(
-                    tc_name, tc_args, db, current_user, investigation_id
-                )
-                yield {"type": "tool_result", "id": tc_id, "name": tc_name, "data": result}
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "name": tc_name,
-                        "content": json.dumps(result),
-                    }
-                )
+                # Emit in prepared order (= LLM tool_call order), not in
+                # completion order which is nondeterministic under gather.
+                by_id = {tc_id: (tc_name, res) for tc_id, tc_name, res in results}
+                for tc_id, tc_name, _ in prepared:
+                    result = by_id[tc_id][1]
+                    yield {"type": "tool_result", "id": tc_id, "name": tc_name, "data": result}
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "name": tc_name,
+                            "content": json.dumps(result),
+                        }
+                    )
+            else:
+                for tc_id, tc_name, tc_args in prepared:
+                    _, _, result = await _run_with_span(tc_id, tc_name, tc_args, db)
+                    yield {"type": "tool_result", "id": tc_id, "name": tc_name, "data": result}
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "name": tc_name,
+                            "content": json.dumps(result),
+                        }
+                    )
 
         # Loop continues — next iteration calls the LLM with the tool
         # results folded into the message trace.

@@ -17,7 +17,9 @@ import ProgressBar from './components/ui/ProgressBar';
 import ShortcutsOverlay from './components/ui/ShortcutsOverlay';
 import NotificationsSheet from './components/layout/NotificationsSheet';
 import RouteFallback from './components/ui/RouteFallback';
+import AuditIntegrityBanner from './components/layout/AuditIntegrityBanner';
 import MergeHistorySection from './components/MergeHistorySection';
+import MergePreviewDrawer from './components/MergePreviewDrawer';
 import { Input, Select, Label } from './components/ui/Input';
 import useTabAwareness from './lib/useTabAwareness';
 import { toast } from './store/useToastStore';
@@ -255,6 +257,7 @@ export default function App() {
       />
 
       <main id="main-content" role="main" aria-label="Main content" className="flex-1 flex flex-col relative overflow-hidden bg-black min-w-0">
+        <AuditIntegrityBanner />
         <Header
           systemStatus={systemStatus}
           onOpenNotifications={() => setIsNotificationsOpen(true)}
@@ -478,6 +481,7 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
+      <MergePreviewDrawer />
       <ProgressBar />
       <ShortcutsOverlay />
       <Toaster />

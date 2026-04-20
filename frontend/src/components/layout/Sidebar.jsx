@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import useNasoStore from '@/store/useNasoStore';
 import {
   Radar, LayoutDashboard, Share2, Fingerprint, Flame, ScrollText, Brain, BookOpen, X,
-  User, LogOut, Keyboard, HelpCircle, ChevronUp, Compass
+  User, LogOut, Keyboard, HelpCircle, ChevronUp, Compass, ShieldCheck
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { TerminalLog } from './TerminalLog';
@@ -59,6 +59,8 @@ function NavItem({ item, onNavigate }) {
 export default function Sidebar({ onEditProfile, open, onClose }) {
   const user = useNasoStore((s) => s.user);
   const logout = useNasoStore((s) => s.logout);
+  const verifyAuditChain = useNasoStore((s) => s.verifyAuditChain);
+  const refreshAuditIntegrity = useNasoStore((s) => s.refreshAuditIntegrity);
   const navigate = useNavigate();
   const role = user?.role;
   const [terminalLogs, setTerminalLogs] = useState([]);
@@ -204,6 +206,18 @@ export default function Sidebar({ onEditProfile, open, onClose }) {
                     onSelect={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}
                   >
                     Keyboard shortcuts
+                  </MenuItem>
+                  <MenuItem
+                    icon={ShieldCheck}
+                    onSelect={async () => {
+                      // Toast feedback (via verifyAuditChain) + refresh the
+                      // banner snapshot so a transition from broken → intact
+                      // actually hides the red bar.
+                      await verifyAuditChain();
+                      await refreshAuditIntegrity({ force: true });
+                    }}
+                  >
+                    Check audit integrity
                   </MenuItem>
                   <MenuItem
                     icon={Compass}

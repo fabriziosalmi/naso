@@ -9,7 +9,11 @@ from sqlalchemy.orm import selectinload
 from shared.database import get_db
 from shared.domain.services.entity_resolution import (
     aggregate_confidence,
+    merge_identities,
     reverse_merge,
+    InsufficientEvidence,
+    CrossTenantMerge,
+    VipInvariantViolation,
 )
 from shared.domain.services.identity_upsert import upsert_identity
 from shared.domain.services.merge_proposer import (
@@ -31,6 +35,15 @@ router = APIRouter()
 
 class ReverseMergeBody(BaseModel):
     reason: str
+
+
+class PairSelection(BaseModel):
+    master_id: str
+    slave_id: str
+
+
+class ExecuteMergesBody(BaseModel):
+    pairs: list[PairSelection]
 
 # ── BUG FIX: /graph MUST be declared before /{identity_id} routes ──
 # FastAPI routes are matched in declaration order. A literal path like /graph
@@ -184,6 +197,102 @@ async def list_recent_merges(
         }
         for e in events
     ]
+
+
+@router.post("/merge/execute")
+async def execute_selected_merges(
+    body: ExecuteMergesBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Merge a caller-selected subset of candidate pairs.
+
+    Evidence is re-derived from the current shared-leak state at execution
+    time rather than taken from the request body — a mid-session ingestion
+    that added or removed a shared leak between two identities should
+    affect the confidence we see when executing. If a pair has no shared
+    leaks (the operator somehow selected something stale), it is reported
+    in ``skipped_no_evidence``; we never fabricate a merge.
+
+    Returns a per-pair outcome dict so the UI can render green/amber rows
+    after execution.
+    """
+    if not body.pairs:
+        return {"merged": [], "skipped_weak": [], "skipped_invariant": [], "skipped_no_evidence": []}
+
+    # Fetch shared-leak pairs for the tenant once; we use this as the
+    # authoritative evidence source.
+    shared_pair_map = await gather_shared_leak_pairs(db, current_user.tenant_id)
+
+    merged: list[dict] = []
+    skipped_weak: list[dict] = []
+    skipped_invariant: list[dict] = []
+    skipped_no_evidence: list[dict] = []
+
+    for pair in body.pairs:
+        master = await db.get(Identity, pair.master_id)
+        slave = await db.get(Identity, pair.slave_id)
+        if master is None or slave is None:
+            skipped_no_evidence.append({"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "identity missing"})
+            continue
+        if master.tenant_id != current_user.tenant_id and current_user.role != "admin":
+            skipped_no_evidence.append({"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "cross-tenant"})
+            continue
+
+        # Canonical-pair lookup ignores order; try both directions.
+        key_a = (pair.master_id, pair.slave_id)
+        key_b = (pair.slave_id, pair.master_id)
+        shared_leaks = shared_pair_map.get(key_a) or shared_pair_map.get(key_b) or shared_pair_map.get(tuple(sorted(key_a)))
+        if not shared_leaks:
+            skipped_no_evidence.append({"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "no shared leaks"})
+            continue
+
+        evidence = [
+            {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
+            for lid in shared_leaks
+        ]
+        try:
+            event = await merge_identities(
+                db, master=master, slave=slave, evidence=evidence, performed_by=current_user.id
+            )
+            merged.append(
+                {
+                    "event_id": event.id,
+                    "master_id": master.id,
+                    "slave_id": slave.id,
+                    "confidence": event.confidence,
+                    "shared_leak_count": len(shared_leaks),
+                }
+            )
+        except InsufficientEvidence:
+            skipped_weak.append({"master_id": master.id, "slave_id": slave.id})
+        except VipInvariantViolation:
+            skipped_invariant.append({"master_id": master.id, "slave_id": slave.id})
+        except CrossTenantMerge:
+            skipped_no_evidence.append({"master_id": master.id, "slave_id": slave.id, "reason": "cross-tenant"})
+
+    if merged:
+        await mark_dirty(db, [m["master_id"] for m in merged])
+
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="EXECUTE_MERGES",
+        details={
+            "merged_count": len(merged),
+            "skipped_weak": len(skipped_weak),
+            "skipped_invariant": len(skipped_invariant),
+            "skipped_no_evidence": len(skipped_no_evidence),
+        },
+    )
+    await db.commit()
+    return {
+        "merged": merged,
+        "skipped_weak": skipped_weak,
+        "skipped_invariant": skipped_invariant,
+        "skipped_no_evidence": skipped_no_evidence,
+    }
 
 
 @router.get("/merge/preview")

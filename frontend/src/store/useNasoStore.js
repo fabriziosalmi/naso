@@ -432,6 +432,45 @@ const useNasoStore = create((set, get) => ({
     }
   },
 
+  executeSelectedMerges: async (pairs) => {
+    const { isAuthenticated } = get();
+    if (!isAuthenticated || !pairs?.length) return null;
+    try {
+      const res = await axios.post('/identities/merge/execute', { pairs });
+      const { merged, skipped_weak, skipped_invariant, skipped_no_evidence } = res.data;
+      const mergedCount = merged?.length ?? 0;
+      const skippedCount =
+        (skipped_weak?.length ?? 0) +
+        (skipped_invariant?.length ?? 0) +
+        (skipped_no_evidence?.length ?? 0);
+
+      if (mergedCount > 0) {
+        toast.success(
+          `${mergedCount} merge${mergedCount === 1 ? '' : 's'} executed`,
+          skippedCount > 0 ? `${skippedCount} pair${skippedCount === 1 ? '' : 's'} skipped — see drawer.` : 'Identity graph reconciled.'
+        );
+      } else if (skippedCount > 0) {
+        toast.warning('No merges executed', `${skippedCount} pair${skippedCount === 1 ? '' : 's'} did not meet the merge criteria.`);
+      }
+
+      // Refresh preview + identities so the UI reflects the new graph.
+      get().fetchMergePreview();
+      get().fetchIdentities();
+      get().fetchRecentMerges();
+      return res.data;
+    } catch (err) {
+      toast.error('Merge execution failed', err?.response?.data?.detail ?? 'Could not execute selected merges.');
+    }
+  },
+
+  // Drawer open/close (controlled from Cmd+K + menu triggers).
+  mergePreviewDrawerOpen: false,
+  openMergePreviewDrawer: async () => {
+    set({ mergePreviewDrawerOpen: true });
+    await get().fetchMergePreview();
+  },
+  closeMergePreviewDrawer: () => set({ mergePreviewDrawerOpen: false }),
+
   reverseMerge: async (eventId, reason) => {
     const { isAuthenticated } = get();
     if (!isAuthenticated) return;
@@ -467,6 +506,44 @@ const useNasoStore = create((set, get) => ({
       return res.data;
     } catch (err) {
       toast.error('Verification failed', 'Could not reach audit verification endpoint.');
+    }
+  },
+
+  // ── Audit integrity banner state ───────────────────────────────────────
+  // Shape: { ok, broken_at, reason, total, tenant_id, checkedAt, error? }.
+  // ``checkedAt`` is the local ``Date.now()`` at fetch time so the 5-minute
+  // TTL check does not depend on a monotonic server clock. ``error`` is
+  // set when the verify endpoint itself errors (network / 500), distinct
+  // from a clean ``ok=false`` answer.
+  auditIntegrity: null,
+  AUDIT_INTEGRITY_TTL_MS: 5 * 60 * 1000,
+
+  refreshAuditIntegrity: async ({ force = false } = {}) => {
+    const { isAuthenticated, auditIntegrity, AUDIT_INTEGRITY_TTL_MS } = get();
+    if (!isAuthenticated) return;
+    if (
+      !force &&
+      auditIntegrity?.checkedAt &&
+      Date.now() - auditIntegrity.checkedAt < AUDIT_INTEGRITY_TTL_MS
+    ) {
+      return auditIntegrity; // TTL cache — background checks on every route change become free.
+    }
+    try {
+      const res = await axios.get('/system/audit/verify');
+      const snapshot = { ...res.data, checkedAt: Date.now(), error: null };
+      set({ auditIntegrity: snapshot });
+      return snapshot;
+    } catch (err) {
+      const snapshot = {
+        ok: null, // null (not false) so the banner can distinguish "unknown" from "broken"
+        broken_at: null,
+        reason: null,
+        total: null,
+        checkedAt: Date.now(),
+        error: err?.message || 'verification request failed',
+      };
+      set({ auditIntegrity: snapshot });
+      return snapshot;
     }
   },
 
