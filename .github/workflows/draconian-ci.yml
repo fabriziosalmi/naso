@@ -40,7 +40,16 @@ jobs:
             backend/requirements.txt
             shared/requirements-shared.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        # backend/requirements.txt embeds ``-r shared/requirements-shared.txt``,
+        # whose path resolves relative to ``backend/`` (where the parent file
+        # lives) — not relative to the workflow CWD. The Dockerfile makes it
+        # work by COPY-ing both into /app/ with the right layout, but the
+        # workflow runs against the source tree. Strip the nested -r and
+        # install the two files explicitly.
+        run: |
+          pip install -r shared/requirements-shared.txt
+          grep -v '^-r ' backend/requirements.txt > /tmp/backend_reqs.txt
+          pip install -r /tmp/backend_reqs.txt
       - name: Run pytest
         env:
           # Tests run against in-memory SQLite via conftest.py; the

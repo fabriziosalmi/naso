@@ -36,9 +36,17 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Audit backend
-        run: pip-audit -r backend/requirements.txt --strict
+        # Same reason as in draconian-ci.yml: backend/requirements.txt has
+        # a nested ``-r shared/requirements-shared.txt`` whose path is
+        # relative to backend/, not the workflow CWD. Strip it and audit
+        # both files independently.
+        run: |
+          grep -v '^-r ' backend/requirements.txt > /tmp/backend_reqs.txt
+          pip-audit -r /tmp/backend_reqs.txt --strict
       - name: Audit workers
-        run: pip-audit -r workers/requirements.txt --strict
+        run: |
+          grep -v '^-r ' workers/requirements.txt > /tmp/worker_reqs.txt
+          pip-audit -r /tmp/worker_reqs.txt --strict
       - name: Audit shared
         run: pip-audit -r shared/requirements-shared.txt --strict
 
@@ -65,7 +73,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        # Tag must exist; aquasecurity/trivy-action's pinning convention is
+        # ``vX.Y.Z``. Last verified at v0.36.0; bump alongside the SARIF
+        # uploader if the schema changes.
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           scan-type: fs
           scan-ref: .
