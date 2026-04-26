@@ -1,11 +1,10 @@
 import ipaddress
+import uuid
 from typing import Optional
 
 import aio_pika
 import orjson
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -17,7 +16,6 @@ from shared.domain.services.darkweb_search import DarkWebSearchService
 from shared.domain.services.shodan_search import ShodanService
 from shared.domain.services.telegram_search import TelegramOSINTService
 from shared.models import LeakHit
-from shared.tasks.pipeline import process_potential_leak
 from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
 

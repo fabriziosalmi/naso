@@ -25,10 +25,11 @@ frequency bonus capped at 100. The difference is *what rows participate*:
 a master's score now reflects every leak reachable through its merge
 cluster, not just the ones it was directly linked to.
 """
+
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +43,7 @@ _FREQUENCY_WEIGHT = 15.0
 
 
 # ─── Pure scoring helper ─────────────────────────────────────────────────────
+
 
 def _score_from_severities(severities: list[int]) -> int:
     """Deterministic formula; 0 severities → 0 score."""
@@ -57,6 +59,7 @@ def _score_from_severities(severities: list[int]) -> int:
 
 # ─── Merge cluster traversal ─────────────────────────────────────────────────
 
+
 async def gather_merged_cluster(db: AsyncSession, root_id: str) -> set[str]:
     """Return ``{root_id}`` ∪ every descendant linked via
     ``Identity.master_identity_id``.
@@ -69,9 +72,7 @@ async def gather_merged_cluster(db: AsyncSession, root_id: str) -> set[str]:
     cluster: set[str] = {root_id}
     frontier: set[str] = {root_id}
     while frontier:
-        stmt = select(Identity.id).where(
-            Identity.master_identity_id.in_(list(frontier))
-        )
+        stmt = select(Identity.id).where(Identity.master_identity_id.in_(list(frontier)))
         children = set((await db.execute(stmt)).scalars().all())
         new = children - cluster
         if not new:
@@ -82,6 +83,7 @@ async def gather_merged_cluster(db: AsyncSession, root_id: str) -> set[str]:
 
 
 # ─── Public API ──────────────────────────────────────────────────────────────
+
 
 async def compute_risk_for_identity(db: AsyncSession, identity_id: str) -> int:
     """Compute the risk score for *identity_id* without persisting it.
@@ -115,11 +117,7 @@ async def mark_dirty(db: AsyncSession, identity_ids: Iterable[str]) -> int:
     ids = [i for i in identity_ids if i]
     if not ids:
         return 0
-    result = await db.execute(
-        update(Identity)
-        .where(Identity.id.in_(ids))
-        .values(risk_score_dirty=True)
-    )
+    result = await db.execute(update(Identity).where(Identity.id.in_(ids)).values(risk_score_dirty=True))
     await db.commit()
     # rowcount is a best-effort hint — SQLite returns the matched-rows count,
     # Postgres returns updated-rows. For our purposes (telemetry, debug log)
@@ -161,9 +159,7 @@ async def recompute_dirty(db: AsyncSession, tenant_id: str, *, limit: int | None
 
     for ident_id, score in scores.items():
         await db.execute(
-            update(Identity)
-            .where(Identity.id == ident_id)
-            .values(risk_score=score, risk_score_dirty=False)
+            update(Identity).where(Identity.id == ident_id).values(risk_score=score, risk_score_dirty=False)
         )
 
     await db.commit()

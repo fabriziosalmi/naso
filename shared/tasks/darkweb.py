@@ -35,6 +35,7 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
         # P-06: allocate the event loop ONCE for the entire crawl job.
         # Creating and tearing down a new loop per page wastes selector init overhead N times.
         import time
+
         loop = asyncio.new_event_loop()
         try:
             while to_visit and pages_crawled < max_pages:
@@ -54,7 +55,9 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                 # passata alla pipeline AI e indicizzata.
                 MAX_CONTENT_BYTES = 1 * 1024 * 1024  # 1 MB
                 if len(content) > MAX_CONTENT_BYTES:
-                    logger.warning(f"[DEEP CRAWL] Content truncated for {url} ({len(content)} bytes > {MAX_CONTENT_BYTES})")
+                    logger.warning(
+                        f"[DEEP CRAWL] Content truncated for {url} ({len(content)} bytes > {MAX_CONTENT_BYTES})"
+                    )
                     content = content[:MAX_CONTENT_BYTES]
 
                 pages_crawled += 1

@@ -13,22 +13,21 @@ masters with stale scores after merges. The rewrite's contract:
     union of its own and its slaves' linked leaks.
   * Reversing a merge re-marks both master and slave dirty.
 """
+
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
 
-from shared.models import Identity, LeakHit, identity_leaks
+from shared.models import LeakHit, identity_leaks
 
 pytest.importorskip("shared.domain.services.risk_scoring_v2", reason="Phase 4 not implemented yet")
+from shared.domain.services.entity_resolution import merge_identities, reverse_merge  # noqa: E402
+from shared.domain.services.identity_upsert import upsert_identity  # noqa: E402
 from shared.domain.services.risk_scoring_v2 import (  # noqa: E402
+    compute_risk_for_identity,
     mark_dirty,
     recompute_dirty,
-    compute_risk_for_identity,
 )
-from shared.domain.services.identity_upsert import upsert_identity  # noqa: E402
-from shared.domain.services.entity_resolution import merge_identities, reverse_merge  # noqa: E402
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,6 +37,7 @@ EV = [{"type": "shared_leak", "leak_id": "demo", "strength": 0.9}]
 
 async def _attach_leak(db, tenant_id, identity, severity, source="test"):
     import uuid as _uuid
+
     leak = LeakHit(
         id=str(_uuid.uuid4()),
         tenant_id=tenant_id,
@@ -47,9 +47,7 @@ async def _attach_leak(db, tenant_id, identity, severity, source="test"):
     )
     db.add(leak)
     await db.flush()
-    await db.execute(
-        identity_leaks.insert().values(identity_id=identity.id, leak_id=leak.id)
-    )
+    await db.execute(identity_leaks.insert().values(identity_id=identity.id, leak_id=leak.id))
     await db.commit()
     return leak
 
@@ -123,9 +121,7 @@ class TestMergeCascade:
         await merge_identities(corr_db, master=master, slave=slave, evidence=EV)
         await recompute_dirty(corr_db, tenant.id)
         await corr_db.refresh(master)
-        assert master.risk_score > pre_merge, (
-            "after merge, master risk must include slave's leaks"
-        )
+        assert master.risk_score > pre_merge, "after merge, master risk must include slave's leaks"
 
 
 class TestBoundedness:

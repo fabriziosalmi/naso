@@ -14,8 +14,8 @@ from shared.database import get_db
 from shared.models import User
 from shared.schemas import Token
 
-from ..deps import oauth2_scheme
 from ...limiter import limiter
+from ..deps import oauth2_scheme
 
 router = APIRouter()
 

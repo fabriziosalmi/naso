@@ -160,8 +160,7 @@ async def ai_chat(
         # one LLM roundtrip. Bypasses both the LLM and the agent loop on
         # hits, so cached responses return in a single SSE chunk.
         semantic_string = orjson.dumps(
-            [{"r": m["role"], "c": m["content"]} for m in messages[1:]]
-            + [str(current_user.tenant_id)]
+            [{"r": m["role"], "c": m["content"]} for m in messages[1:]] + [str(current_user.tenant_id)]
         )
         cache_key = f"ai_cache:{hashlib.sha256(semantic_string).hexdigest()}"
 
@@ -194,9 +193,7 @@ async def ai_chat(
                     resp.raise_for_status()
                     return resp.json()
                 except httpx.ConnectError as exc:
-                    raise RuntimeError(
-                        f"AI engine offline — check LM Studio at {settings.AI_ENDPOINT}"
-                    ) from exc
+                    raise RuntimeError(f"AI engine offline — check LM Studio at {settings.AI_ENDPOINT}") from exc
 
             full_text = ""
             async for event in run_agent_loop(

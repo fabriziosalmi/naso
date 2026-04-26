@@ -23,6 +23,7 @@ The new surface:
   * ``audit_logs.prev_hash``, ``audit_logs.self_hash`` + composite index
   * ``merge_events`` table (append-only ledger with hash chain)
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -65,9 +66,7 @@ def upgrade() -> None:
         if not _has_column("identities", "last_seen"):
             batch.add_column(sa.Column("last_seen", sa.DateTime(timezone=True), server_default=sa.func.now()))
         if not _has_column("identities", "risk_score_dirty"):
-            batch.add_column(
-                sa.Column("risk_score_dirty", sa.Boolean(), nullable=False, server_default=sa.false())
-            )
+            batch.add_column(sa.Column("risk_score_dirty", sa.Boolean(), nullable=False, server_default=sa.false()))
 
     # Backfill normalized_identifier for legacy rows using the SAME rule the
     # Python helper uses (lower + strip). Gmail alias collapsing only kicks in
@@ -95,9 +94,7 @@ def upgrade() -> None:
 
     # Unique constraint — created after backfill so we don't violate it.
     # Use batch_alter_table because SQLite needs a table rebuild to add UNIQUE.
-    existing_uqs = {
-        c["name"] for c in sa.inspect(op.get_bind()).get_unique_constraints("identities")
-    }
+    existing_uqs = {c["name"] for c in sa.inspect(op.get_bind()).get_unique_constraints("identities")}
     if "uq_identities_normalized" not in existing_uqs:
         with op.batch_alter_table("identities") as batch:
             batch.create_unique_constraint(
@@ -154,9 +151,7 @@ def upgrade() -> None:
         op.create_index("ix_merge_events_master_id", "merge_events", ["master_id"])
         op.create_index("ix_merge_events_slave_id", "merge_events", ["slave_id"])
         op.create_index("ix_merge_events_performed_at", "merge_events", ["performed_at"])
-        op.create_index(
-            "ix_merge_events_pair", "merge_events", ["tenant_id", "master_id", "slave_id"]
-        )
+        op.create_index("ix_merge_events_pair", "merge_events", ["tenant_id", "master_id", "slave_id"])
         op.create_index(
             "ix_merge_events_active_slave",
             "merge_events",
@@ -188,9 +183,7 @@ def downgrade() -> None:
             batch.drop_column("normalized_content")
 
     with op.batch_alter_table("identities") as batch:
-        existing_uqs = {
-            c["name"] for c in sa.inspect(op.get_bind()).get_unique_constraints("identities")
-        }
+        existing_uqs = {c["name"] for c in sa.inspect(op.get_bind()).get_unique_constraints("identities")}
         if "uq_identities_normalized" in existing_uqs:
             batch.drop_constraint("uq_identities_normalized", type_="unique")
         if _has_index("identities", "ix_identities_risk_score_dirty"):

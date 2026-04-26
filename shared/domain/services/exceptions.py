@@ -4,6 +4,7 @@ Kept in their own module so services can raise them and callers (HTTP
 handlers, AI tools, Celery workers) can catch them without creating an
 import cycle with the service modules themselves.
 """
+
 from __future__ import annotations
 
 

@@ -5,6 +5,7 @@ This replaces the legacy ``auto_merge_identities`` behaviour of merging on
 the raw username prefix. Pairs of identities are now only merged if they
 share one or more leaks — which is the strongest evidence NASO has.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -33,9 +34,7 @@ async def _make_leak(db, tenant_id, severity=50):
 
 
 async def _link(db, identity_id, leak_id):
-    await db.execute(
-        identity_leaks.insert().values(identity_id=identity_id, leak_id=leak_id)
-    )
+    await db.execute(identity_leaks.insert().values(identity_id=identity_id, leak_id=leak_id))
 
 
 class TestMergesPairsSharingALeak:
@@ -52,11 +51,7 @@ class TestMergesPairsSharingALeak:
         assert report["merged_count"] == 1
 
         # One of the two is now a slave of the other.
-        rows = (
-            await corr_db.execute(
-                select(Identity).where(Identity.tenant_id == tenant.id)
-            )
-        ).scalars().all()
+        rows = (await corr_db.execute(select(Identity).where(Identity.tenant_id == tenant.id))).scalars().all()
         assert any(r.master_identity_id is not None for r in rows)
 
 
@@ -101,11 +96,7 @@ class TestIdempotencyAcrossCalls:
         # new merges, zero duplicate MergeEvent rows.
         assert r2["merged_count"] == 0
 
-        events = (
-            await corr_db.execute(
-                select(MergeEvent).where(MergeEvent.tenant_id == tenant.id)
-            )
-        ).scalars().all()
+        events = (await corr_db.execute(select(MergeEvent).where(MergeEvent.tenant_id == tenant.id))).scalars().all()
         assert len([e for e in events if e.reversed_at is None]) == 1
 
 

@@ -26,6 +26,7 @@ pipeline:
 The class accepts an injectable ``httpx.AsyncClient`` so tests can point
 it at ``MockTransport`` without real network access.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -145,6 +146,7 @@ def sanitize_query(raw: str, *, min_len: int, max_len: int) -> str:
 
 # ─── Client ──────────────────────────────────────────────────────────────────
 
+
 class AhmiaClient:
     """Hardened Ahmia search client.
 
@@ -215,7 +217,7 @@ class AhmiaClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def __aenter__(self) -> "AhmiaClient":
+    async def __aenter__(self) -> AhmiaClient:
         return self
 
     async def __aexit__(self, *exc_info) -> None:
@@ -266,10 +268,7 @@ class AhmiaClient:
 
         # ── Optional NEWNYM broadcast before the first fetch ─────────────
         rotation_report: dict = {}
-        if (
-            self._config.rotate_circuit_per_query
-            and self._config.tor_control_hosts
-        ):
+        if self._config.rotate_circuit_per_query and self._config.tor_control_hosts:
             rotation_report = await rotate_circuits(
                 self._config.tor_control_hosts,
                 port=self._config.tor_control_port,
@@ -310,9 +309,7 @@ class AhmiaClient:
         # — the analyst wanting a do-over can force-refresh; the default
         # is to avoid re-hammering a degraded service.
         if self._cache is not None and report.results:
-            await self._cache.set(
-                query, report, ttl_seconds=self._config.cache_ttl_seconds
-            )
+            await self._cache.set(query, report, ttl_seconds=self._config.cache_ttl_seconds)
 
         return report
 
@@ -369,15 +366,13 @@ class AhmiaClient:
 
     def _backoff_delay(self, attempt: int) -> float:
         """Exponential backoff with full jitter, capped at ``retry_max_delay``."""
-        base = self._config.retry_base_delay * (2 ** attempt)
+        base = self._config.retry_base_delay * (2**attempt)
         # Full jitter (AWS-style) — uniform in [0, base] — gives the best
         # collision avoidance when many workers retry at once.
         delay = random.uniform(0.0, base)
         return min(delay, self._config.retry_max_delay)
 
-    def _parse_page(
-        self, html: str, *, page: int, seen_urls: set[str]
-    ) -> tuple[list[AhmiaResult], int]:
+    def _parse_page(self, html: str, *, page: int, seen_urls: set[str]) -> tuple[list[AhmiaResult], int]:
         """Parse Ahmia HTML into AhmiaResult list. Returns ``(results, dupes)``.
 
         ``seen_urls`` is mutated with every fresh URL. Duplicate URLs are

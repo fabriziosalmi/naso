@@ -31,10 +31,11 @@ replaces the internals with:
 The notification + MITRE + webhook flow is unchanged; analysts observe the
 same downstream behaviour.
 """
+
 import logging
 import os
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -64,9 +65,7 @@ def _dialect_insert(db: AsyncSession):
     raise RuntimeError(f"unsupported dialect for leak link: {name!r}")
 
 
-async def _link_identities_to_leak(
-    db: AsyncSession, leak_id: str, identity_ids: Iterable[str]
-) -> None:
+async def _link_identities_to_leak(db: AsyncSession, leak_id: str, identity_ids: Iterable[str]) -> None:
     """Idempotently link every identity in *identity_ids* to *leak_id*.
 
     The join table has a composite PK ``(identity_id, leak_id)``; a duplicate
@@ -77,9 +76,7 @@ async def _link_identities_to_leak(
     """
     ins = _dialect_insert(db)
     for ident_id in identity_ids:
-        stmt = ins(identity_leaks).values(
-            identity_id=ident_id, leak_id=leak_id
-        ).on_conflict_do_nothing()
+        stmt = ins(identity_leaks).values(identity_id=ident_id, leak_id=leak_id).on_conflict_do_nothing()
         await db.execute(stmt)
 
 
@@ -102,8 +99,8 @@ class IdentityCorrelationService:
         tenant_id: str,
         screenshot_path: str = None,
         preextracted_emails: set = None,  # P-08: reuse Babel output, skip duplicate regex scan
-        severity_score: int = None,        # P-13: avoid DB re-query for leak severity
-        leak_source: str = None,           # P-13: avoid DB re-query for leak source
+        severity_score: int = None,  # P-13: avoid DB re-query for leak severity
+        leak_source: str = None,  # P-13: avoid DB re-query for leak source
     ):
         # 1. Extract emails — use Babel output when present (P-08).
         emails = preextracted_emails if preextracted_emails else set(re.findall(cls.EMAIL_REGEX, content))

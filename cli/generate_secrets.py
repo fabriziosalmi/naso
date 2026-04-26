@@ -26,6 +26,7 @@ What it does:
 The result: ``make bootstrap && make up && make demo`` works on a clean
 checkout — no manual editing required.
 """
+
 from __future__ import annotations
 
 import argparse

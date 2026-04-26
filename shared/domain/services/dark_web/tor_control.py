@@ -29,11 +29,13 @@ Design
 * A short post-rotation sleep lets Tor finish tearing down old circuits
   before the first request goes out on a fresh one.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Awaitable, Callable, Iterable
+from collections.abc import Iterable
+from typing import Callable
 
 logger = logging.getLogger("naso-darkweb-torctl")
 
@@ -44,6 +46,7 @@ HostRotator = Callable[[str, int, str | None], None]
 
 
 # ─── Default (production) rotator using stem ────────────────────────────────
+
 
 def _stem_rotate_sync(host: str, port: int, password: str | None) -> None:
     """Open a Tor controller, authenticate, send NEWNYM, close.
@@ -67,6 +70,7 @@ def _stem_rotate_sync(host: str, port: int, password: str | None) -> None:
 
 
 # ─── Public coroutine ────────────────────────────────────────────────────────
+
 
 async def rotate_circuits(
     hosts: Iterable[str],

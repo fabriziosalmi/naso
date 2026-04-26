@@ -24,6 +24,7 @@ Public surface:
     * :func:`verify_chain` — walk the chain for a tenant, returning a
       :class:`VerifyResult` that flags the first broken row (or None).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,7 +39,6 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import AuditLog
-
 
 # ─── In-process per-tenant serialization ─────────────────────────────────────
 # The Postgres advisory lock covers the production deployment, but under
@@ -72,6 +72,7 @@ async def _tenant_lock(tenant_id: str | None) -> asyncio.Lock:
 
 # ─── Result object ───────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class VerifyResult:
     """Outcome of a chain verification walk.
@@ -89,6 +90,7 @@ class VerifyResult:
 
 
 # ─── Canonical hashing ───────────────────────────────────────────────────────
+
 
 def _canonical_payload(
     *,
@@ -142,6 +144,7 @@ async def _acquire_tenant_lock(db: AsyncSession, tenant_id: str | None) -> None:
 
 
 # ─── Public API ──────────────────────────────────────────────────────────────
+
 
 async def write_audit(
     db: AsyncSession,
@@ -231,9 +234,7 @@ async def write_audit(
         return row
 
 
-async def verify_chain(
-    db: AsyncSession, *, tenant_id: str | None
-) -> VerifyResult:
+async def verify_chain(db: AsyncSession, *, tenant_id: str | None) -> VerifyResult:
     """Walk the full audit chain for *tenant_id* and re-verify each row.
 
     At each position we check two independent invariants:
@@ -247,11 +248,7 @@ async def verify_chain(
     the first position after the gap, so delete-tampering is detected with
     the same machinery.
     """
-    stmt = (
-        select(AuditLog)
-        .where(AuditLog.tenant_id == tenant_id)
-        .order_by(AuditLog.timestamp, AuditLog.id)
-    )
+    stmt = select(AuditLog).where(AuditLog.tenant_id == tenant_id).order_by(AuditLog.timestamp, AuditLog.id)
     rows = (await db.execute(stmt)).scalars().all()
 
     expected_prev: str | None = None

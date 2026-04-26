@@ -16,29 +16,32 @@ Contracts:
   * ``verify_chain`` returns ``ok=False`` with the index of the first break
     when any field of a middle row is tampered with.
 """
+
 from __future__ import annotations
+
+import uuid as _uuid
 
 import pytest
 from sqlalchemy import select
 
 from shared.models import AuditLog, Tenant
-import uuid as _uuid
 
 pytest.importorskip("shared.utils.audit_chain", reason="Phase 6 not implemented yet")
-from shared.utils.audit_chain import write_audit, verify_chain  # noqa: E402
-
+from shared.utils.audit_chain import verify_chain, write_audit  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 
 
 async def _fetch_chain(db, tenant_id):
     return (
-        await db.execute(
-            select(AuditLog)
-            .where(AuditLog.tenant_id == tenant_id)
-            .order_by(AuditLog.timestamp, AuditLog.id)
+        (
+            await db.execute(
+                select(AuditLog).where(AuditLog.tenant_id == tenant_id).order_by(AuditLog.timestamp, AuditLog.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
 
 class TestChainConstruction:
@@ -57,16 +60,31 @@ class TestChainConstruction:
 
     async def test_subsequent_entries_link(self, corr_db, tenant, user):
         r1 = await write_audit(
-            corr_db, tenant_id=tenant.id, user_id=user.id,
-            action="A", resource_type="identity", resource_id="1", details={},
+            corr_db,
+            tenant_id=tenant.id,
+            user_id=user.id,
+            action="A",
+            resource_type="identity",
+            resource_id="1",
+            details={},
         )
         r2 = await write_audit(
-            corr_db, tenant_id=tenant.id, user_id=user.id,
-            action="B", resource_type="identity", resource_id="2", details={},
+            corr_db,
+            tenant_id=tenant.id,
+            user_id=user.id,
+            action="B",
+            resource_type="identity",
+            resource_id="2",
+            details={},
         )
         r3 = await write_audit(
-            corr_db, tenant_id=tenant.id, user_id=user.id,
-            action="C", resource_type="identity", resource_id="3", details={},
+            corr_db,
+            tenant_id=tenant.id,
+            user_id=user.id,
+            action="C",
+            resource_type="identity",
+            resource_id="3",
+            details={},
         )
         assert r2.prev_hash == r1.self_hash
         assert r3.prev_hash == r2.self_hash
@@ -79,12 +97,22 @@ class TestTenantIsolation:
         await corr_db.commit()
 
         r_a = await write_audit(
-            corr_db, tenant_id=tenant.id, user_id=user.id, action="A",
-            resource_type="x", resource_id="1", details={},
+            corr_db,
+            tenant_id=tenant.id,
+            user_id=user.id,
+            action="A",
+            resource_type="x",
+            resource_id="1",
+            details={},
         )
         r_b = await write_audit(
-            corr_db, tenant_id=other.id, user_id=user.id, action="B",
-            resource_type="x", resource_id="2", details={},
+            corr_db,
+            tenant_id=other.id,
+            user_id=user.id,
+            action="B",
+            resource_type="x",
+            resource_id="2",
+            details={},
         )
         # First entry in the other tenant must NOT reference the first tenant's hash.
         assert r_b.prev_hash is None
@@ -95,8 +123,12 @@ class TestVerification:
     async def test_pristine_chain_verifies(self, corr_db, tenant, user):
         for i in range(5):
             await write_audit(
-                corr_db, tenant_id=tenant.id, user_id=user.id,
-                action=f"ACT_{i}", resource_type="r", resource_id=str(i),
+                corr_db,
+                tenant_id=tenant.id,
+                user_id=user.id,
+                action=f"ACT_{i}",
+                resource_type="r",
+                resource_id=str(i),
                 details={"i": i},
             )
         result = await verify_chain(corr_db, tenant_id=tenant.id)
@@ -106,8 +138,12 @@ class TestVerification:
     async def test_tamper_with_middle_entry_breaks_chain(self, corr_db, tenant, user):
         for i in range(5):
             await write_audit(
-                corr_db, tenant_id=tenant.id, user_id=user.id,
-                action=f"ACT_{i}", resource_type="r", resource_id=str(i),
+                corr_db,
+                tenant_id=tenant.id,
+                user_id=user.id,
+                action=f"ACT_{i}",
+                resource_type="r",
+                resource_id=str(i),
                 details={"i": i},
             )
         chain = await _fetch_chain(corr_db, tenant.id)
@@ -124,8 +160,12 @@ class TestVerification:
     async def test_removing_an_entry_breaks_chain(self, corr_db, tenant, user):
         for i in range(4):
             await write_audit(
-                corr_db, tenant_id=tenant.id, user_id=user.id,
-                action=f"ACT_{i}", resource_type="r", resource_id=str(i),
+                corr_db,
+                tenant_id=tenant.id,
+                user_id=user.id,
+                action=f"ACT_{i}",
+                resource_type="r",
+                resource_id=str(i),
                 details={"i": i},
             )
         chain = await _fetch_chain(corr_db, tenant.id)
@@ -145,9 +185,7 @@ class TestConcurrentWrites:
     irrecoverable chain break.
     """
 
-    async def test_parallel_writes_keep_chain_intact(
-        self, corr_session_factory, tenant, user
-    ):
+    async def test_parallel_writes_keep_chain_intact(self, corr_session_factory, tenant, user):
         import asyncio as _asyncio
 
         # One write per task, 8 tasks, each on its own session to simulate
@@ -170,15 +208,14 @@ class TestConcurrentWrites:
         async with corr_session_factory() as verify_session:
             result = await verify_chain(verify_session, tenant_id=tenant.id)
             assert result.ok is True, (
-                f"chain broke under concurrent writes: reason={result.reason}, "
-                f"at={result.broken_at}"
+                f"chain broke under concurrent writes: reason={result.reason}, at={result.broken_at}"
             )
 
-            from shared.models import AuditLog
             from sqlalchemy import select as _select
+
+            from shared.models import AuditLog
+
             rows = (
-                await verify_session.execute(
-                    _select(AuditLog).where(AuditLog.tenant_id == tenant.id)
-                )
-            ).scalars().all()
+                (await verify_session.execute(_select(AuditLog).where(AuditLog.tenant_id == tenant.id))).scalars().all()
+            )
             assert len(rows) == 8

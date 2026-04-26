@@ -13,14 +13,14 @@ contract introduced by the Tor/Ahmia round:
   * Duplicate URLs across pages are deduplicated and counted.
   * ``via_tor`` flag reflects the configured proxy.
 """
+
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 
 from shared.domain.services.dark_web.ahmia_client import (
     AhmiaClient,
-    AhmiaUnavailable,
     InvalidQuery,
     sanitize_query,
 )
@@ -28,11 +28,11 @@ from shared.domain.services.dark_web.circuit_breaker import CircuitBreaker
 from shared.domain.services.dark_web.config import DarkWebConfig
 from shared.domain.services.dark_web.rate_limiter import TokenBucket
 
-
 # asyncio marker applied per-class so the sync sanitize tests don't warn.
 
 
 # ─── HTML fixtures ───────────────────────────────────────────────────────────
+
 
 def _page_html(results: list[tuple[str, str, str]]) -> str:
     """Build an Ahmia-like page with a list of (title, url, description)."""
@@ -53,6 +53,7 @@ EMPTY_PAGE = "<html><body><p>No results</p></body></html>"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
 
 def _fast_config(**overrides) -> DarkWebConfig:
     """DarkWebConfig with tiny timeouts + no real retries for test speed."""
@@ -93,6 +94,7 @@ def _client_with_handler(handler, config: DarkWebConfig | None = None) -> AhmiaC
 
 # ─── Query sanitization ──────────────────────────────────────────────────────
 
+
 class TestSanitizeQuery:
     def test_strips_control_chars(self):
         assert sanitize_query("foo\x00bar\x1f", min_len=1, max_len=50) == "foobar"
@@ -117,16 +119,22 @@ class TestSanitizeQuery:
 
 # ─── Pagination ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestPagination:
     async def test_fetches_multiple_pages(self):
         def handler(request: httpx.Request) -> httpx.Response:
             page = int(request.url.params.get("d", "1"))
             if page <= 2:
-                return httpx.Response(200, html=_page_html([
-                    (f"Title {page}-A", f"url-{page}-a.onion", "desc"),
-                    (f"Title {page}-B", f"url-{page}-b.onion", "desc"),
-                ]))
+                return httpx.Response(
+                    200,
+                    html=_page_html(
+                        [
+                            (f"Title {page}-A", f"url-{page}-a.onion", "desc"),
+                            (f"Title {page}-B", f"url-{page}-b.onion", "desc"),
+                        ]
+                    ),
+                )
             return httpx.Response(200, html=EMPTY_PAGE)
 
         client = _client_with_handler(handler)
@@ -137,6 +145,7 @@ class TestPagination:
 
     async def test_deduplicates_urls_across_pages(self):
         """If page 2 returns URLs already seen on page 1, they are dropped."""
+
         def handler(request: httpx.Request) -> httpx.Response:
             page = int(request.url.params.get("d", "1"))
             results = [
@@ -155,6 +164,7 @@ class TestPagination:
 
 
 # ─── Retry / failure handling ────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestRetry:
@@ -215,6 +225,7 @@ class TestRetry:
 
 # ─── Circuit breaker ─────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestCircuitBreaker:
     async def test_trips_after_threshold_and_rejects_further_calls(self):
@@ -242,12 +253,11 @@ class TestCircuitBreaker:
         # Third search — breaker is open, NO new HTTP call should fire.
         before_third = call_count["n"]
         await client.search("breach three")
-        assert call_count["n"] == before_third, (
-            "open breaker must not forward requests to the transport"
-        )
+        assert call_count["n"] == before_third, "open breaker must not forward requests to the transport"
 
 
 # ─── Provenance ──────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestProvenance:
@@ -271,9 +281,7 @@ class TestProvenance:
         # Build client with tor_proxy_url configured — we override the
         # http client so no actual proxy connection is attempted.
         cfg = _fast_config()
-        cfg = DarkWebConfig(
-            **{**cfg.__dict__, "tor_proxy_url": "socks5://naso-tor-cluster:8118"}
-        )
+        cfg = DarkWebConfig(**{**cfg.__dict__, "tor_proxy_url": "socks5://naso-tor-cluster:8118"})
         transport = httpx.MockTransport(handler)
         http = httpx.AsyncClient(transport=transport)
         client = AhmiaClient(
@@ -290,6 +298,7 @@ class TestProvenance:
 
 
 # ─── Legacy façade ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestFacadePreservesLegacyShape:
@@ -309,6 +318,7 @@ class TestFacadePreservesLegacyShape:
 
 # ─── Cache integration ──────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 class TestCacheIntegration:
     async def test_second_search_hits_cache_and_skips_http(self):
@@ -318,9 +328,7 @@ class TestCacheIntegration:
             call_count["n"] += 1
             return httpx.Response(200, html=_page_html([("T", "u.onion", "D")]))
 
-        client = _client_with_handler(
-            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60)
-        )
+        client = _client_with_handler(handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60))
         first = await client.search("same-query")
         assert first.cached is False
         assert call_count["n"] == 1
@@ -341,9 +349,7 @@ class TestCacheIntegration:
             q = request.url.params.get("q", "")
             return httpx.Response(200, html=_page_html([(f"T-{q}", f"u-{q}.onion", "d")]))
 
-        client = _client_with_handler(
-            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60)
-        )
+        client = _client_with_handler(handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60))
         await client.search("alpha")
         await client.search("bravo")
         assert call_count["n"] == 2
@@ -355,9 +361,7 @@ class TestCacheIntegration:
             call_count["n"] += 1
             return httpx.Response(200, html=_page_html([("T", "u.onion", "D")]))
 
-        client = _client_with_handler(
-            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=0)
-        )
+        client = _client_with_handler(handler, config=_fast_config(max_pages=1, cache_ttl_seconds=0))
         await client.search("qq")
         await client.search("qq")
         # No caching — both hit HTTP.
@@ -372,15 +376,14 @@ class TestCacheIntegration:
             call_count["n"] += 1
             return httpx.Response(200, html=EMPTY_PAGE)
 
-        client = _client_with_handler(
-            handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60)
-        )
+        client = _client_with_handler(handler, config=_fast_config(max_pages=1, cache_ttl_seconds=60))
         await client.search("qq")
         await client.search("qq")
         assert call_count["n"] == 2
 
 
 # ─── NEWNYM rotation integration ────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 class TestCircuitRotationIntegration:
@@ -398,6 +401,7 @@ class TestCircuitRotationIntegration:
             cache_ttl_seconds=0,
         )
         from shared.domain.services.dark_web.config import DarkWebConfig
+
         cfg = DarkWebConfig(
             **{
                 **cfg.__dict__,

@@ -13,6 +13,7 @@ All durations are seconds, all sizes are counts. Defaults are tuned for
 conservative clearnet Ahmia queries; production should enable
 ``tor_proxy_url`` so the traffic is routed through the local Tor cluster.
 """
+
 from __future__ import annotations
 
 import os
@@ -108,7 +109,7 @@ class DarkWebConfig:
     # ─── Construction helpers ────────────────────────────────────────────
 
     @classmethod
-    def from_env(cls) -> "DarkWebConfig":
+    def from_env(cls) -> DarkWebConfig:
         """Load config from the standard ``NASO_DARKWEB_*`` env vars.
 
         Unrecognised vars are ignored; missing vars fall back to the class
@@ -162,9 +163,7 @@ class DarkWebConfig:
             tor_control_hosts=hosts_tuple,
             tor_control_port=_int("NASO_DARKWEB_TOR_CONTROL_PORT", cls.tor_control_port),
             tor_control_password=os.getenv("NASO_DARKWEB_TOR_CONTROL_PASSWORD") or None,
-            rotate_circuit_per_query=_bool(
-                "NASO_DARKWEB_ROTATE_CIRCUIT", cls.rotate_circuit_per_query
-            ),
+            rotate_circuit_per_query=_bool("NASO_DARKWEB_ROTATE_CIRCUIT", cls.rotate_circuit_per_query),
             cache_ttl_seconds=_int("NASO_DARKWEB_CACHE_TTL", cls.cache_ttl_seconds),
             cache_max_size=_int("NASO_DARKWEB_CACHE_MAX_SIZE", cls.cache_max_size),
             max_query_length=_int("NASO_DARKWEB_MAX_QUERY_LEN", cls.max_query_length),

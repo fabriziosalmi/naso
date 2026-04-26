@@ -9,6 +9,7 @@ no real Tor controller, no stem dependency, no network. Contract:
     * Sleeps ``settle_seconds`` after a successful broadcast.
     * Returns a per-host status dict.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,9 +29,7 @@ class TestBroadcast:
         def fake(host, port, password):
             calls.append((host, port, password))
 
-        result = await rotate_circuits(
-            ["a", "b", "c"], port=9051, password="pw", rotator=fake, settle_seconds=0
-        )
+        result = await rotate_circuits(["a", "b", "c"], port=9051, password="pw", rotator=fake, settle_seconds=0)
         assert result == {"a": "ok", "b": "ok", "c": "ok"}
         assert {c[0] for c in calls} == {"a", "b", "c"}
         # Every call used the same (port, password).
@@ -74,9 +73,7 @@ class TestParallelism:
             time.sleep(0.05)
 
         started = asyncio.get_event_loop().time()
-        await rotate_circuits(
-            ["a", "b", "c"], port=9051, password=None, rotator=slow, settle_seconds=0
-        )
+        await rotate_circuits(["a", "b", "c"], port=9051, password=None, rotator=slow, settle_seconds=0)
         elapsed = asyncio.get_event_loop().time() - started
         # Sequential would be ~150ms; parallel should be ~50ms + scheduling.
         assert elapsed < 0.12, f"rotation should be parallel, took {elapsed:.3f}s"
@@ -85,9 +82,7 @@ class TestParallelism:
 class TestSettleDelay:
     async def test_settle_seconds_adds_sleep_after_broadcast(self):
         started = asyncio.get_event_loop().time()
-        await rotate_circuits(
-            ["a"], port=9051, password=None, rotator=lambda *a: None, settle_seconds=0.1
-        )
+        await rotate_circuits(["a"], port=9051, password=None, rotator=lambda *a: None, settle_seconds=0.1)
         elapsed = asyncio.get_event_loop().time() - started
         assert elapsed >= 0.1
         assert elapsed < 0.3  # upper bound for CI jitter

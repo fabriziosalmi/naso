@@ -18,6 +18,7 @@ shape so the frontend UI continues to render. Additional provenance
 fields (``fetched_at``, ``page``, ``via_tor``, ``source``) are appended
 but optional — callers that need them can ask; old callers simply ignore.
 """
+
 from __future__ import annotations
 
 import logging

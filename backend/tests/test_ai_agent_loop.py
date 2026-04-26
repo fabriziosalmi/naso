@@ -14,6 +14,7 @@ observable and assertable:
     * Malformed JSON in tool arguments is handled gracefully.
     * LLM exception produces a clean ``error`` event without killing the loop.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ pytestmark = pytest.mark.asyncio
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FakeUser:
     id: str
@@ -38,6 +40,7 @@ class FakeUser:
 def _tool_call_msg(tc_id: str, name: str, args: dict) -> dict:
     """Mimic an OpenAI-shape chat completion with tool_calls."""
     import json as _json
+
     return {
         "choices": [
             {
@@ -94,6 +97,7 @@ def _scripted_llm(responses: list[dict]):
 
 # ─── Terminal case ───────────────────────────────────────────────────────────
 
+
 class TestTerminalCase:
     async def test_single_text_response_emits_one_text_event(self, corr_db, tenant, user):
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
@@ -113,6 +117,7 @@ class TestTerminalCase:
 
 # ─── Single-round tool call ──────────────────────────────────────────────────
 
+
 class TestSingleToolCallRound:
     async def test_tool_call_then_final_text(self, corr_db, tenant, user):
         # Seed one identity so search_identities returns something.
@@ -128,7 +133,9 @@ class TestSingleToolCallRound:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm(responses),
             )
         )
@@ -150,6 +157,7 @@ class TestSingleToolCallRound:
 
 # ─── Multi-round chain ───────────────────────────────────────────────────────
 
+
 class TestMultiRoundChain:
     async def test_chains_two_tool_rounds(self, corr_db, tenant, user):
         """First LLM response calls tool A, second calls tool B, third is text."""
@@ -166,7 +174,9 @@ class TestMultiRoundChain:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm(responses),
             )
         )
@@ -183,6 +193,7 @@ class TestMultiRoundChain:
 
 # ─── Iteration cap ───────────────────────────────────────────────────────────
 
+
 class TestIterationCap:
     async def test_runaway_tool_calls_trigger_error(self, corr_db, tenant, user):
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
@@ -193,7 +204,9 @@ class TestIterationCap:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm(loop_responses),
                 max_iterations=3,
             )
@@ -208,6 +221,7 @@ class TestIterationCap:
 
 
 # ─── Malformed input handling ────────────────────────────────────────────────
+
 
 class TestMalformedInput:
     async def test_bad_tool_args_json_defaults_to_empty(self, corr_db, tenant, user):
@@ -234,7 +248,9 @@ class TestMalformedInput:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm([bad, _text_msg("Done.")]),
             )
         )
@@ -253,7 +269,10 @@ class TestLLMException:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake, llm_call=boom,
+                messages,
+                db=corr_db,
+                current_user=fake,
+                llm_call=boom,
             )
         )
         assert len(events) == 1
@@ -263,15 +282,14 @@ class TestLLMException:
 
 # ─── Parallel tool execution (Phase 10c) ────────────────────────────────────
 
+
 class TestParallelToolExecution:
     """When ``session_factory`` is supplied, a multi-tool round runs in
     parallel — each tool on its own session — while event ordering in the
     output stream matches the LLM's tool_call order, not completion order.
     """
 
-    async def test_multi_tool_round_runs_in_parallel(
-        self, corr_db, corr_session_factory, tenant, user
-    ):
+    async def test_multi_tool_round_runs_in_parallel(self, corr_db, corr_session_factory, tenant, user):
         """Three tools in the same round should complete in ~max(lat),
         not sum(lat). We can't easily add artificial latency to the real
         tools, so we measure relatively: the test just verifies that ALL
@@ -312,7 +330,9 @@ class TestParallelToolExecution:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm([first_round, _text_msg("Summary.")]),
                 session_factory=corr_session_factory,
             )
@@ -331,9 +351,7 @@ class TestParallelToolExecution:
         assert results[1]["data"].get("tool") == "propose_merges_preview"
         assert results[2]["data"].get("tool") == "verify_audit_chain"
 
-    async def test_single_tool_round_skips_fanout(
-        self, corr_db, corr_session_factory, tenant, user
-    ):
+    async def test_single_tool_round_skips_fanout(self, corr_db, corr_session_factory, tenant, user):
         """One tool in a round → no fan-out, reuse the shared session.
         This is an optimization (no session setup overhead) but it also
         makes the test suite's sequential-path assertions stay valid for
@@ -351,7 +369,9 @@ class TestParallelToolExecution:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm(responses),
                 session_factory=corr_session_factory,
             )
@@ -393,7 +413,9 @@ class TestParallelToolExecution:
 
         events = await _collect(
             run_agent_loop(
-                messages, db=corr_db, current_user=fake,
+                messages,
+                db=corr_db,
+                current_user=fake,
                 llm_call=_scripted_llm([first_round, _text_msg("Done.")]),
                 # no session_factory
             )

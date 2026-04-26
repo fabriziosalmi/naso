@@ -8,10 +8,10 @@ Contracts exercised:
     * ``ttl_seconds <= 0`` is a no-op set (cache is bypassed).
     * Concurrent set under ``asyncio.Lock`` does not corrupt state.
 """
+
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 

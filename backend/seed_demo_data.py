@@ -1,12 +1,13 @@
 import asyncio
-import uuid
 import random
-import json
+import uuid
 from datetime import datetime, timedelta, timezone
-from shared.database import async_session
-from shared.models import Tenant, Identity, LeakHit
+
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+from shared.database import async_session
+from shared.models import Identity, LeakHit, Tenant
 
 console = Console()
 

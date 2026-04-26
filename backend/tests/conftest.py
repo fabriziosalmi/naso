@@ -63,9 +63,9 @@ async def client(db):
     # Deferred imports — the full FastAPI app is only needed when a test
     # actually exercises an HTTP endpoint. Correlation-engine tests can run
     # without these modules installed.
+    from app.main import app
     from httpx import ASGITransport, AsyncClient
 
-    from app.main import app
     from shared.core.jwt_manager import jwt_blacklist
 
     jwt_blacklist.is_blacklisted = AsyncMock(return_value=False)
@@ -90,6 +90,7 @@ async def client(db):
 # SQLite serializes everything through a single connection, which would mask
 # the very races we are trying to detect. Every correlation test therefore
 # gets its own file-backed SQLite so we can open genuinely parallel sessions.
+
 
 @pytest_asyncio.fixture
 async def corr_engine():

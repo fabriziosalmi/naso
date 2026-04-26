@@ -1,4 +1,5 @@
 """Token bucket semantics — burst, refill, fairness, overcommit guards."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +8,6 @@ import time
 import pytest
 
 from shared.domain.services.dark_web.rate_limiter import TokenBucket
-
 
 # Async marker is applied per-test rather than at module scope so the
 # handful of synchronous construction tests below do not trigger pytest's

@@ -23,6 +23,7 @@ Usage::
         await bucket.acquire()
         response = await client.get(...)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -67,9 +68,7 @@ class TokenBucket:
         if tokens <= 0:
             raise ValueError("tokens must be positive")
         if tokens > self._capacity:
-            raise ValueError(
-                f"requested {tokens} tokens exceeds capacity {self._capacity}"
-            )
+            raise ValueError(f"requested {tokens} tokens exceeds capacity {self._capacity}")
 
         async with self._lock:
             while True:

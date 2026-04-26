@@ -21,13 +21,15 @@ Public surface:
       proposed merge in the UI without writing.
     * Exceptions re-exported from ``.exceptions`` for caller convenience.
 """
+
 from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from hashlib import sha256
-from typing import Any, Iterable
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +48,7 @@ MIN_CONFIDENCE: float = 0.5
 
 
 # ─── Evidence aggregation ────────────────────────────────────────────────────
+
 
 def aggregate_confidence(evidence: Iterable[dict] | None) -> float:
     """Fuse independent evidence strengths via ``1 - Π(1 - s_i)``.
@@ -67,11 +70,12 @@ def aggregate_confidence(evidence: Iterable[dict] | None) -> float:
             s = 0.0
         elif s > 1.0:
             s = 1.0
-        product *= (1.0 - s)
+        product *= 1.0 - s
     return 1.0 - product
 
 
 # ─── Hash-chain helpers ──────────────────────────────────────────────────────
+
 
 def _canonical_payload(
     *,
@@ -131,6 +135,7 @@ async def _acquire_tenant_chain_lock(db: AsyncSession, tenant_id: str) -> None:
 
 # ─── Public merge / reverse ──────────────────────────────────────────────────
 
+
 async def merge_identities(
     db: AsyncSession,
     *,
@@ -160,15 +165,11 @@ async def merge_identities(
         raise ValueError("cannot merge an identity with itself")
 
     if master.tenant_id != slave.tenant_id:
-        raise CrossTenantMerge(
-            f"master tenant {master.tenant_id} != slave tenant {slave.tenant_id}"
-        )
+        raise CrossTenantMerge(f"master tenant {master.tenant_id} != slave tenant {slave.tenant_id}")
 
     conf = aggregate_confidence(evidence)
     if conf < MIN_CONFIDENCE:
-        raise InsufficientEvidence(
-            f"aggregate confidence {conf:.3f} below threshold {MIN_CONFIDENCE}"
-        )
+        raise InsufficientEvidence(f"aggregate confidence {conf:.3f} below threshold {MIN_CONFIDENCE}")
 
     # Idempotency — if an active merge for this pair already exists, return
     # it unchanged. Checked BEFORE acquiring the chain lock so repeat calls
@@ -194,9 +195,7 @@ async def merge_identities(
 
     enriched_evidence = list(evidence)
     if promoted:
-        enriched_evidence.append(
-            {"type": "vip_promotion", "detail": "master promoted to protected"}
-        )
+        enriched_evidence.append({"type": "vip_promotion", "detail": "master promoted to protected"})
 
     # Serialize chain appends for this tenant, then fetch the current head.
     await _acquire_tenant_chain_lock(db, master.tenant_id)

@@ -4,15 +4,17 @@ Supporta due modalità:
   - offline: genera SQL puro senza connessione al DB
   - online:  applica le migrazioni via connessione async
 """
+
 import asyncio
 import os
 import sys
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # Aggiungi la root del repo al path in modo che `shared` sia importabile
 # sia dal container Docker che dall'ambiente di sviluppo locale.

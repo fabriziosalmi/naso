@@ -25,6 +25,7 @@ Contract (full detail in ``backend/tests/test_identity_upsert.py``):
     * Validated — empty / whitespace-only identifiers (before OR after
       normalization) raise ``ValueError``.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -87,20 +88,24 @@ async def upsert_identity(
     # from the original observation, matching the "observation metadata is
     # write-once" contract.
     insert_ctor = _on_conflict_insert(db)
-    stmt = insert_ctor(Identity).values(
-        id=str(uuid.uuid4()),
-        tenant_id=tenant_id,
-        identifier=stripped,
-        type=type_,
-        normalized_identifier=normalized,
-        confidence=confidence,
-        first_seen=now,
-        last_seen=now,
-        risk_score=0,
-        risk_score_dirty=False,
-        is_protected=False,
-    ).on_conflict_do_nothing(
-        index_elements=["tenant_id", "type", "normalized_identifier"],
+    stmt = (
+        insert_ctor(Identity)
+        .values(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            identifier=stripped,
+            type=type_,
+            normalized_identifier=normalized,
+            confidence=confidence,
+            first_seen=now,
+            last_seen=now,
+            risk_score=0,
+            risk_score_dirty=False,
+            is_protected=False,
+        )
+        .on_conflict_do_nothing(
+            index_elements=["tenant_id", "type", "normalized_identifier"],
+        )
     )
     await db.execute(stmt)
 
