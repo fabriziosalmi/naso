@@ -1,0 +1,82 @@
+name: Security scan
+
+# Lives in its own workflow so the 4-job CI in draconian-ci.yml stays
+# fast (under 5 min). The supply-chain scans here can take longer and
+# are scheduled weekly + on every PR that touches dependency manifests.
+
+on:
+  pull_request:
+    paths:
+      - "backend/requirements.txt"
+      - "workers/requirements.txt"
+      - "shared/requirements-shared.txt"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "Dockerfile.backend"
+      - "Dockerfile.worker"
+      - ".github/workflows/security-scan.yml"
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write   # for SARIF upload
+
+jobs:
+  pip-audit:
+    name: pip-audit (Python deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit backend
+        run: pip-audit -r backend/requirements.txt --strict
+      - name: Audit workers
+        run: pip-audit -r workers/requirements.txt --strict
+      - name: Audit shared
+        run: pip-audit -r shared/requirements-shared.txt --strict
+
+  npm-audit:
+    name: npm audit (frontend deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      # ``npm audit`` returns non-zero only when the configured level
+      # is met. We want PRs to fail on high/critical, leave moderate
+      # findings as warnings the analyst can triage.
+      - name: Audit frontend
+        run: npm audit --audit-level=high
+        working-directory: frontend
+
+  trivy-fs:
+    name: Trivy (filesystem)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
+          # Don't break the build on first finding — upload the SARIF
+          # so GitHub Code Scanning surfaces them on the Security tab.
+          exit-code: 0
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
