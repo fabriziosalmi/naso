@@ -1,0 +1,59 @@
+# Local-only pre-commit hooks.
+#
+# Install once:
+#   pip install pre-commit
+#   pre-commit install
+#
+# After that every ``git commit`` runs the checks below on the touched
+# files; a hook failure blocks the commit. Use ``pre-commit run -a`` to
+# scan the whole repo on demand.
+#
+# The same checks run in CI (.github/workflows/draconian-ci.yml) so the
+# hooks are belt-and-braces — you don't *have* to install them, but
+# fixing a ruff finding locally is cheaper than waiting for the CI
+# round trip.
+
+repos:
+  # ── Hygiene: catch trivial mistakes before they hit the diff ─────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # Workflows use GitHub Actions' templating which trips check-yaml
+        # on the ${{ ... }} expressions. Skip them.
+        exclude: ^\.github/
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # ── Python: ruff (format + lint) ─────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ── GitHub Actions workflow validation ───────────────────────────
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
+
+  # ── Frontend: ESLint + lint-staged-style scope ───────────────────
+  # Run only when frontend files change so a backend-only commit
+  # doesn't pay the npm cold-start cost.
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: frontend ESLint (changed files)
+        language: system
+        files: ^frontend/.*\.(js|jsx|ts|tsx)$
+        pass_filenames: true
+        # We don't enforce the lint output yet (ESLint config not
+        # checked in), so this is informational. Flip to fail on
+        # error once the config is in place.
+        entry: bash -c 'echo "[hint] frontend changed — run `cd frontend && npm run lint` if a config exists"; true'
