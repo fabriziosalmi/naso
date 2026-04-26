@@ -5,11 +5,13 @@ from typing import Optional
 import aio_pika
 import orjson
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from minio import Minio
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 
+from shared.config import settings
 from shared.core.exceptions import AuthorizationError, ResourceNotFoundError
 from shared.database import get_db
 from shared.domain.services.darkweb_search import DarkWebSearchService
@@ -467,19 +469,19 @@ async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), 
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
         raise AuthorizationError("Accesso negato")
 
-    # Proxy da MinIO
-    import os
-
-    from minio import Minio
-
-    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
-    MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
-
-    if not MINIO_ACCESS_KEY or not MINIO_SECRET_KEY:
+    # Proxy da MinIO. Read configuration from the typed Settings singleton
+    # rather than os.getenv — keeps a single source of truth and lets
+    # MINIO_SECURE flip TLS on for production deployments without a
+    # source edit.
+    if not settings.MINIO_ACCESS_KEY or not settings.MINIO_SECRET_KEY:
         raise HTTPException(status_code=500, detail="Configurazione MinIO mancante. Ambiente corrotto o compromesso.")
 
-    minio_client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
+    minio_client = Minio(
+        settings.MINIO_ENDPOINT,
+        access_key=settings.MINIO_ACCESS_KEY,
+        secret_key=settings.MINIO_SECRET_KEY,
+        secure=settings.MINIO_SECURE,
+    )
 
     # screenshot_path è del tipo minio://bucket/object
     path_parts = leak.screenshot_path.replace("minio://", "").split("/")

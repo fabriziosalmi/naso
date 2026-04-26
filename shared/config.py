@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     ES_PORT: int = 9200
     ES_USER: Optional[str] = None
     ES_PASSWORD: Optional[str] = None
+    # Whether the ES client verifies the server certificate. Default True
+    # for prod safety; the dev compose ships a self-signed ES cert, so
+    # set ES_VERIFY_CERTS=false in dev .env to skip verification there.
+    ES_VERIFY_CERTS: bool = True
 
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"

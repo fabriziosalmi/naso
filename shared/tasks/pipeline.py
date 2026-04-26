@@ -34,7 +34,8 @@ logger = logging.getLogger("naso-pipeline")
 # Optional Component Initializations (No hard crashes!)
 if settings.ES_PASSWORD:
     es = AsyncElasticsearch(
-        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}", verify_certs=False
+        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
+        verify_certs=settings.ES_VERIFY_CERTS,
     )
 else:
     es = None
