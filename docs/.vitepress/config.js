@@ -5,6 +5,10 @@ export default {
   description: "Advanced Forensic & Intelligence Framework.",
   cleanUrls: true,
   appearance: 'dark', // Native dark mode standard
+  // Show "Last updated" footer per page based on git mtime.
+  // Builds credibility: a contributor can tell at a glance whether
+  // a doc is current or last touched 18 months ago.
+  lastUpdated: true,
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/naso/logo.svg' }],
     ['meta', { name: 'theme-color', content: '#000000' }]
