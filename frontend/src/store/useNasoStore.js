@@ -554,7 +554,7 @@ const useNasoStore = create((set, get) => ({
     if (!query || !query.trim()) return set({ error: 'Enter a search query before launching probe' });
     set({ isLoading: true, error: null });
     try {
-      await axios.get('/leaks/recon/telegram', { params: { channel_username: query.trim() } });
+      await axios.get('/leaks/recon/telegram', { params: { channel: query.trim() } });
       get().fetchLeaks();
       get().fetchAuditLogs();
       set({ isLoading: false });
