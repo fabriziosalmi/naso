@@ -24,6 +24,10 @@ from shared.schemas import LeakStatus
 from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
 
+from ...infrastructure.rabbitmq import rabbitmq_pool
+from ...limiter import limiter
+from ..deps import get_current_user
+
 # Hard cap on the unified webhook body. 1 MiB is enough for any
 # realistic leak snippet (full breach dumps go through bulk uploads,
 # not the synchronous webhook); larger bodies signal abuse and we 413
@@ -49,8 +53,6 @@ def _csv_safe(value) -> str:
         return "'" + s
     return s
 
-from ...infrastructure.rabbitmq import rabbitmq_pool
-from ..deps import get_current_user
 
 router = APIRouter()
 
@@ -62,14 +64,28 @@ class WebhookPayload(BaseModel):
 
 
 @router.post("/ingest/webhook", status_code=202)
-async def unified_ingestion_webhook(request: Request, current_user=Depends(get_current_user)):
-    """Validated, size-capped webhook ingestion.
+@limiter.limit("60/minute")
+async def unified_ingestion_webhook(
+    request: Request,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Validated, size-capped, rate-limited webhook ingestion.
 
     Body is parsed by FastAPI/pydantic against ``WebhookPayload`` (was
     previously ``orjson.loads(raw_body)`` with no schema), so missing
     fields and oversized content fail with a 422 instead of being
     swallowed. A Content-Length precheck adds an early 413 for clients
     that announce a body larger than ``_MAX_INGEST_BYTES``.
+
+    Rate limit (slowapi): 60 requests / minute / remote IP. The webhook
+    is the synchronous fast-path; bulk loads are expected to use the
+    massive worker queue, not this endpoint. A misconfigured client
+    looping on it gets backed off rather than DoSing the broker.
+
+    Every accepted request emits an audit row keyed off the Celery
+    task_id so an analyst can later correlate the resulting leak back
+    to the originating ingest call.
 
     Payload then crosses straight into the Celery exchange via aio_pika
     so the request handler never holds the parsed object beyond what
@@ -137,6 +153,21 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
         await exchange.publish(message, routing_key="celery")
     finally:
         await channel.close()
+
+    # Audit. Hash-chain entry pinned to task_id so an analyst can later
+    # answer "where did this leak come from?" without scanning logs.
+    # ``content_bytes`` is the raw payload size (post pydantic
+    # validation) — useful for spotting clients pushing the cap.
+    await AuditLogger.log(
+        db,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        action="INGEST_WEBHOOK",
+        resource_type="celery_task",
+        resource_id=task_id,
+        details={"source": payload.source, "content_bytes": len(payload.content)},
+    )
+    await db.commit()
 
     return {
         "status": "accepted",
