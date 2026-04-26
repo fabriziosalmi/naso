@@ -15,6 +15,18 @@ from ..deps import get_current_user
 router = APIRouter()
 
 
+@router.get("/me", response_model=UserSchema)
+async def read_operator_profile(current_user: User = Depends(get_current_user)):
+    """Return the authenticated operator's profile.
+
+    Used by the SPA to restore session state on a hard refresh: the
+    auth cookie is httpOnly, so the JS layer cannot inspect it directly
+    and instead pings this endpoint. A 200 confirms the cookie still
+    decodes; a 401 makes the SPA fall back to the login screen.
+    """
+    return current_user
+
+
 @router.put("/me", response_model=UserSchema)
 async def update_operator_profile(
     user_update: UserUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)

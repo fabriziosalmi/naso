@@ -115,7 +115,7 @@ export default function App() {
     isLoading, systemStatus, fetchSystemStatus,
     addIdentity, updateProfile,
     graphData, fetchGraphData,
-    isAuthenticated, logout
+    isAuthenticated, authChecked, fetchMe, logout
   } = useNasoStore();
 
   const location = useLocation();
@@ -153,6 +153,11 @@ export default function App() {
 
   // Close the mobile sidebar when the route changes (tap-through from drawer).
   useEffect(() => { setIsSidebarOpen(false); }, [location.pathname]);
+
+  // Session restore: ping /users/me with the httpOnly cookie. fetchMe()
+  // sets `authChecked: true` either way (200 → authed, 401 → anon), so
+  // the auth gate below can render the right surface without flicker.
+  useEffect(() => { fetchMe(); }, [fetchMe]);
 
   // Allow deep-link triggers from the command palette and insight chips.
   useEffect(() => {
@@ -233,10 +238,11 @@ export default function App() {
 
   const isFullHeightView = ['/ai-analyst', '/docs'].includes(location.pathname);
 
-  // Auth gate: show login if not authenticated
-  if (!isAuthenticated) {
-    return <Login />;
-  }
+  // Auth gate. authChecked == false means /users/me hasn't resolved yet —
+  // render nothing rather than flashing <Login /> for a frame on a hard
+  // refresh that will turn out to be authenticated.
+  if (!authChecked) return null;
+  if (!isAuthenticated) return <Login />;
 
   return (
     <div className="flex h-screen bg-black text-zinc-100 overflow-hidden font-sans relative">

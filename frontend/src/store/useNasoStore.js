@@ -8,6 +8,10 @@ axios.defaults.withCredentials = true;
 const useNasoStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
+  // True once we've asked the backend whether the httpOnly cookie is still
+  // valid. The SPA blocks routing on this so a hard refresh doesn't flash
+  // <Login /> for a frame before the session-restore call resolves.
+  authChecked: false,
   token: null,
   leaks: [],
   identities: [],
@@ -249,7 +253,7 @@ const useNasoStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
       // Il backend imposta il cookie httpOnly — nessun token da memorizzare in JS
-      set({ isAuthenticated: true, isLoading: false });
+      set({ isAuthenticated: true, authChecked: true, isLoading: false });
     } catch (err) {
       set({ error: 'Authentication failed', isLoading: false });
     }
@@ -259,7 +263,7 @@ const useNasoStore = create((set, get) => ({
     try {
       await axios.post('/auth/logout'); // Il backend cancella il cookie
     } catch { /* ignora errori di rete — il logout locale avviene sempre */ }
-    set({ user: null, isAuthenticated: false, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
+    set({ user: null, isAuthenticated: false, authChecked: true, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
     toast.info('Signed out', 'Session terminated.');
   },
 
@@ -728,9 +732,12 @@ const useNasoStore = create((set, get) => ({
   fetchMe: async () => {
     try {
       const res = await axios.get('/users/me');
-      set({ user: res.data, isAuthenticated: true });
+      set({ user: res.data, isAuthenticated: true, authChecked: true });
     } catch {
-      set({ isAuthenticated: false, user: null });
+      // 401 (no/expired cookie) is the steady-state for an anonymous
+      // visitor — keep silent. authChecked flips either way so the SPA
+      // can finish the boot decision.
+      set({ isAuthenticated: false, user: null, authChecked: true });
     }
   },
 }));
