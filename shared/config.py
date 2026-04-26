@@ -12,6 +12,14 @@ class Settings(BaseSettings):
     JWT_PUBLIC_KEY: Optional[str] = None
     ALGORITHM: str = "EdDSA"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # Standard claims. Issuer ties tokens to this engine; audience ties
+    # them to this API surface, so a token minted for a sister service
+    # (e.g. an MCP-only signing key reused on the API path) is rejected.
+    JWT_ISSUER: str = "naso-forensic-engine"
+    JWT_AUDIENCE: str = "naso-api"
+    # Clock-skew tolerance for nbf/exp/iat checks (seconds). Tight by
+    # default — operators behind NTP shouldn't need more than a few.
+    JWT_LEEWAY_SECONDS: int = 10
 
     # Redis Blacklist
     REDIS_HOST: str = "redis://naso-cache:6379/0"

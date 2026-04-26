@@ -38,7 +38,18 @@ async def get_current_user(
         raise credentials_exception
 
     try:
-        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
+        # Verify standard claims explicitly. ``algorithms`` is a list of
+        # exactly one entry to prevent the alg-confusion family of
+        # attacks; iss/aud must match the values minted by
+        # create_access_token; leeway tolerates small clock skew.
+        payload = jwt.decode(
+            token,
+            settings.JWT_PUBLIC_KEY,
+            algorithms=[settings.ALGORITHM],
+            issuer=settings.JWT_ISSUER,
+            audience=settings.JWT_AUDIENCE,
+            leeway=settings.JWT_LEEWAY_SECONDS,
+        )
         jti: str = payload.get("jti")
         email: str = payload.get("sub")
 

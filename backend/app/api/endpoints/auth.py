@@ -76,8 +76,17 @@ async def logout(request: Request, response: Response, token: str = Depends(oaut
     clear_csrf_cookie(response)
 
     try:
-        # Verifica la firma prima di aggiungere alla blacklist (fix C-01 mantenuto)
-        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
+        # Verifica la firma prima di aggiungere alla blacklist. Same iss/aud
+        # checks as deps.get_current_user — a token that doesn't validate
+        # cleanly here can't have come from us, so we don't blacklist it.
+        payload = jwt.decode(
+            token,
+            settings.JWT_PUBLIC_KEY,
+            algorithms=[settings.ALGORITHM],
+            issuer=settings.JWT_ISSUER,
+            audience=settings.JWT_AUDIENCE,
+            leeway=settings.JWT_LEEWAY_SECONDS,
+        )
         jti = payload.get("jti")
         exp = payload.get("exp")
 
