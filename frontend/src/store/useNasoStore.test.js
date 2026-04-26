@@ -3,11 +3,17 @@ import useNasoStore from './useNasoStore';
 import axios from 'axios';
 
 vi.mock('axios', () => {
+    // useNasoStore registers a request interceptor at module load to attach
+    // the X-Naso-CSRF header on every mutating call. The mock has to expose
+    // `interceptors.request.use` or the import would throw before any test
+    // runs. The interceptor logic itself is exercised by backend integration
+    // tests (test_csrf.py) — here we just make sure registration is a no-op.
     return {
         default: {
             post: vi.fn(),
             get: vi.fn(),
-            defaults: { withCredentials: false }
+            defaults: { withCredentials: false },
+            interceptors: { request: { use: vi.fn() } }
         }
     };
 });

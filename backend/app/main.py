@@ -25,6 +25,7 @@ from shared.config import settings
 from shared.database import engine
 
 from .api.endpoints import ai, auth, identities, keywords, leaks, system, tenants, users, yara
+from .csrf import CSRFMiddleware
 from .infrastructure.rabbitmq import rabbitmq_pool
 from .limiter import limiter
 
@@ -88,6 +89,11 @@ async def secure_headers_middleware(request: Request, call_next):
     return response
 
 
+# CSRF (double-submit cookie). Added BEFORE CORS so CORS — which Starlette
+# applies more externally because it was registered later — can short-circuit
+# preflight OPTIONS without ever reaching the CSRF check.
+app.add_middleware(CSRFMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.ALLOWED_CORS_ORIGINS.split(",")],
@@ -100,6 +106,7 @@ app.add_middleware(
         "Content-Type",
         "X-Requested-With",
         "X-CSRF-Token",
+        "X-Naso-CSRF",
         "Cache-Control",
     ],
 )

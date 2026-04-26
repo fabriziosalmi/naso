@@ -5,6 +5,36 @@ import { toast } from './useToastStore';
 // Tutti i request axios inviano automaticamente il cookie httpOnly naso_access_token
 axios.defaults.withCredentials = true;
 
+// CSRF double-submit cookie. The backend issues a non-httpOnly `naso_csrf`
+// cookie at login; we read it with document.cookie and echo it back as
+// X-Naso-CSRF on every state-changing request. Safe methods skip — the
+// middleware itself short-circuits GET/HEAD/OPTIONS, so we don't bother
+// the network with a header it would ignore.
+const CSRF_COOKIE_NAME = 'naso_csrf';
+const CSRF_HEADER_NAME = 'X-Naso-CSRF';
+const SAFE_METHODS = new Set(['get', 'head', 'options']);
+
+export function readCsrfToken() {
+  if (typeof document === 'undefined' || !document.cookie) return null;
+  const prefix = `${CSRF_COOKIE_NAME}=`;
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) return decodeURIComponent(trimmed.slice(prefix.length));
+  }
+  return null;
+}
+
+axios.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toLowerCase();
+  if (SAFE_METHODS.has(method)) return config;
+  const token = readCsrfToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers[CSRF_HEADER_NAME] = token;
+  }
+  return config;
+});
+
 const useNasoStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -61,11 +91,15 @@ const useNasoStore = create((set, get) => ({
     
     while (attempt < maxRetries) {
       try {
+        // fetch() bypasses the axios interceptor, so we attach the CSRF
+        // token by hand. The auth cookie rides via credentials: 'include'.
+        const csrfToken = readCsrfToken();
         const response = await fetch('/ai/chat', {
           method: 'POST',
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
+            ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
           },
           body: JSON.stringify({
             messages: history.map(m => ({ role: m.role, content: m.content })),

@@ -50,7 +50,13 @@ async def auth_headers(client, admin_user):
         data={"username": "admin@acme.local", "password": "Admin$ecure99"},
     )
     token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    # Include the CSRF token: the login response sets the cookie, and the
+    # test client persists it across requests, so any subsequent mutating
+    # call hits the CSRFMiddleware. Bearer-only callers wouldn't need
+    # this — but the test client's cookie jar already carries the auth
+    # cookie, so the middleware treats it as a cookie-auth request.
+    csrf = res.cookies["naso_csrf"]
+    return {"Authorization": f"Bearer {token}", "X-Naso-CSRF": csrf}
 
 
 @pytest.fixture
@@ -60,7 +66,8 @@ async def analyst_headers(client, analyst_user):
         data={"username": "analyst@acme.local", "password": "Analyst$ecure99"},
     )
     token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    csrf = res.cookies["naso_csrf"]
+    return {"Authorization": f"Bearer {token}", "X-Naso-CSRF": csrf}
 
 
 # ── System status ─────────────────────────────────────────────────────────────
@@ -130,7 +137,11 @@ async def test_logout_clears_cookie(client, admin_user):
         data={"username": "admin@acme.local", "password": "Admin$ecure99"},
     )
     token = login.json()["access_token"]
-    res = await client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    csrf = login.cookies["naso_csrf"]
+    res = await client.post(
+        "/auth/logout",
+        headers={"Authorization": f"Bearer {token}", "X-Naso-CSRF": csrf},
+    )
     assert res.status_code == 200
 
 
