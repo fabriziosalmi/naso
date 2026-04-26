@@ -1,139 +1,212 @@
-/* docs/.vitepress/theme/custom.css */
+/* docs/.vitepress/theme/custom.css
+ *
+ * Apple-like, system-native palette. The goal is calm typography +
+ * unobtrusive surfaces, not neon. Hover states are subtle (1 px border
+ * shift, no glow). Buttons are pill-shaped with a small lift, the same
+ * idiom as the SF system action affordances. Dark mode is the default
+ * and the only carefully-tuned theme; the light side falls back to the
+ * VitePress defaults.
+ */
 
-/* Core Typography - Apple Native Stack */
 :root {
-  --vp-font-family-base: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-  --vp-font-family-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  
-  /* Apple Color Palette Core */
+  /* System font stacks — SF on Apple platforms, Segoe / Roboto on
+   * everything else. Mono falls back to SF Mono / system mono. */
+  --vp-font-family-base: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --vp-font-family-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Accent. System blue, slightly desaturated for long-form reading. */
   --vp-c-brand-1: #0A84FF;
-  --vp-c-brand-2: #007AFF;
+  --vp-c-brand-2: #0071E3;
   --vp-c-brand-3: #5AC8FA;
-  
-  /* Micro-animation timing function (Apple iOS/macOS standard) */
+
+  /* Eased animation. Same curve macOS uses on view transitions. */
   --vp-custom-bezier: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --vp-custom-transition: all 0.3s var(--vp-custom-bezier);
+  --vp-custom-transition: all 0.25s var(--vp-custom-bezier);
 }
 
-/* Dark Mode Overrides - Pitch Black & Glassmorphism */
 html.dark {
-  /* Enforce True Black */
   --vp-c-bg: #000000;
-  --vp-c-bg-alt: #111111;
-  --vp-c-bg-elv: #1C1C1E;
-  
-  /* Clean Grays */
-  --vp-c-text-1: #F5F5F7;
-  --vp-c-text-2: #A1A1A6;
-  --vp-c-text-3: #ECECEC;
-  
-  /* Border subtleties */
+  --vp-c-bg-alt: #0c0c0c;
+  --vp-c-bg-elv: #141414;
+  --vp-c-bg-soft: #1a1a1a;
+
+  --vp-c-text-1: #f5f5f7;
+  --vp-c-text-2: #a1a1a6;
+  --vp-c-text-3: #6e6e73;
+
   --vp-c-divider: rgba(255, 255, 255, 0.08);
-  --vp-c-gutter: rgba(255, 255, 255, 0.08);
-  --vp-c-border: rgba(255, 255, 255, 0.12);
-  
-  /* Navbar Glassmorphism */
-  --vp-nav-bg-color: rgba(0, 0, 0, 0.65);
+  --vp-c-gutter: rgba(255, 255, 255, 0.06);
+  --vp-c-border: rgba(255, 255, 255, 0.10);
+
+  --vp-nav-bg-color: rgba(0, 0, 0, 0.72);
 }
 
-/* Glassmorphism NavBar & Blends */
+/* Translucent, blurred nav. Reads as the system menubar. */
 .VPNav {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   background-color: var(--vp-nav-bg-color) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--vp-c-divider);
 }
 
-/* Clean up hero section aesthetics */
-.VPHero.has-image .container {
-  display: flex;
+/* Hero: centered, breathing. The home no longer carries an image, so
+ * remove the side gutter VitePress reserves for one. */
+.VPHero .container {
+  text-align: center;
+  flex-direction: column;
   align-items: center;
+}
+.VPHero .main {
+  max-width: 820px;
+  margin: 0 auto;
+}
+.VPHero .name,
+.VPHero .text {
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  line-height: 1.05;
+}
+.VPHero .name {
+  background: none !important;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--vp-c-text-1);
+}
+.VPHero .tagline {
+  color: var(--vp-c-text-2) !important;
+  font-size: 18px;
+  max-width: 640px;
+  margin: 24px auto 0;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+.VPHero .actions {
+  margin-top: 32px;
   justify-content: center;
 }
 
-.VPHero .name, .VPHero .text {
-  letter-spacing: -0.02em;
-  font-weight: 700;
-}
-
-.VPHero .tagline {
-  color: var(--vp-c-text-2) !important;
-  font-size: 20px;
-  max-width: 650px;
-  margin: 0 auto;
-  line-height: 1.4;
+/* Buttons. Pill shape; action-affordance-only hover (no glow). */
+.VPButton {
+  border-radius: 9999px !important;
+  font-weight: 500;
   letter-spacing: -0.01em;
+  transition: var(--vp-custom-transition) !important;
 }
-
-/* Hero Button Transitions */
 .VPButton.brand {
   background-color: var(--vp-c-brand-1) !important;
   border-color: var(--vp-c-brand-1) !important;
-  border-radius: 9999px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  transition: var(--vp-custom-transition) !important;
 }
-
 .VPButton.brand:hover {
   background-color: var(--vp-c-brand-2) !important;
-  transform: scale(1.02);
-  box-shadow: 0 8px 16px rgba(10, 132, 255, 0.3);
+  transform: translateY(-1px);
 }
-
 .VPButton.alt {
-  border-radius: 9999px;
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  font-weight: 500;
-  transition: var(--vp-custom-transition) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--vp-c-border) !important;
+  color: var(--vp-c-text-1) !important;
 }
-
 .VPButton.alt:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  transform: scale(1.02);
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  transform: translateY(-1px);
 }
 
-/* Feature Cards Apple-Style */
-.VPFeatures .item {
-  transition: var(--vp-custom-transition);
+/* Feature grid: clickable cards with a subtle border shift on hover.
+ * No glow, no scale — just a 1 px translate and a slight bg lift. */
+.VPFeatures .container {
+  max-width: 1200px;
 }
-
 .VPFeature {
   background-color: var(--vp-c-bg-elv) !important;
   border: 1px solid var(--vp-c-border) !important;
-  border-radius: 16px !important;
+  border-radius: 14px !important;
   transition: var(--vp-custom-transition) !important;
 }
-
 .VPFeature:hover {
-  border-color: var(--vp-c-brand-1) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background-color: var(--vp-c-bg-soft) !important;
+  transform: translateY(-1px);
 }
-
 .VPFeature .title {
   font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+}
+.VPFeature .details {
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+/* The link affordance sits inside .VPLink.link-text-value — make it
+ * visible on the card without dominating the layout. */
+.VPFeature .link-text-value {
+  color: var(--vp-c-brand-1);
+  font-weight: 500;
 }
 
-/* Doc Content Polish */
-.vp-doc h1, .vp-doc h2, .vp-doc h3, .vp-doc h4 {
+/* Doc body. Tight headings, comfortable line-length. */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4 {
   letter-spacing: -0.02em;
 }
-
+.vp-doc h1 {
+  font-size: clamp(28px, 3.6vw, 40px);
+}
+.vp-doc h2 {
+  margin-top: 2.2em;
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 1.5em;
+}
+.vp-doc p {
+  line-height: 1.65;
+  color: var(--vp-c-text-1);
+}
 .vp-doc a {
   color: var(--vp-c-brand-1);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
   transition: var(--vp-custom-transition);
 }
-
 .vp-doc a:hover {
   color: var(--vp-c-brand-3);
 }
 
-.vp-doc p {
-  line-height: 1.6;
+/* Code blocks: a quieter background than the page, mono with the system
+ * fallback so SF Mono shows up where available. */
+.vp-doc div[class*="language-"] {
+  background-color: #0a0a0a !important;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+}
+.vp-doc :not(pre) > code {
+  background-color: rgba(255, 255, 255, 0.06);
   color: var(--vp-c-text-1);
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* Tables: align with body text size, light dividers. */
+.vp-doc table {
+  font-size: 14px;
+}
+.vp-doc th {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Right-rail TOC. Lighter, no chunky border. */
+.VPDocAsideOutline .outline-marker {
+  background-color: var(--vp-c-brand-1);
+}
+
+/* Footer: deliberately quiet. */
+.VPFooter {
+  border-top: 1px solid var(--vp-c-divider);
+  background-color: transparent !important;
+}
+.VPFooter .copyright {
+  color: var(--vp-c-text-3);
+  font-size: 13px;
 }
