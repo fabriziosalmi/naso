@@ -1,5 +1,7 @@
 fastapi>=0.111.0
-uvicorn[standard]==0.27.0
+# uvicorn floor is dictated by mcp>=1.23.0, which requires uvicorn>=0.31.1
+# (CVE-2025-66416 in mcp). Kept as a >= so future minor bumps can flow.
+uvicorn[standard]>=0.31.1,<1
 uvloop==0.19.0
 sqlalchemy[asyncio]==2.0.25
 asyncpg==0.29.0

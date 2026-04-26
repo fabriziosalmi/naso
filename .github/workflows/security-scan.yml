@@ -87,7 +87,16 @@ jobs:
           # so GitHub Code Scanning surfaces them on the Security tab.
           exit-code: 0
       - name: Upload SARIF
+        # GitHub Code Scanning needs to be enabled on the repo for the
+        # SARIF upload to land. On a PR opened against a repo without
+        # Advanced Security / Code Scanning the API call returns
+        # "Resource not accessible by integration" and breaks the
+        # workflow. ``continue-on-error: true`` lets the scan job stay
+        # green; the SARIF file is still produced and could be
+        # uploaded later, e.g. via a workflow_run trigger on push to
+        # main where the permission is reliably granted.
         uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
