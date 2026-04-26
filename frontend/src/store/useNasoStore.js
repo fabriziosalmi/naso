@@ -621,10 +621,16 @@ const useNasoStore = create((set, get) => ({
   exportMassiveDossier: async () => {
     const { isAuthenticated } = get();
     if (!isAuthenticated) return;
+    let url = null;
+    let link = null;
     try {
       const response = await axios.get('/leaks/export/dossier', { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
+      // The blob URL is held by the browser until revoked; without the
+      // cleanup below every dossier export leaked a few MB. Same goes
+      // for the <a> we synthesize — leaving it in the DOM was harmless
+      // but accumulating.
+      url = window.URL.createObjectURL(new Blob([response.data]));
+      link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', 'NASO-FULL-DOSSIER.pdf');
       document.body.appendChild(link);
@@ -634,6 +640,10 @@ const useNasoStore = create((set, get) => ({
     } catch (err) {
       set({ error: 'Dossier export failed' });
       toast.error('Export failed', 'Could not compile the forensic dossier.');
+    } finally {
+      // Always clean up, including on error after createObjectURL.
+      if (link && link.parentNode) link.parentNode.removeChild(link);
+      if (url) window.URL.revokeObjectURL(url);
     }
   },
 
