@@ -78,14 +78,44 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# Swagger / ReDoc paths need a relaxed CSP because they pull JS/CSS from a
+# jsdelivr CDN and execute inline boot scripts. Anything else gets the
+# strict default-src 'self'.
+_SWAGGER_PATHS = ("/api/docs", "/api/redoc", "/api/openapi.json")
+_SWAGGER_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "img-src 'self' data: https://fastapi.tiangolo.com; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'"
+)
+_DEFAULT_CSP = "default-src 'self'; frame-ancestors 'none'"
+
+
 @app.middleware("http")
 async def secure_headers_middleware(request: Request, call_next):
     response = await call_next(request)
+    # HSTS: 1 year, includeSubDomains. Browsers ignore over plain HTTP, so
+    # emitting it unconditionally is safe and means the first HTTPS hit
+    # locks subsequent requests onto TLS.
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    # X-XSS-Protection deliberately NOT set: deprecated in every modern
+    # browser, and the legacy 1; mode=block has known cross-site
+    # information-disclosure bugs. CSP is the modern equivalent.
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Disable browser APIs we don't use. ``()`` denies the feature for
+    # every origin, including the page's own. Add an allowlist later if
+    # the SPA grows a need.
+    response.headers["Permissions-Policy"] = (
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
+        "magnetometer=(), microphone=(), payment=(), usb=()"
+    )
+    response.headers["Content-Security-Policy"] = (
+        _SWAGGER_CSP if request.url.path in _SWAGGER_PATHS else _DEFAULT_CSP
+    )
     return response
 
 
