@@ -46,6 +46,7 @@ const useNasoStore = create((set, get) => ({
   leaks: [],
   identities: [],
   auditLogs: [],
+  auditTotal: 0,    // Total rows the server has, regardless of the current page.
   darkWebResults: [],
   graphData: { nodes: [], links: [] },
   selectedIdentityInsights: null,
@@ -669,7 +670,19 @@ const useNasoStore = create((set, get) => ({
     set({ isLoading: true });
     try {
       const response = await axios.get('/system/audit');
-      set({ auditLogs: response.data, isLoading: false });
+      const data = response.data;
+      // Backend returns {total, limit, offset, items}; older deployments
+      // (or callers that haven't upgraded) might still hand back a bare
+      // array. Accept both so a partial roll-out doesn't blank the UI.
+      if (Array.isArray(data)) {
+        set({ auditLogs: data, auditTotal: data.length, isLoading: false });
+      } else {
+        set({
+          auditLogs: data.items || [],
+          auditTotal: data.total ?? 0,
+          isLoading: false,
+        });
+      }
     } catch (err) {
       set({ error: "Audit log fetch failed", isLoading: false });
       console.error("Audit log fetch failed", err);

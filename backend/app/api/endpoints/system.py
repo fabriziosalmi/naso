@@ -2,8 +2,8 @@ import asyncio
 import logging
 import time
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import text
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -106,30 +106,64 @@ async def _check_elasticsearch() -> None:
         await es.close()
 
 
-@router.get("/audit", response_model=list[dict])
-async def get_audit_logs(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+@router.get("/audit")
+async def get_audit_logs(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    action: str | None = Query(None, max_length=255),
+    resource_type: str | None = Query(None, max_length=64),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Paginated audit-log read.
+
+    Query params:
+      * ``limit`` — page size, [1..500], default 100. Avoids hammering
+        the DB with a SELECT * when /audit is hit by a script.
+      * ``offset`` — straight numeric offset for keyset pagination.
+        Cursor-based pagination is a follow-up; for now offset is
+        bounded enough by the limit cap.
+      * ``action`` and ``resource_type`` — optional equality filters.
+        Useful to drill into a class of events ("show me every
+        IDENTITY_MERGED") without pulling the full table.
+
+    Response shape: ``{total, limit, offset, items: [...]}`` so the
+    client can render "showing 100 of 4321".
     """
-    Recupera i log di audit per compliance (#10).
-    """
-    query = select(AuditLog)
+    base = select(AuditLog)
     if current_user.role != "admin":
-        query = query.where(AuditLog.tenant_id == current_user.tenant_id)
+        base = base.where(AuditLog.tenant_id == current_user.tenant_id)
+    if action:
+        base = base.where(AuditLog.action == action)
+    if resource_type:
+        base = base.where(AuditLog.resource_type == resource_type)
 
-    result = await db.execute(query.order_by(AuditLog.timestamp.desc()).limit(100))
-    logs = result.scalars().all()
+    # Total count — proper aggregate, not len(all_rows).
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
 
-    return [
-        {
-            "id": l.id,
-            "user_id": l.user_id,
-            "action": l.action,
-            "resource_type": l.resource_type,
-            "resource_id": l.resource_id,
-            "timestamp": l.timestamp.isoformat(),
-            "details": l.details,
-        }
-        for l in logs
-    ]
+    # Page rows.
+    rows = (
+        await db.execute(base.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit))
+    ).scalars().all()
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": [
+            {
+                "id": l.id,
+                "user_id": l.user_id,
+                "action": l.action,
+                "resource_type": l.resource_type,
+                "resource_id": l.resource_id,
+                "timestamp": l.timestamp.isoformat(),
+                "details": l.details,
+            }
+            for l in rows
+        ],
+    }
 
 
 @router.get("/audit/verify")
@@ -149,8 +183,11 @@ async def verify_audit_chain_endpoint(
     result = await verify_chain(db, tenant_id=tenant_id)
 
     # Count rows for UX — "verified 247 entries, chain intact".
-    count_stmt = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
-    total = len((await db.execute(count_stmt)).scalars().all())
+    # Use a proper SQL aggregate; the previous len(all_rows) materialized
+    # the entire chain into Python memory just to count it, which is
+    # quadratic with how often the integrity banner re-runs verify.
+    count_stmt = select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tenant_id)
+    total = (await db.execute(count_stmt)).scalar_one()
 
     return {
         "ok": result.ok,
