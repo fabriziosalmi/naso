@@ -1,7 +1,12 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr
+
+# Closed set of values the LeakHit.status column can hold. Anything else
+# is rejected with a 422 at the API boundary instead of silently being
+# stored. Add to this list when introducing a new workflow state.
+LeakStatus = Literal["new", "reviewing", "resolved", "escalated", "false_positive"]
 
 
 # Tenant Schemas

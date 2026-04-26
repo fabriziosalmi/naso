@@ -294,3 +294,45 @@ async def test_shodan_rejects_invalid_ip(client, auth_headers):
     res = await client.get("/leaks/recon/shodan?ip=not_an_ip", headers=auth_headers)
     assert res.status_code == 400
     assert "Invalid IP address" in res.json()["detail"]
+
+
+# ── Pydantic input validation ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_leak_status_rejects_unknown_value(client, auth_headers):
+    """LeakStatus is a closed Literal — values outside the allowed set hit
+    a FastAPI 422 during query-param validation, before the route body
+    runs. We don't need an actual row.
+    """
+    res = await client.patch("/leaks/whatever/status?status=bogus", headers=auth_headers)
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_leaks_rejects_unknown_status_filter(client, auth_headers):
+    res = await client.get("/leaks/?status=bogus", headers=auth_headers)
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ingest_webhook_rejects_oversized_content_length(client, auth_headers):
+    """Client lies about a 5MB body — middleware short-circuits with 413."""
+    big = 5 * 1024 * 1024
+    res = await client.post(
+        "/leaks/ingest/webhook",
+        content=b"{}",
+        headers={**auth_headers, "Content-Length": str(big)},
+    )
+    assert res.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_ingest_webhook_rejects_invalid_payload_shape(client, auth_headers):
+    """Body parses as JSON but doesn't match WebhookPayload — 422 from pydantic."""
+    res = await client.post(
+        "/leaks/ingest/webhook",
+        json={"missing_required_source_and_content": True},
+        headers=auth_headers,
+    )
+    assert res.status_code == 422

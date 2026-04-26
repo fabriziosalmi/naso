@@ -18,8 +18,16 @@ from shared.domain.services.darkweb_search import DarkWebSearchService
 from shared.domain.services.shodan_search import ShodanService
 from shared.domain.services.telegram_search import TelegramOSINTService
 from shared.models import LeakHit
+from shared.schemas import LeakStatus
 from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
+
+# Hard cap on the unified webhook body. 1 MiB is enough for any
+# realistic leak snippet (full breach dumps go through bulk uploads,
+# not the synchronous webhook); larger bodies signal abuse and we 413
+# them before consuming them. The check uses Content-Length first; a
+# request without a Content-Length still gets a streamed bound below.
+_MAX_INGEST_BYTES = 1 * 1024 * 1024
 
 from ...infrastructure.rabbitmq import rabbitmq_pool
 from ..deps import get_current_user
@@ -28,27 +36,52 @@ router = APIRouter()
 
 
 class WebhookPayload(BaseModel):
-    source: str = Field(..., description="Name of the external tool or script (e.g. 'custom_scraper')")
-    content: str = Field(..., description="Raw text or JSON dump discovered")
-    metadata: Optional[dict] = Field(default={}, description="Optional tracking tags and OSINT parameters")
+    source: str = Field(..., min_length=1, max_length=255, description="Name of the external tool or script (e.g. 'custom_scraper')")
+    content: str = Field(..., max_length=_MAX_INGEST_BYTES, description="Raw text or JSON dump discovered")
+    metadata: Optional[dict] = Field(default_factory=dict, description="Optional tracking tags and OSINT parameters")
 
 
 @router.post("/ingest/webhook", status_code=202)
 async def unified_ingestion_webhook(request: Request, current_user=Depends(get_current_user)):
-    """
-    ZERO-ALLOCATION WEBHOOK INGESTION (SOTA)
-    Reads raw bytes stream via orjson and directly writes to RabbitMQ
-    Celery Queue via aio_pika, bypassing heap allocation buffering.
-    """
-    raw_body = await request.body()
-    try:
-        payload = orjson.loads(raw_body)
-    except orjson.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON stream format")
+    """Validated, size-capped webhook ingestion.
 
-    source = payload.get("source", "webhook")
-    content = payload.get("content", "")
-    metadata = payload.get("metadata", {})
+    Body is parsed by FastAPI/pydantic against ``WebhookPayload`` (was
+    previously ``orjson.loads(raw_body)`` with no schema), so missing
+    fields and oversized content fail with a 422 instead of being
+    swallowed. A Content-Length precheck adds an early 413 for clients
+    that announce a body larger than ``_MAX_INGEST_BYTES``.
+
+    Payload then crosses straight into the Celery exchange via aio_pika
+    so the request handler never holds the parsed object beyond what
+    pydantic already produced.
+    """
+    # Early reject: client that *says* it will send a giant body. The
+    # pydantic max_length on `content` catches it post-parse anyway, but
+    # this avoids wasting bandwidth + parser cycles. Header is optional
+    # in HTTP/1.1 chunked uploads, so missing length means "fall through
+    # to the per-field cap below".
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            if int(declared) > _MAX_INGEST_BYTES:
+                raise HTTPException(status_code=413, detail="Payload too large")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header")
+
+    raw_body = await request.body()
+    if len(raw_body) > _MAX_INGEST_BYTES:
+        # Belt-and-braces for chunked uploads where Content-Length was
+        # absent. Same status code so clients see one consistent error.
+        raise HTTPException(status_code=413, detail="Payload too large")
+
+    try:
+        payload = WebhookPayload.model_validate_json(raw_body)
+    except ValueError as exc:
+        # Pydantic ValidationError subclasses ValueError; orjson errors
+        # in the same path land here too (bad JSON → can't validate).
+        raise HTTPException(status_code=422, detail=f"Invalid webhook payload: {exc}") from exc
+
+    metadata = dict(payload.metadata or {})
     metadata["tenant_id"] = current_user.tenant_id
 
     # 1. Ottieni un canale dal pool condiviso (evita una connessione TCP per ogni request)
@@ -61,11 +94,11 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
         task_id = str(uuid.uuid4())
         hit_data_dict = {
             "tenant_id": current_user.tenant_id,
-            "source": source,
+            "source": payload.source,
             "metadata_json": metadata,
         }
         task_args = (
-            [hit_data_dict, content],  # positional: hit_data, raw_content
+            [hit_data_dict, payload.content],  # positional: hit_data, raw_content
             {},
             {"callbacks": None, "errbacks": None, "chain": None, "chord": None},
         )
@@ -216,10 +249,17 @@ async def export_massive_dossier(db: AsyncSession = Depends(get_db), current_use
 
 @router.patch("/{leak_id}/status")
 async def update_leak_status(
-    leak_id: str, status: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+    leak_id: str,
+    status: LeakStatus,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """
-    Update status and log for compliance (#10).
+    """Update a leak's workflow status (compliance trail).
+
+    ``status`` is typed as the closed-set ``LeakStatus`` Literal, so an
+    unknown value (``?status=anything``) produces a 422 from FastAPI
+    before this body runs. Previously the param was ``str`` and the DB
+    happily stored garbage.
     """
     result = await db.execute(select(LeakHit).where(LeakHit.id == leak_id))
     leak = result.scalar_one_or_none()
@@ -323,7 +363,7 @@ async def acknowledge_all_critical(
 @router.get("/")
 async def get_leaks(
     source: Optional[str] = None,
-    status: Optional[str] = None,
+    status: Optional[LeakStatus] = None,
     min_severity: Optional[int] = None,
     max_severity: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
