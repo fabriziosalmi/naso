@@ -1,91 +1,181 @@
 # Architecture
 
-NASO is engineered as a heavily decoupled, containerized microservices platform optimized for high-throughput forensic evidence processing.
+Runtime layout, the data flow for a single leak, and the schema of the two append-only ledgers (audit + merge events).
 
-## System Overview
+## Runtime layout
 
 ```mermaid
-graph TD
-    subgraph External Sources
-        A1((Dark Web))
-        A2((Paste Sites))
-        A3((Combo Lists))
-    end
+graph LR
+  classDef api fill:#1c1c1e,stroke:#0a84ff,color:#fff,rx:6,ry:6
+  classDef worker fill:#1c1c1e,stroke:#bf5af2,color:#fff,rx:6,ry:6
+  classDef store fill:#1c1c1e,stroke:#32d74b,color:#fff,rx:6,ry:6
+  classDef ext fill:#0c0c0e,stroke:#8e8e93,color:#fff,rx:6,ry:6
 
-    subgraph NASO Core
-        B[Async API - FastAPI]
-        C[Worker: Pipeline]
-        D[Worker: Massive]
-        E{Babel NLP Node}
-    end
+  SPA[React SPA]:::api -- HTTPS + cookie + CSRF --> API
+  CLI((curl / MCP)):::ext -- Bearer --> API
 
-    subgraph Storage Layer
-        F1[(PostgreSQL)]
-        F2[(Elasticsearch)]
-        F3[(MinIO)]
-    end
+  API[FastAPI<br/>uvicorn]:::api -- aio_pika --> MQ[(RabbitMQ)]:::worker
+  MQ --> WP[Celery worker<br/>pipeline]:::worker
+  MQ --> WM[Celery worker<br/>massive]:::worker
 
-    subgraph Integrations
-        G((SOAR/SIEM))
-        H[MCP Local Agent]
-    end
+  API <--> PG[(PostgreSQL<br/>asyncpg)]:::store
+  API <--> RD[(Redis<br/>JTI blacklist)]:::store
 
-    A1 & A2 & A3 -->|Triggers| B
-    B -->|Fast Route| C
-    B -->|Streaming| D
-    C --> E
-    D --> E
-    E -->|Metadata| F1
-    E -->|Full-Text| F2
-    E -->|Blobs| F3
-    E -->|Severity >= 90| G
-    H -->|Direct Access| B
+  WP --> PG
+  WP --> ES[(Elasticsearch)]:::store
+  WP --> MIN[(MinIO)]:::store
+  WP --> LLM([Local LLM]):::ext
+  WP --> TOR((Tor x5 + HAProxy)):::ext
+  WP -. severity ≥ 90 .-> SOAR((SOAR webhook<br/>HMAC-signed)):::ext
+
+  WM --> PG
+  WM --> MIN
+
+  API --> JAE[(Jaeger /<br/>OTLP collector)]:::store
+  WP --> JAE
 ```
 
-## 1. Web Layer (FastAPI)
+Boundaries:
 
-The API server is built on FastAPI with full async/await support. All database interactions use SQLAlchemy 2.0's asynchronous API with the `asyncpg` PostgreSQL driver.
+- **API process**: stateless. Anything in-process (the CSRF middleware, the per-tenant audit lock) survives only within the request scope.
+- **Worker processes**: own their own engine + session pool (`NullPool`, see [`shared/tasks/pipeline.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/tasks/pipeline.py) for why). Two queues: `default + osint` for the regular pipeline, `massive` for streaming bulk processors that must be single-concurrency.
+- **Tor cluster**: bridge-network only. Dark-web egress goes through HAProxy → 5 Tor instances. There is no clearnet escape hatch from the workers other than this proxy.
 
-- **Connection Pooling**: Configurable via `DB_POOL_SIZE` (default: 20) and `DB_MAX_OVERFLOW` (default: 10).
-- **Authentication**: OAuth2 Bearer tokens with JWT (EdDSA / Ed25519). Token expiry configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`.
-- **Multi-Tenancy**: Every data query is scoped to `tenant_id` by default. Admin-role users can bypass tenant isolation for global views.
+## Leak ingestion: end-to-end
 
-## 2. Worker Pipeline (Celery)
+```mermaid
+sequenceDiagram
+  participant C as Caller
+  participant API as FastAPI<br/>/leaks/ingest/webhook
+  participant MQ as RabbitMQ
+  participant W as worker-pipeline
+  participant DB as Postgres
+  participant ES as Elasticsearch
+  participant MIN as MinIO
+  participant SOAR as SOAR receiver
 
-The ingestion engine is decoupled from the API layer via Celery workers backed by RabbitMQ.
+  C->>API: POST { source, content, metadata }
+  API->>API: pydantic validate + 1 MiB cap
+  API->>API: rate-limit (60/min/IP)
+  API->>MQ: aio_pika publish (celery exchange)
+  API->>DB: write INGEST_WEBHOOK audit row
+  API-->>C: 202 { task_id }
 
-### Worker Separation
+  MQ->>W: deliver task
+  W->>W: idempotency_key = SHA-256(content)
+  W->>W: Babel NLP / NER pass
+  W->>W: YARA rule scan
+  W->>W: AI triage (with circuit breaker)
+  W->>MIN: store raw blob + screenshot
+  W->>ES: index leak document
+  W->>DB: ingest_leak (SimHash dedup, ON CONFLICT)
+  W->>DB: identity correlation (upsert + ON CONFLICT)
+  W->>DB: mark_dirty for risk recompute
+  W->>DB: write IDENTITY_LINKED audit rows
+  alt severity ≥ 90
+    W->>SOAR: POST signed STIX (HMAC-SHA256)
+  end
+```
 
-| Worker | Queue | Concurrency | Purpose |
-|---|---|---|---|
-| `worker-pipeline` | `default`, `osint` | 4 | Standard OSINT scraping, identity merging |
-| `worker-massive` | `massive` | 1 | Gigabyte-scale streaming file processing |
+Idempotency key is the SHA-256 of the raw content. Two ingests of the same dump go through Babel + YARA + AI exactly once; the second collapses on the existing `LeakHit` row via `ingest_leak`'s `ON CONFLICT DO NOTHING` (see [`shared/domain/services/leak_ingest.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/domain/services/leak_ingest.py)).
 
-### Security Hardening
+Near-duplicate dedup uses 64-bit SimHash + a Hamming distance threshold of ≤ 3. A breach dump that re-emerges with whitespace/line-ending differences gets folded into the same row instead of duplicating.
 
-All worker containers run with:
+## Storage hierarchy
 
-- `no-new-privileges: true`
-- `cap_drop: ALL`
-- `read_only: true` filesystem (with `tmpfs` for scratch)
-- Memory and CPU resource limits enforced via Docker `deploy.resources`
+| Store         | Owns                                                                                  |
+|---------------|---------------------------------------------------------------------------------------|
+| **PostgreSQL**| Tenants, users, keywords, identities, identity_leaks (M:N), leak_hits, merge_events, audit_logs, MITRE techniques, YARA rules, webhooks, investigation plans + tasks |
+| **Elasticsearch** | Full-text index over leak content + metadata. Source of truth is still Postgres — ES is rebuildable. |
+| **MinIO**     | Raw content blobs, forensic screenshots, exported dossier PDFs. One bucket per tenant. |
+| **Redis**     | JWT JTI blacklist (TTL = remaining token lifetime); dark-web result cache with bounded size + TTL. |
 
-## 3. Storage Hierarchy
+## The two ledgers
 
-### PostgreSQL (Relational Metadata)
-Primary store for users, tenants, identities, leak records, investigation plans, audit logs, YARA rules, and webhook configurations.
+NASO's tamper-evident posture rests on two append-only tables, both per-tenant hash-chained.
 
-### MinIO (Object Storage)
-Binary artifacts: forensic screenshots, raw data blobs, and exported dossier PDFs.
+### `audit_logs` (every analyst action)
 
-### Elasticsearch (Search Index)
-Full-text search across leak content snippets and metadata, enabling sub-millisecond retrieval for analyst queries.
+```
+┌──────────────┬──────────────┬──────────────┐
+│  prev_hash   │              │              │
+│      ↓       │              │              │
+│  ┌────────┐  │  ┌────────┐  │  ┌────────┐  │
+│  │ row 0  │──┼─→│ row 1  │──┼─→│ row 2  │  │
+│  └────────┘  │  └────────┘  │  └────────┘  │
+│              │              │              │
+└──────────────┴──────────────┴──────────────┘
+              tenant A
+```
 
-## 4. Tor Cluster
+`self_hash = SHA256(canonical-json(tenant_id, user_id, action, resource_type, resource_id, details, timestamp, prev_hash))`. Tampering anything in the row changes `self_hash`; tampering the previous row breaks `prev_hash`. Verification walks the chain and reports the first failing row.
 
-A fleet of 5 Tor containers behind an HAProxy load balancer provides anonymized dark web access. All Tor traffic is isolated within the internal Docker bridge network.
+Concurrency: `pg_advisory_xact_lock(hashtext(tenant_id))` for cross-process serialization, `asyncio.Lock` per tenant for in-process. Both required: SQLite tests rely on the asyncio lock alone; Postgres prod relies on both.
 
-## 5. Observability
+### `merge_events` (every identity merge)
 
-- **Distributed Tracing**: Jaeger (OpenTelemetry) is deployed as a sidecar for end-to-end request tracing across API and worker boundaries.
-- **Audit Logging**: Every user and AI action is recorded in the `audit_logs` table with IP address, timestamp, and structured detail fields.
+Same chain semantics. Each row carries the `evidence` JSON array (e.g. `{"type":"shared_leak", "leak_id":"...", "strength":0.8}`), aggregate `confidence`, and a `reversed_at` field for soft reversal — the ledger stays append-only. See [`shared/domain/services/entity_resolution.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/domain/services/entity_resolution.py) for the merge logic and [`shared/domain/services/merge_proposer.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/domain/services/merge_proposer.py) for the candidate-pair selector.
+
+## Schema (key tables)
+
+```mermaid
+erDiagram
+  TENANTS ||--o{ USERS : has
+  TENANTS ||--o{ IDENTITIES : has
+  TENANTS ||--o{ LEAK_HITS : has
+  TENANTS ||--o{ AUDIT_LOGS : has
+  TENANTS ||--o{ MERGE_EVENTS : has
+
+  IDENTITIES ||--o{ IDENTITY_LEAKS : in
+  LEAK_HITS  ||--o{ IDENTITY_LEAKS : in
+  IDENTITIES ||--o| IDENTITIES : "master_identity_id"
+
+  LEAK_HITS  ||--o{ MITRE_LEAKS : tagged
+  MITRE_TECHNIQUES ||--o{ MITRE_LEAKS : referenced
+
+  MERGE_EVENTS }o--|| IDENTITIES : master
+  MERGE_EVENTS }o--|| IDENTITIES : slave
+```
+
+Notable design choices:
+
+- `Identity.normalized_identifier` is the canonical key (Gmail dot/plus folded, domain lowercased, phone digits-only). The unique constraint is on `(tenant_id, type, normalized_identifier)`, so two analysts ingesting the same email in different surface forms create one row.
+- `Identity.master_identity_id` self-references for merge clusters. Risk computation walks up the cluster.
+- `LeakHit.simhash64` is indexed; near-duplicate lookups are fast.
+- `AuditLog` and `MergeEvent` carry `prev_hash` + `self_hash`; the rest of the columns are normal data.
+
+The full SQLAlchemy declarations live in [`shared/models.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/models.py).
+
+## Worker separation
+
+| Worker             | Queues          | Concurrency | Job                                                                  |
+|--------------------|-----------------|-------------|----------------------------------------------------------------------|
+| `worker-pipeline`  | `default, osint`| 4           | Standard ingest, identity correlation, dark-web probes, GitHub scans |
+| `worker-massive`   | `massive`       | 1           | Streaming bulk-blob processors (gigabyte-scale)                      |
+
+Massive jobs run single-concurrency by design: their working set already fills the machine, parallelism just OOMs faster.
+
+The `task_routes` in `shared/celery_app.py` map task name patterns to queues. Each task that needs to run on the massive queue must declare an explicit `name="tasks.massive.<...>"` so the routing pattern matches.
+
+## Observability
+
+- **Distributed tracing**: every API request and Celery task starts an OpenTelemetry span; cross-process trace context propagates via the AMQP message headers. The Co-Analyst loop wraps each iteration in an `agent_turn` span and each tool call in a `tool_span`, with attributes for `parallel`, `iteration`, `tenant_id`. Dashboards: see the [Runbook](runbook.md).
+- **Sentry**: opt-in via `SENTRY_DSN`. The global FastAPI exception handler captures uncaught exceptions, downgrading to a 500 with no stack trace in the response.
+- **Audit chain**: see above. The integrity check is itself observable — a `BROKEN_CHAIN` event lands in the audit log when a verification request fails.
+
+## Code map
+
+| Where                                          | What                                                              |
+|------------------------------------------------|-------------------------------------------------------------------|
+| `backend/app/main.py`                          | FastAPI app, middlewares (CSRF / CORS / TrustedHost / sec headers) |
+| `backend/app/api/endpoints/`                   | One file per resource (`auth`, `leaks`, `identities`, …)           |
+| `backend/app/csrf.py`                          | Double-submit cookie middleware                                    |
+| `shared/config.py`                             | Pydantic Settings (single source of truth)                         |
+| `shared/database.py`                           | API-side async engine + session                                    |
+| `shared/models.py`                             | All ORM models                                                    |
+| `shared/celery_app.py`                         | Celery app + queue routing                                        |
+| `shared/tasks/`                                | One module per task family (pipeline, darkweb, github, …)          |
+| `shared/domain/services/`                      | Business logic (correlation, merge, identity_upsert, audit_chain) |
+| `shared/utils/`                                | Cross-cutting (audit, reporting, tracing, circuit_breaker, …)      |
+
+If a change spans more than one of these, it likely belongs in the corresponding domain service, not in an endpoint handler.

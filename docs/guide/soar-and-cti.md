@@ -1,49 +1,105 @@
-# Automation: SOAR Webhooks & CTI
+# SOAR & CTI
 
-NASO's pipeline can execute automated response actions when critical threats are detected.
+Two outbound integrations: a signed webhook into your SOAR / SIEM for critical alerts, and a small set of CTI adapters that enrich leaks at ingest time.
 
-## SOAR Webhooks
+## SOAR webhook
 
-When a leak is processed with `severity_score >= 80`, NASO can fire a webhook to your SIEM/SOAR platform.
+When the pipeline finishes processing a leak with `severity_score ≥ 90`, it POSTs a payload to `SOAR_WEBHOOK_URL`. Implementation: [`shared/tasks/pipeline.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/tasks/pipeline.py).
 
-### Enabling the Hook
-
-Set the following environment variable:
-
-```bash
-SOAR_WEBHOOK_URL="https://your-splunk-heavy-forwarder.corp.local/api/v1/stix-feed"
-```
-
-### Threshold
-
-The SOAR trigger threshold is `80` (configurable at call time via the `ack-all` endpoint parameter).
-
-### The Payload
-
-NASO dispatches a non-blocking `POST` with a JSON body:
+### Payload
 
 ```json
 {
   "alert_type": "CRITICAL_OSINT_LEAK",
   "details": {
-    "tenant_id": "ORG-1X",
-    "source": "tor-crawl",
-    "severity_score": 98,
-    "metadata_json": { ... }
+    "tenant_id": "...",
+    "source": "telegram",
+    "severity_score": 95,
+    "idempotency_key": "<sha256 of raw content>",
+    "metadata_json": { "ai_analysis": { ... }, "yara_matches": [...] }
   }
 }
 ```
 
-### Rate Limiting
+The body is `orjson`-serialized. Receivers MUST hash the bytes as-is — order of keys is not stable; don't depend on it.
 
-The webhook call has a 3-second timeout and is fire-and-forget (non-blocking). Configure your SIEM to accept this payload format.
+### Headers
 
-## CTI Adapters
+```
+Content-Type: application/json
+X-Naso-Timestamp: 1777219979
+X-Naso-Signature-256: sha256=24c72707e2737a51c41423aaf50cee02562bff17878a2033c328eb06019374a9
+```
 
-NASO integrates with public, keyless CTI sources:
+### HMAC verification
 
-- **Bitcoin wallet balance** — queried from public blockchain explorers
-- **IP threat scoring** — fetched from ThreatFox public API
-- **YARA rule matching** — local rule engine against all ingested content
+The signature is `HMAC-SHA256(NASO_WEBHOOK_SIGNING_SECRET, "<timestamp>.<body>")`. Receivers should:
 
-These integrations are implemented as Celery tasks and run asynchronously within the pipeline worker.
+1. Reject when `|now - X-Naso-Timestamp| > 5 minutes`. Anti-replay.
+2. Recompute the MAC with their copy of the secret, over the exact bytes received.
+3. `hmac.compare_digest` against the value in `X-Naso-Signature-256` (constant-time compare).
+
+Reference receiver in Python:
+
+```python
+import hmac, hashlib, time
+
+SECRET = b"<same NASO_WEBHOOK_SIGNING_SECRET>"
+
+def verify(headers, body: bytes) -> bool:
+    ts = headers.get("X-Naso-Timestamp")
+    sig = headers.get("X-Naso-Signature-256", "")
+    if not ts or not sig.startswith("sha256="):
+        return False
+    if abs(int(time.time()) - int(ts)) > 300:
+        return False
+    expected = hmac.new(SECRET, ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig.removeprefix("sha256="), expected)
+```
+
+### Behavior when the secret is missing
+
+If `NASO_WEBHOOK_SIGNING_SECRET` is unset, NASO still ships the alert (so a misconfigured dev env doesn't silently swallow critical notifications) but logs a `WARNING`. Production receivers should reject unsigned deliveries.
+
+### Failure handling
+
+- Network errors are caught, logged at ERROR, and **don't** retry. The pipeline keeps moving — a leak doesn't get re-ingested because a SOAR webhook flapped.
+- For at-least-once delivery, run a sidecar that periodically re-fires the alerts for `LeakHit` rows where `severity_score ≥ 90` and a downstream marker is missing. Out of scope for the engine itself.
+
+### Threshold
+
+The SOAR trigger threshold is hard-coded at `severity_score ≥ 90` in `pipeline.py`, deliberately decoupled from the in-app notification threshold (`CRITICAL_SCORE_THRESHOLD`, default 80). The webhook is for *true* criticals; the in-app notification is for everything you'd flag for review.
+
+## CTI adapters
+
+[`shared/domain/services/cti_adapters.py`](https://github.com/fabriziosalmi/naso/blob/main/shared/domain/services/cti_adapters.py) holds the in-pipeline enrichment layer. When a leak's Babel NLP pass extracts certain entities, the pipeline calls out to public CTI sources to enrich the metadata.
+
+| Entity type           | Source              | Field added to `LeakHit.metadata_json` |
+|-----------------------|---------------------|----------------------------------------|
+| Bitcoin wallet        | blockchain.info      | `cti_btc` (balance + recent tx count)  |
+| IPv4 / IPv6 address   | ThreatFox public API | `cti_threatfox` (matched IOCs, family) |
+| YARA rule matches     | local engine         | `yara_matches` (rule names + offsets)  |
+
+Both HTTP-based adapters:
+
+- Time out aggressively so a slow CTI provider doesn't pin the worker.
+- Cache results with a short TTL where the source allows it.
+- Fail open: if the CTI provider is unreachable, the leak is processed without enrichment. Logged at WARNING.
+
+Adding a new CTI source = adding a method on `CTIAdapters` + a call from the pipeline next to the existing ones. Tests use `httpx.MockTransport` so the suite never touches the network.
+
+## STIX/TAXII?
+
+NASO does **not** speak STIX/TAXII natively. The SOAR webhook payload is JSON-shaped to be easily mapped to STIX 2.1 by the receiver (the `alert_type` corresponds to a STIX `indicator` object), but the engine doesn't generate STIX bundles itself. If your SOAR insists on STIX, the mapping is mechanical and belongs in your receiver.
+
+## Configuration recap
+
+| Variable                       | Notes                                                                |
+|--------------------------------|----------------------------------------------------------------------|
+| `SOAR_WEBHOOK_URL`             | When unset, the SOAR branch logs and skips                           |
+| `NASO_WEBHOOK_SIGNING_SECRET`  | 64-char hex generated by `cli/generate_secrets.py`. Production must set this. |
+| `CRITICAL_SCORE_THRESHOLD`     | Default 80. In-app notification threshold. SOAR threshold is hard-coded at 90 in `pipeline.py`. |
+
+See also:
+- [Configuration](configuration.md) for the full env-var reference.
+- [Runbook → SOAR webhook receiver not getting alerts](runbook.md#soar-webhook-receiver-not-getting-alerts) for diagnosis.

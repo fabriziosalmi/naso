@@ -27,8 +27,12 @@ export default {
         text: "Platform",
         collapsed: false,
         items: [
-          { text: "Introduction", link: "/guide/" },
-          { text: "Architecture", link: "/guide/architecture" }
+          { text: "Getting Started", link: "/guide/" },
+          { text: "Architecture", link: "/guide/architecture" },
+          { text: "Configuration", link: "/guide/configuration" },
+          { text: "Security", link: "/guide/security" },
+          { text: "Deployment", link: "/guide/deployment" },
+          { text: "Runbook", link: "/guide/runbook" }
         ]
       },
       {
@@ -37,9 +41,17 @@ export default {
         items: [
           { text: "Identity Hub", link: "/guide/identity-hub" },
           { text: "Dark Web Recon", link: "/guide/dark-recon" },
-          { text: "MCP & GenAI", link: "/guide/mcp-integration" },
-          { text: "SOAR & CTI Hooks", link: "/guide/soar-and-cti" },
-          { text: "Compliance Data", link: "/guide/reporting" }
+          { text: "AI Co-Analyst", link: "/guide/ai-coanalyst" },
+          { text: "MCP Integration", link: "/guide/mcp-integration" },
+          { text: "SOAR & CTI", link: "/guide/soar-and-cti" },
+          { text: "Reporting", link: "/guide/reporting" }
+        ]
+      },
+      {
+        text: "Project",
+        collapsed: false,
+        items: [
+          { text: "Contributing", link: "/guide/contributing" }
         ]
       }
     ],
