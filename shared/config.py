@@ -18,6 +18,12 @@ class Settings(BaseSettings):
 
     # API Security
     ALLOWED_CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000"
+    # Hosts the API answers to. TrustedHostMiddleware rejects anything else
+    # with a 400 — so the prod deployer MUST override this to include the
+    # public DNS name. The default keeps dev (localhost / docker) and the
+    # two pytest httpx ASGITransport hostnames working out of the box.
+    # Example: ALLOWED_HOSTS="naso.example.com,api.naso.example.com"
+    ALLOWED_HOSTS: str = "localhost,127.0.0.1,host.docker.internal,naso-api,test,testserver"
 
     # Elasticsearch
     ES_HOST: str = "elasticsearch"

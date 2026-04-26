@@ -89,6 +89,17 @@ async def test_system_status_no_error_field(client):
     assert "error" not in response.json()
 
 
+@pytest.mark.asyncio
+async def test_trusted_host_rejects_unknown_host_header(client):
+    """TrustedHostMiddleware drops a request whose Host header is not in
+    settings.ALLOWED_HOSTS. The dev default permits localhost / docker /
+    the pytest httpx hostnames; an arbitrary value like "evil.example.com"
+    must hit a 400 from Starlette before any route runs.
+    """
+    response = await client.get("/system/status", headers={"host": "evil.example.com"})
+    assert response.status_code == 400
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 

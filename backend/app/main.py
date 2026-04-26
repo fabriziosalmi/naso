@@ -111,7 +111,10 @@ app.add_middleware(
     ],
 )
 
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "host.docker.internal", "naso-api"])
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=[h.strip() for h in settings.ALLOWED_HOSTS.split(",") if h.strip()],
+)
 app.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 app.include_router(keywords.router, prefix="/keywords", tags=["keywords"])
 app.include_router(leaks.router, prefix="/leaks", tags=["leaks"])
