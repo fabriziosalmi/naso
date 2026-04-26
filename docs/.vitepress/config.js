@@ -5,6 +5,10 @@ export default {
   description: "Advanced Forensic & Intelligence Framework.",
   cleanUrls: true,
   appearance: 'dark', // Native dark mode standard
+  // docs/internal/* holds historical scratch notes (planning docs, old
+  // walkthroughs). Not part of the public site; explicitly excluded so a
+  // stray <a href> never resolves to one.
+  srcExclude: ['internal/**'],
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/naso/logo.svg' }],
     ['meta', { name: 'theme-color', content: '#000000' }]
