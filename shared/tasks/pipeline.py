@@ -1,14 +1,16 @@
 # ruff: noqa: E402
 import asyncio
 import hashlib
+import hmac
 import io
 import json
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
+import orjson
 from elasticsearch import AsyncElasticsearch
 from minio import Minio
 from sqlalchemy import select
@@ -168,12 +170,38 @@ def process_potential_leak(self, hit_data, raw_content):
         if hit_data.get("severity_score", 0) >= 90:
             try:
                 webhook_url = os.getenv("SOAR_WEBHOOK_URL")
-                if webhook_url:
-                    stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
-                    await _soar_client.post(webhook_url, json=stix_payload)  # P-05: async, no thread blocking
-                    logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
-                else:
+                if not webhook_url:
                     logger.info("[SOAR] SOAR_WEBHOOK_URL not configured, skipping webhook dispatch")
+                else:
+                    stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
+                    # Serialize once, then sign that exact byte string.
+                    # Using orjson here (rather than letting httpx pick a
+                    # default encoder) guarantees the receiver hashes
+                    # the same bytes we did.
+                    body = orjson.dumps(stix_payload)
+                    timestamp = str(int(datetime.now(timezone.utc).timestamp()))
+                    headers = {
+                        "Content-Type": "application/json",
+                        "X-Naso-Timestamp": timestamp,
+                    }
+                    secret = os.getenv("NASO_WEBHOOK_SIGNING_SECRET", "").encode()
+                    if secret:
+                        # Concatenate "<ts>.<body>" before signing so a
+                        # replay with a fresh timestamp and the same body
+                        # produces a different MAC. Receivers should:
+                        #   1. reject when |now - ts| > 5 minutes
+                        #   2. recompute MAC with their copy of the secret
+                        #   3. compare with hmac.compare_digest
+                        signed = timestamp.encode() + b"." + body
+                        sig = hmac.new(secret, signed, hashlib.sha256).hexdigest()
+                        headers["X-Naso-Signature-256"] = f"sha256={sig}"
+                    else:
+                        logger.warning(
+                            "[SOAR] NASO_WEBHOOK_SIGNING_SECRET not set; sending unsigned webhook. "
+                            "Configure the secret in production — receivers should reject unsigned alerts."
+                        )
+                    await _soar_client.post(webhook_url, content=body, headers=headers)
+                    logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
             except Exception as e:
                 logger.error(f"[SOAR] Webhook dispatch failed: {e}")
 
