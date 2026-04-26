@@ -38,6 +38,11 @@ tenacity==8.2.3
 pytest
 pytest-asyncio
 pytest-cov
+# In-memory SQLite driver used by the test conftest. Not needed at
+# runtime but the test suite imports it at collection time, so it
+# has to live alongside pytest in this list.
+aiosqlite>=0.19.0
 -r shared/requirements-shared.txt
-mcp>=1.2.0
+# CVE-2025-66416 fixed in 1.23.0; pip-audit gates on this floor.
+mcp>=1.23.0
 sentry-sdk[fastapi]>=1.40.4
