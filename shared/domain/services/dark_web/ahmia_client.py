@@ -36,7 +36,6 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 import httpx
 from bs4 import BeautifulSoup
@@ -158,12 +157,12 @@ class AhmiaClient:
     def __init__(
         self,
         *,
-        config: Optional[DarkWebConfig] = None,
-        http_client: Optional[httpx.AsyncClient] = None,
-        token_bucket: Optional[TokenBucket] = None,
-        breaker: Optional[CircuitBreaker] = None,
-        cache: Optional[AhmiaCache] = None,
-        rotator: Optional[HostRotator] = None,
+        config: DarkWebConfig | None = None,
+        http_client: httpx.AsyncClient | None = None,
+        token_bucket: TokenBucket | None = None,
+        breaker: CircuitBreaker | None = None,
+        cache: AhmiaCache | None = None,
+        rotator: HostRotator | None = None,
     ) -> None:
         self._config = config or DEFAULT_CONFIG
         self._http = http_client or self._build_default_client(self._config)
@@ -325,7 +324,7 @@ class AhmiaClient:
         return await self._breaker.call(_do)
 
     async def _execute_with_retries(self, query: str, page: int) -> str:
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         params = {"q": query}
         # Ahmia uses ``&d=`` as the "page" argument on its classic search
         # template (``?q=…&d=N``). First page omits ``d``.

@@ -138,10 +138,8 @@ def annotate_result(span, result: dict[str, Any] | None) -> None:
     err = result.get("error")
     if err:
         span.set_attribute("naso.result.error", str(err)[:200])
-        try:
+        with contextlib.suppress(Exception):
             span.set_status(Status(StatusCode.ERROR))
-        except Exception:
-            pass
     if result.get("cached") is True:
         span.set_attribute("naso.cache.hit", True)
 

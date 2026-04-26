@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import sys
 import tempfile
@@ -94,9 +95,13 @@ async def client(db):
 
 @pytest_asyncio.fixture
 async def corr_engine():
-    tmp = tempfile.NamedTemporaryFile(prefix="naso_corr_", suffix=".sqlite", delete=False)
-    tmp.close()
-    url = f"sqlite+aiosqlite:///{tmp.name}"
+    # NamedTemporaryFile is opened inside a `with` so the FD lifecycle is
+    # explicit; we still need the path after close so we capture it before
+    # exiting the context manager. delete=False keeps the file alive for
+    # SQLite to reopen via the URL below; it's removed in the finally.
+    with tempfile.NamedTemporaryFile(prefix="naso_corr_", suffix=".sqlite", delete=False) as tmp:
+        tmp_path = tmp.name
+    url = f"sqlite+aiosqlite:///{tmp_path}"
     eng = create_async_engine(url, echo=False)
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -104,10 +109,8 @@ async def corr_engine():
         yield eng
     finally:
         await eng.dispose()
-        try:
-            Path(tmp.name).unlink()
-        except FileNotFoundError:
-            pass
+        with contextlib.suppress(FileNotFoundError):
+            Path(tmp_path).unlink()
 
 
 @pytest_asyncio.fixture

@@ -87,10 +87,7 @@ async def seed_demo():
             now = datetime.now(timezone.utc)
 
             for ident in identity_objects:
-                if ident.is_protected:
-                    num_leaks = random.randint(5, 15)
-                else:
-                    num_leaks = random.randint(1, 5)
+                num_leaks = random.randint(5, 15) if ident.is_protected else random.randint(1, 5)
 
                 for _ in range(num_leaks):
                     severity = random.randint(80, 100) if ident.is_protected else random.randint(20, 80)

@@ -159,16 +159,27 @@ async def run_agent_loop(
             #   * ``session_factory`` + 1 tool — no reason to fan out.
             parallelize = session_factory is not None and len(prepared) > 1
 
+            # Bind the two loop-scoped values (parallelize, iteration) as
+            # default args so the inner closures don't pick up the
+            # late-binding behavior B023 warns about. Functionally
+            # equivalent here — the closures are invoked synchronously
+            # within the same iteration — but the binding makes the
+            # invariant explicit and silences ruff.
             async def _run_with_span(
-                tc_id: str, tc_name: str, tc_args: dict, session: AsyncSession
+                tc_id: str,
+                tc_name: str,
+                tc_args: dict,
+                session: AsyncSession,
+                _parallelize: bool = parallelize,
+                _iteration: int = iteration,
             ) -> tuple[str, str, dict]:
                 with tool_span(
                     tc_name,
                     tenant_id=tenant_id,
                     user_id=user_id,
                     investigation_id=investigation_id,
-                    parallel=parallelize,
-                    ai_iteration=iteration,
+                    parallel=_parallelize,
+                    ai_iteration=_iteration,
                 ) as span:
                     res = await execute_tool(tc_name, tc_args, session, current_user, investigation_id)
                     annotate_result(span, res)

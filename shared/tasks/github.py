@@ -38,7 +38,9 @@ def scan_github_for_keyword(self, keyword_value, tenant_id):
         logger.error("Errore: GITHUB_TOKEN non configurato.")
         return
 
-    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    # Auth headers live on the persistent _github_client built above —
+    # rebuilding them here was a leftover from when each task instantiated
+    # its own client. Removed to silence ruff F841.
 
     # quote() sanitizza la keyword per prevenire URL/parameter injection (G-09)
     safe_keyword = quote(str(keyword_value), safe="")
