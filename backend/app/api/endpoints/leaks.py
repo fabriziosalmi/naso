@@ -1,6 +1,8 @@
+import csv
+import io
 import ipaddress
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
 import aio_pika
 import orjson
@@ -28,6 +30,24 @@ from shared.utils.reporting import ForensicReportGenerator
 # them before consuming them. The check uses Content-Length first; a
 # request without a Content-Length still gets a streamed bound below.
 _MAX_INGEST_BYTES = 1 * 1024 * 1024
+
+
+# Excel / LibreOffice / Google Sheets parse leading =, +, -, @, \t, \r as
+# the start of a formula and execute it on cell focus. A breach record
+# whose source name happens to be ``=cmd|'/c calc'!A1`` (entirely
+# possible — operators don't sanitize threat-actor handles) would launch
+# arbitrary commands the moment an analyst opens the export.
+# OWASP-recommended mitigation: prefix the value with a single quote so
+# the spreadsheet treats it as text. The quote itself isn't visible in
+# any client we care about — see OWASP "CSV Injection" cheat sheet.
+_CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value) -> str:
+    s = "" if value is None else str(value)
+    if s and s[0] in _CSV_DANGEROUS_PREFIXES:
+        return "'" + s
+    return s
 
 from ...infrastructure.rabbitmq import rabbitmq_pool
 from ..deps import get_current_user
@@ -455,10 +475,17 @@ async def export_leak_report(leak_id: str, db: AsyncSession = Depends(get_db), c
 
 @router.get("/export/data")
 async def bulk_export_leaks(
-    format: str = "json", db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+    format: Literal["json", "csv"] = "json",
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    """
-    Export bulk leak data in JSON or CSV format for forensic analysis.
+    """Bulk leak export.
+
+    ``format`` is closed to {"json", "csv"} via Literal — passing
+    ``?format=xml`` (or anything else) yields a 422 instead of silently
+    falling back to JSON. CSV cells are escaped with ``_csv_safe`` so a
+    leak whose ``source`` happens to start with ``=`` doesn't execute
+    as a spreadsheet formula on the analyst's machine.
     """
     query = select(LeakHit)
     if current_user.role != "admin":
@@ -468,14 +495,19 @@ async def bulk_export_leaks(
     leaks = result.scalars().all()
 
     if format == "csv":
-        import csv
-        import io
-
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["ID", "Source", "Severity", "Status", "Timestamp"])
         for l in leaks:
-            writer.writerow([l.id, l.source, l.severity_score, l.status, l.discovered_at.isoformat()])
+            writer.writerow(
+                [
+                    _csv_safe(l.id),
+                    _csv_safe(l.source),
+                    _csv_safe(l.severity_score),
+                    _csv_safe(l.status),
+                    _csv_safe(l.discovered_at.isoformat()),
+                ]
+            )
         return Response(
             content=output.getvalue(),
             media_type="text/csv",

@@ -669,19 +669,37 @@ const useNasoStore = create((set, get) => ({
   exportAuditCsv: () => {
     const { auditLogs } = get();
     if (!auditLogs || auditLogs.length === 0) return;
-    
+
+    // CSV injection mitigation. A cell starting with =, +, -, @, \t, or
+    // \r is parsed as a formula by Excel / LibreOffice / Google Sheets.
+    // Audit log fields like ``action`` or ``resource_type`` come from
+    // user input upstream — an attacker who registered an "identity"
+    // named ``=cmd|'/c calc'!A1`` would otherwise own every analyst
+    // who opens the export. Prefixing with a single quote forces text
+    // mode in every spreadsheet client that matters; the quote itself
+    // doesn't render. See OWASP "CSV Injection" cheat sheet.
+    const csvSafe = (v) => {
+      const s = v == null ? '' : String(v);
+      if (s && /^[=+\-@\t\r]/.test(s)) return "'" + s;
+      return s;
+    };
+    // Escape embedded double quotes per RFC 4180 ("" inside a quoted
+    // field). Apply *after* csvSafe so the leading quote we add is
+    // counted as a normal character.
+    const csvField = (v) => `"${csvSafe(v).replace(/"/g, '""')}"`;
+
     const headers = ['Timestamp', 'Operator', 'Action', 'Asset Vector', 'Details'];
     const rows = auditLogs.map(log => [
       log.timestamp,
       log.user_id,
       log.action,
       log.resource_type || '',
-      log.details ? JSON.stringify(log.details).replace(/"/g, '""') : ''
+      log.details ? JSON.stringify(log.details) : ''
     ]);
-    
-    const csvContent = headers.join(',') + '\n' + 
-      rows.map(e => e.map(cell => `"${cell}"`).join(',')).join('\n');
-      
+
+    const csvContent = headers.join(',') + '\n' +
+      rows.map(e => e.map(csvField).join(',')).join('\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -690,6 +708,7 @@ const useNasoStore = create((set, get) => ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   },
 
 

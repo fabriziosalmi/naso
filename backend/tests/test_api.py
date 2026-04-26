@@ -336,3 +336,24 @@ async def test_ingest_webhook_rejects_invalid_payload_shape(client, auth_headers
         headers=auth_headers,
     )
     assert res.status_code == 422
+
+
+def test_csv_safe_prefixes_dangerous_cells():
+    """Direct unit on the helper. Anything starting with =, +, -, @, \\t, \\r
+    must be prefixed with a single quote so spreadsheet clients treat it
+    as text, not a formula."""
+    from app.api.endpoints.leaks import _csv_safe  # noqa: PLC0415
+
+    for value, expected in [
+        ("=cmd|'/c calc'!A1", "'=cmd|'/c calc'!A1"),
+        ("+1+2", "'+1+2"),
+        ("-CMD", "'-CMD"),
+        ("@SUM(A1)", "'@SUM(A1)"),
+        ("\tinjected", "'\tinjected"),
+        ("\rmalicious", "'\rmalicious"),
+        ("normal value", "normal value"),
+        ("", ""),
+        (None, ""),
+        (42, "42"),
+    ]:
+        assert _csv_safe(value) == expected, f"failed for {value!r}"
