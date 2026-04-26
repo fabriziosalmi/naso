@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from shared.celery_app import celery_app
+from shared.config import settings
 from shared.models import AuditLog, Identity, Keyword, LeakHit, Tenant, User, identity_leaks
-from shared.tasks.pipeline import ES_HOST, ES_PASSWORD, MINIO_ACCESS_KEY, MINIO_ENDPOINT, MINIO_SECRET_KEY
 
 logger = logging.getLogger("naso-maintenance")
 
@@ -55,7 +55,10 @@ def delete_tenant_saga(self, tenant_id: str):
 
 
 async def delete_from_es(tenant_id: str):
-    es = AsyncElasticsearch(f"https://elastic:{ES_PASSWORD}@{ES_HOST}:9200", verify_certs=False)
+    es = AsyncElasticsearch(
+        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
+        verify_certs=False,
+    )
     try:
         # Delete by query for the specific tenant
         query = {"query": {"term": {"tenant_id": tenant_id}}}
@@ -66,7 +69,12 @@ async def delete_from_es(tenant_id: str):
 
 
 async def delete_from_minio(tenant_id: str):
-    minio_client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
+    minio_client = Minio(
+        settings.MINIO_ENDPOINT,
+        access_key=settings.MINIO_ACCESS_KEY,
+        secret_key=settings.MINIO_SECRET_KEY,
+        secure=settings.MINIO_SECURE,
+    )
     bucket_name = f"tenant-{tenant_id}"
 
     if minio_client.bucket_exists(bucket_name):
