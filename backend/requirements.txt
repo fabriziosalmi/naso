@@ -44,6 +44,10 @@ tenacity==8.2.3
 pytest
 pytest-asyncio
 pytest-cov
+# Per-test wall-clock cap so a single hanging test can't pin the whole
+# CI job. Honors the ``timeout`` marker registered in pyproject.toml
+# and ``--timeout=N`` from the CLI.
+pytest-timeout
 # In-memory SQLite driver used by the test conftest. Not needed at
 # runtime but the test suite imports it at collection time, so it
 # has to live alongside pytest in this list.

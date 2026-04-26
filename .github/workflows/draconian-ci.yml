@@ -30,6 +30,11 @@ jobs:
     name: Backend pytest
     runs-on: ubuntu-latest
     needs: ruff
+    # Job-level cap. Pytest itself is bounded by --timeout=60 below; a
+    # job-level ceiling guards against the overhead beyond that
+    # (download caches, network stalls during pip install, etc.) so a
+    # silent hang surfaces in 15 minutes instead of GitHub's default 6 h.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -60,7 +65,10 @@ jobs:
           JWT_PUBLIC_KEY: ci-test-secret
           RABBITMQ_USER: ci
           RABBITMQ_PASS: ci
-        run: pytest backend/tests -v --maxfail=10 -W ignore::DeprecationWarning
+        # ``--timeout=60`` (pytest-timeout) lets us actually see *which*
+        # test is hanging when one of them holds the worker. Default
+        # ``thread`` method works for both async and sync tests.
+        run: pytest backend/tests -v --maxfail=10 --timeout=60 -W ignore::DeprecationWarning
 
   frontend-tests:
     name: Frontend vitest
