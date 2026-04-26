@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 
 from shared.core.security import get_password_hash
 from shared.models import LeakHit, Tenant, User
@@ -6,7 +7,7 @@ from shared.models import LeakHit, Tenant, User
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def tenant(db):
     t = Tenant(name="AcmeCorp Security")
     db.add(t)
@@ -15,7 +16,7 @@ async def tenant(db):
     return t
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def admin_user(db, tenant):
     u = User(
         email="admin@acme.local",
@@ -29,7 +30,7 @@ async def admin_user(db, tenant):
     return u
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def analyst_user(db, tenant):
     u = User(
         email="analyst@acme.local",
@@ -43,7 +44,7 @@ async def analyst_user(db, tenant):
     return u
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def auth_headers(client, admin_user):
     res = await client.post(
         "/auth/login",
@@ -59,7 +60,7 @@ async def auth_headers(client, admin_user):
     return {"Authorization": f"Bearer {token}", "X-Naso-CSRF": csrf}
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def analyst_headers(client, analyst_user):
     res = await client.post(
         "/auth/login",

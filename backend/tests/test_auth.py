@@ -1,12 +1,13 @@
 import jwt
 import pytest
+import pytest_asyncio
 
 from shared.config import settings
 from shared.core.security import create_access_token, get_password_hash
 from shared.models import Tenant, User
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_user(db):
     tenant = Tenant(name="Test TenantCorp")
     db.add(tenant)
