@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,8 +6,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://naso:naso@db:5432/naso"
 
     # JWT EdDSA
-    JWT_PRIVATE_KEY: Optional[str] = None
-    JWT_PUBLIC_KEY: Optional[str] = None
+    JWT_PRIVATE_KEY: str | None = None
+    JWT_PUBLIC_KEY: str | None = None
     ALGORITHM: str = "EdDSA"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     # Standard claims. Issuer ties tokens to this engine; audience ties
@@ -36,8 +34,8 @@ class Settings(BaseSettings):
     # Elasticsearch
     ES_HOST: str = "elasticsearch"
     ES_PORT: int = 9200
-    ES_USER: Optional[str] = None
-    ES_PASSWORD: Optional[str] = None
+    ES_USER: str | None = None
+    ES_PASSWORD: str | None = None
     # Whether the ES client verifies the server certificate. Default True
     # for prod safety; the dev compose ships a self-signed ES cert, so
     # set ES_VERIFY_CERTS=false in dev .env to skip verification there.
@@ -45,14 +43,14 @@ class Settings(BaseSettings):
 
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
-    MINIO_ACCESS_KEY: Optional[str] = None
-    MINIO_SECRET_KEY: Optional[str] = None
+    MINIO_ACCESS_KEY: str | None = None
+    MINIO_SECRET_KEY: str | None = None
     MINIO_SECURE: bool = False
 
     # RabbitMQ
     RABBITMQ_HOST: str = "rabbitmq"
-    RABBITMQ_USER: Optional[str] = None
-    RABBITMQ_PASS: Optional[str] = None
+    RABBITMQ_USER: str | None = None
+    RABBITMQ_PASS: str | None = None
 
     # System Performance Constants
     DB_POOL_SIZE: int = 20
@@ -74,18 +72,18 @@ class Settings(BaseSettings):
     # SMTP / Notifications (#9)
     SMTP_HOST: str = "smtp.naso.local"
     SMTP_PORT: int = 587
-    SMTP_USER: Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
     SMTP_FROM: str = "naso-engine@naso.local"
     ENABLE_NOTIFICATIONS: bool = True
 
     # Telegram Intelligence (#23)
-    TELEGRAM_API_ID: Optional[str] = None
-    TELEGRAM_API_HASH: Optional[str] = None
+    TELEGRAM_API_ID: str | None = None
+    TELEGRAM_API_HASH: str | None = None
     TELEGRAM_SESSION_NAME: str = "naso_forensic_bot"
 
     # Shodan Integration
-    SHODAN_API_KEY: Optional[str] = None
+    SHODAN_API_KEY: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", secrets_dir="/run/secrets", extra="ignore")
 

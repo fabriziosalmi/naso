@@ -1,8 +1,9 @@
 import csv
 import io
 import ipaddress
+import logging
 import uuid
-from typing import Literal, Optional
+from typing import Literal
 
 import aio_pika
 import orjson
@@ -27,6 +28,8 @@ from shared.utils.reporting import ForensicReportGenerator
 from ...infrastructure.rabbitmq import rabbitmq_pool
 from ...limiter import limiter
 from ..deps import get_current_user
+
+logger = logging.getLogger("naso-leaks")
 
 # Hard cap on the unified webhook body. 1 MiB is enough for any
 # realistic leak snippet (full breach dumps go through bulk uploads,
@@ -58,9 +61,11 @@ router = APIRouter()
 
 
 class WebhookPayload(BaseModel):
-    source: str = Field(..., min_length=1, max_length=255, description="Name of the external tool or script (e.g. 'custom_scraper')")
+    source: str = Field(
+        ..., min_length=1, max_length=255, description="Name of the external tool or script (e.g. 'custom_scraper')"
+    )
     content: str = Field(..., max_length=_MAX_INGEST_BYTES, description="Raw text or JSON dump discovered")
-    metadata: Optional[dict] = Field(default_factory=dict, description="Optional tracking tags and OSINT parameters")
+    metadata: dict | None = Field(default_factory=dict, description="Optional tracking tags and OSINT parameters")
 
 
 @router.post("/ingest/webhook", status_code=202)
@@ -101,8 +106,8 @@ async def unified_ingestion_webhook(
         try:
             if int(declared) > _MAX_INGEST_BYTES:
                 raise HTTPException(status_code=413, detail="Payload too large")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid Content-Length header")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header") from exc
 
     raw_body = await request.body()
     if len(raw_body) > _MAX_INGEST_BYTES:
@@ -223,8 +228,8 @@ async def shodan_recon(ip: str, db: AsyncSession = Depends(get_db), current_user
     # Validazione IP: accetta solo indirizzi IPv4/IPv6 validi per prevenire SSRF e abuso quota
     try:
         ipaddress.ip_address(ip.strip())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid IP address format")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid IP address format") from exc
     clean_ip = ip.strip()
 
     results = await ShodanService.scan_host(clean_ip)
@@ -413,10 +418,10 @@ async def acknowledge_all_critical(
 
 @router.get("/")
 async def get_leaks(
-    source: Optional[str] = None,
-    status: Optional[LeakStatus] = None,
-    min_severity: Optional[int] = None,
-    max_severity: Optional[int] = None,
+    source: str | None = None,
+    status: LeakStatus | None = None,
+    min_severity: int | None = None,
+    max_severity: int | None = None,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -529,14 +534,14 @@ async def bulk_export_leaks(
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["ID", "Source", "Severity", "Status", "Timestamp"])
-        for l in leaks:
+        for leak in leaks:
             writer.writerow(
                 [
-                    _csv_safe(l.id),
-                    _csv_safe(l.source),
-                    _csv_safe(l.severity_score),
-                    _csv_safe(l.status),
-                    _csv_safe(l.discovered_at.isoformat()),
+                    _csv_safe(leak.id),
+                    _csv_safe(leak.source),
+                    _csv_safe(leak.severity_score),
+                    _csv_safe(leak.status),
+                    _csv_safe(leak.discovered_at.isoformat()),
                 ]
             )
         return Response(
@@ -547,14 +552,14 @@ async def bulk_export_leaks(
 
     return [
         {
-            "id": l.id,
-            "source": l.source,
-            "severity": l.severity_score,
-            "status": l.status,
-            "timestamp": l.discovered_at.isoformat(),
-            "metadata": l.metadata_json,
+            "id": leak.id,
+            "source": leak.source,
+            "severity": leak.severity_score,
+            "status": leak.status,
+            "timestamp": leak.discovered_at.isoformat(),
+            "metadata": leak.metadata_json,
         }
-        for l in leaks
+        for leak in leaks
     ]
 
 
@@ -609,7 +614,9 @@ async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), 
 
         return Response(content=data, media_type="image/png")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore nel recupero dello screenshot: {str(e)}")
+        # Don't leak the storage backend's exception text to the client.
+        logger.exception("Screenshot fetch failed for leak %s: %s", leak_id, e)
+        raise HTTPException(status_code=500, detail="Screenshot retrieval failed") from e
     finally:
         if response:
             response.close()

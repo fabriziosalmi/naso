@@ -74,4 +74,4 @@ def scan_github_for_keyword(self, keyword_value, tenant_id):
 
     except Exception as e:
         logger.error(f"Errore durante lo scan GitHub per {keyword_value}: {e}")
-        raise self.retry(exc=e, countdown=300)
+        raise self.retry(exc=e, countdown=300) from e

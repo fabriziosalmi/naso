@@ -91,7 +91,7 @@ def process_blob_stream(self, file_url_or_path: str, tenant_id: str):
 
     except Exception as e:
         logger.error(f"[MASSIVE OOM-SAFE FAILED] Stream collapse on {file_url_or_path}: {e}")
-        raise self.retry(exc=e, countdown=60)
+        raise self.retry(exc=e, countdown=60) from e
     finally:
         if stream is not None and hasattr(stream, "close"):
             stream.close()

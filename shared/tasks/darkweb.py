@@ -79,9 +79,12 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                     full_url = urljoin(url, href)
 
                     # Filtriamo per restare nello stesso dominio .onion
-                    if urlparse(full_url).netloc == urlparse(root_url).netloc:
-                        if full_url not in visited and full_url not in to_visit:
-                            to_visit.append(full_url)
+                    if (
+                        urlparse(full_url).netloc == urlparse(root_url).netloc
+                        and full_url not in visited
+                        and full_url not in to_visit
+                    ):
+                        to_visit.append(full_url)
         finally:
             loop.close()
 
@@ -89,7 +92,7 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
 
     except Exception as e:
         logger.error(f"[DEEP CRAWL FAILED] {root_url}: {e}")
-        raise self.retry(exc=e, countdown=600)
+        raise self.retry(exc=e, countdown=600) from e
 
 
 @celery_app.task(bind=True, max_retries=5, name="tasks.darkweb.crawl_onion_stealth")
@@ -149,4 +152,4 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
                 {"event": "darkweb_crawl_retry", "url": onion_url, "error": str(e), "next_retry_seconds": retry_delay}
             )
         )
-        raise self.retry(exc=e, countdown=retry_delay)
+        raise self.retry(exc=e, countdown=retry_delay) from e

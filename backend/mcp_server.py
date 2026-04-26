@@ -210,8 +210,11 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 result = await db.execute(stmt)
                 leaks = result.scalars().all()
                 out = f"Recorded Leaked Artifacts (Severity >= {min_sev}):\n"
-                for l in leaks:
-                    out += f"ID: {l.id} | Source: {l.source} | Severity: {l.severity_score} | DB_Status: {l.status}\nSnippet: {l.content_snippet}\n\n"
+                for leak in leaks:
+                    out += (
+                        f"ID: {leak.id} | Source: {leak.source} | Severity: {leak.severity_score} "
+                        f"| DB_Status: {leak.status}\nSnippet: {leak.content_snippet}\n\n"
+                    )
                 return [TextContent(type="text", text=out or "No intelligence artifacts match criteria.")]
             except Exception as e:
                 return [TextContent(type="text", text=f"Database error: {str(e)}")]

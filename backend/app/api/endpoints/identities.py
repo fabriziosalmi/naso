@@ -1,5 +1,3 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import bindparam as sa_bindparam
@@ -485,7 +483,7 @@ async def get_identity_insights(
         "leaks": leaks,
         "merged_identities": slaves,
         "total_leaks": len(leaks),
-        "highest_severity": max([l.severity_score for l in leaks]) if leaks else 0,
+        "highest_severity": max(leak.severity_score for leak in leaks) if leaks else 0,
         "first_seen": leaks[-1].discovered_at if leaks else None,
         "last_seen": leaks[0].discovered_at if leaks else None,
     }
@@ -553,10 +551,10 @@ async def trigger_auto_merge(db: AsyncSession = Depends(get_db), current_user=De
 
 @router.get("/")
 async def search_identities(
-    identifier: Optional[str] = None,
-    type: Optional[str] = None,
-    min_risk: Optional[int] = None,
-    max_risk: Optional[int] = None,
+    identifier: str | None = None,
+    type: str | None = None,
+    min_risk: int | None = None,
+    max_risk: int | None = None,
     only_masters: bool = True,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),

@@ -35,7 +35,7 @@ async def _timed(coro) -> dict:
     started = time.perf_counter()
     try:
         await asyncio.wait_for(coro, timeout=_HEALTH_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"ok": False, "latency_ms": int(_HEALTH_TIMEOUT_SECONDS * 1000), "error": "timeout"}
     except Exception as exc:
         logger.warning("health probe failed: %s", exc)
@@ -143,9 +143,7 @@ async def get_audit_logs(
     total = (await db.execute(count_stmt)).scalar_one()
 
     # Page rows.
-    rows = (
-        await db.execute(base.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit))
-    ).scalars().all()
+    rows = (await db.execute(base.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit))).scalars().all()
 
     return {
         "total": total,
@@ -153,15 +151,15 @@ async def get_audit_logs(
         "offset": offset,
         "items": [
             {
-                "id": l.id,
-                "user_id": l.user_id,
-                "action": l.action,
-                "resource_type": l.resource_type,
-                "resource_id": l.resource_id,
-                "timestamp": l.timestamp.isoformat(),
-                "details": l.details,
+                "id": entry.id,
+                "user_id": entry.user_id,
+                "action": entry.action,
+                "resource_type": entry.resource_type,
+                "resource_id": entry.resource_id,
+                "timestamp": entry.timestamp.isoformat(),
+                "details": entry.details,
             }
-            for l in rows
+            for entry in rows
         ],
     }
 

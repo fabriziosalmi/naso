@@ -61,7 +61,9 @@ async def get_current_user(
 
         token_data = TokenData(email=email, tenant_id=payload.get("tenant_id"), role=payload.get("role"))
     except jwt.PyJWTError:
-        raise credentials_exception
+        # ``from None`` — the underlying jwt error message would leak
+        # claim names / signature details to a 401 response body.
+        raise credentials_exception from None
 
     result = await db.execute(select(User).where(User.email == token_data.email))
     user = result.scalar_one_or_none()

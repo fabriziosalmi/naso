@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import orjson
@@ -179,7 +179,7 @@ def process_potential_leak(self, hit_data, raw_content):
                     # default encoder) guarantees the receiver hashes
                     # the same bytes we did.
                     body = orjson.dumps(stix_payload)
-                    timestamp = str(int(datetime.now(timezone.utc).timestamp()))
+                    timestamp = str(int(datetime.now(UTC).timestamp()))
                     headers = {
                         "Content-Type": "application/json",
                         "X-Naso-Timestamp": timestamp,
@@ -210,7 +210,7 @@ def process_potential_leak(self, hit_data, raw_content):
             await store_and_index(hit_data, raw_content)
         except Exception as e:
             logger.error(json.dumps({"event": "storage_failed", "error": str(e), "idempotency_key": idempotency_key}))
-            raise self.retry(exc=e, countdown=60)
+            raise self.retry(exc=e, countdown=60) from e
 
         return hit_data["severity_score"]
 

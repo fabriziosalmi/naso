@@ -31,7 +31,7 @@ import asyncio
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
@@ -196,7 +196,7 @@ async def write_audit(
         # Naive UTC matches the convention used in identity_upsert /
         # entity_resolution so the same value round-trips across SQLite
         # and Postgres without triggering the aware/naive comparison trap.
-        timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+        timestamp = datetime.now(UTC).replace(tzinfo=None)
         row_id = str(uuid.uuid4())
 
         self_hash = _sha256_hex(

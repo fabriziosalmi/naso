@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable
-from enum import Enum
-from typing import Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from enum import StrEnum
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -37,7 +37,7 @@ class CircuitBreakerOpen(Exception):
     """Raised when a request is rejected because the breaker is open."""
 
 
-class _State(str, Enum):
+class _State(StrEnum):
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"

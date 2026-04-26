@@ -1,7 +1,21 @@
 [tool.ruff]
 # Enable Pyflakes (F), pycodestyle (E, W), isort (I), pyupgrade (UP), flake8-bugbear (B), and flake8-simplify (SIM)
 lint.select = ["E", "F", "I", "UP", "B", "SIM"]
-lint.ignore = ["E501", "B008", "E402", "B904", "E741", "SIM102"] # Ignore long lines, FastAPI Depends, top-level imports and B904 for Celery retry
+# Trim the ignore list to the rules we genuinely don't want enforced:
+#   E501  — long lines, we already cap at 120 below.
+#   B008  — function calls in default arguments. FastAPI's Depends()
+#           legitimately requires this pattern.
+#   E402  — module-level imports below code. Used in shared/tasks/*
+#           with an explicit ``# ruff: noqa: E402`` header for the
+#           tracing-then-import dance.
+# B904 / E741 / SIM102 used to live here as "we don't care" entries.
+# They were used to hide real findings: ``raise self.retry()`` in
+# Celery handlers (B904 — fixed file-locally with ``# noqa: B904``),
+# ``for l in leaks`` typos that shadowed the math constant 1 in dense
+# pages (E741 — renamed to ``leak``), and one nested-if that simplified
+# trivially (SIM102). Keeping the ignore list short means a future bug
+# of any of those classes shows up in CI.
+lint.ignore = ["E501", "B008", "E402"]
 
 # Allow autofix for all enabled rules
 lint.fixable = ["ALL"]
@@ -33,8 +47,12 @@ exclude = [
 # Set line length to 120
 line-length = 120
 
-# Assume Python 3.9
-target-version = "py39"
+# Match the runtime (Dockerfile.backend / Dockerfile.worker run on
+# python:3.11-slim, CI uses python-version: "3.11"). Earlier the
+# value was "py39" which let through code that didn't actually run on
+# the deployed Python — e.g. ``X | None`` was getting flagged as a
+# pyupgrade hint instead of being accepted as native syntax.
+target-version = "py311"
 
 [tool.ruff.format]
 quote-style = "double"

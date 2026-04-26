@@ -126,6 +126,4 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # browser-CSRF threat model doesn't apply. Auth itself happens
         # via the Authorization header, which an attacker page can't
         # forge cross-origin.
-        if AUTH_COOKIE_NAME not in request.cookies:
-            return True
-        return False
+        return AUTH_COOKIE_NAME not in request.cookies

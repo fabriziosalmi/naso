@@ -75,4 +75,4 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
     except Exception as e:
         # Graceful Degradation (#15)
         logger.warning(f"[GRACEFUL DEGRADATION] AI Service Unavailable: {e}")
-        raise AIServiceError(f"AI Connection failed: {e}")
+        raise AIServiceError(f"AI Connection failed: {e}") from e

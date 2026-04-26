@@ -51,7 +51,7 @@ def delete_tenant_saga(self, tenant_id: str):
     except Exception as e:
         logger.error(json.dumps({"event": "tenant_deleted_saga_failed", "tenant_id": tenant_id, "error": str(e)}))
         # Retry logic: deletion is idempotent, so we can just retry the whole saga
-        raise self.retry(exc=e, countdown=300, max_retries=5)
+        raise self.retry(exc=e, countdown=300, max_retries=5) from e
 
 
 async def delete_from_es(tenant_id: str):

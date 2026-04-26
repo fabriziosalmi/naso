@@ -192,7 +192,7 @@ async def test_leaks_tenant_isolation(client, db, auth_headers, analyst_headers,
 
     res = await client.get("/leaks/", headers=analyst_headers)
     assert res.status_code == 200
-    leak_ids = [l["id"] for l in res.json()]
+    leak_ids = [leak["id"] for leak in res.json()]
     assert foreign_leak.id not in leak_ids
 
 

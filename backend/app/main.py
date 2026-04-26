@@ -110,12 +110,9 @@ async def secure_headers_middleware(request: Request, call_next):
     # every origin, including the page's own. Add an allowlist later if
     # the SPA grows a need.
     response.headers["Permissions-Policy"] = (
-        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
-        "magnetometer=(), microphone=(), payment=(), usb=()"
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
     )
-    response.headers["Content-Security-Policy"] = (
-        _SWAGGER_CSP if request.url.path in _SWAGGER_PATHS else _DEFAULT_CSP
-    )
+    response.headers["Content-Security-Policy"] = _SWAGGER_CSP if request.url.path in _SWAGGER_PATHS else _DEFAULT_CSP
     return response
 
 

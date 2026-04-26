@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr
 
@@ -12,7 +12,7 @@ LeakStatus = Literal["new", "reviewing", "resolved", "escalated", "false_positiv
 # Tenant Schemas
 class TenantBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class TenantCreate(TenantBase):
@@ -31,9 +31,9 @@ class Tenant(TenantBase):
 # User Schemas
 class UserBase(BaseModel):
     email: EmailStr
-    full_name: Optional[str] = None
+    full_name: str | None = None
     role: str = "analyst"
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
 
 
 class UserCreate(UserBase):
@@ -41,10 +41,10 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
+    email: EmailStr | None = None
+    full_name: str | None = None
     # Richiesta per cambiare l'email — previene account-takeover con token temporaneamente rubati
-    current_password: Optional[str] = None
+    current_password: str | None = None
 
 
 class User(UserBase):
@@ -68,7 +68,7 @@ class KeywordCreate(KeywordBase):
 class Keyword(KeywordBase):
     id: str
     created_at: datetime
-    last_scanned: Optional[datetime] = None
+    last_scanned: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -81,9 +81,9 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    email: Optional[str] = None
-    tenant_id: Optional[str] = None
-    role: Optional[str] = None
+    email: str | None = None
+    tenant_id: str | None = None
+    role: str | None = None
 
 
 # Yara Schemas (#25)
@@ -94,12 +94,12 @@ class YaraRuleBase(BaseModel):
 
 
 class YaraRuleCreate(YaraRuleBase):
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
 
 
 class YaraRule(YaraRuleBase):
     id: str
-    tenant_id: Optional[str]
+    tenant_id: str | None
     created_at: datetime
 
     class Config:
@@ -121,7 +121,7 @@ class Identity(IdentityBase):
     id: str
     tenant_id: str
     risk_score: int
-    master_identity_id: Optional[str] = None
+    master_identity_id: str | None = None
 
     class Config:
         from_attributes = True
@@ -140,7 +140,7 @@ class MitreTechniqueBase(BaseModel):
     id: str
     name: str
     tactic: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class MitreTechnique(MitreTechniqueBase):
@@ -152,9 +152,9 @@ class LeakHit(LeakHitBase):
     id: str
     tenant_id: str
     discovered_at: datetime
-    content_snippet: Optional[str] = None
-    storage_path: Optional[str] = None
-    screenshot_path: Optional[str] = None
+    content_snippet: str | None = None
+    storage_path: str | None = None
+    screenshot_path: str | None = None
     mitre_techniques: list[MitreTechnique] = []
 
     class Config:

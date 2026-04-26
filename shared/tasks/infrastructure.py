@@ -1,6 +1,6 @@
 import logging
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -31,7 +31,7 @@ def _probe_common_ports(ip: str, ports: list[int] = None) -> list[dict]:
         try:
             with socket.create_connection((ip, port), timeout=1):
                 return {"port": port, "state": "open"}
-        except (socket.timeout, ConnectionRefusedError, OSError):
+        except (TimeoutError, ConnectionRefusedError, OSError):
             return None
 
     from concurrent.futures import ThreadPoolExecutor
@@ -57,7 +57,7 @@ def scan_exposed_surface(self, target_ip_or_domain: str, tenant_id: str):
             "INFRASTRUCTURE OSINT REPORT",
             f"Target: {target_ip_or_domain}",
             f"Resolved IP: {ip_address}",
-            f"Date: {datetime.now(timezone.utc).isoformat()}",
+            f"Date: {datetime.now(UTC).isoformat()}",
             "",
             f"Open ports detected: {[p['port'] for p in open_ports] or 'none'}",
         ]
@@ -101,4 +101,4 @@ def scan_exposed_surface(self, target_ip_or_domain: str, tenant_id: str):
 
     except Exception as e:
         logger.error(f"[INFRA RECON FAILED] {target_ip_or_domain}: {e}")
-        raise self.retry(exc=e, countdown=120)
+        raise self.retry(exc=e, countdown=120) from e

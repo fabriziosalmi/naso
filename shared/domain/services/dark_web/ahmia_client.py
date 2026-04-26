@@ -35,7 +35,7 @@ import random
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from bs4 import BeautifulSoup
@@ -380,7 +380,7 @@ class AhmiaClient:
         soup = BeautifulSoup(html, "html.parser")
         out: list[AhmiaResult] = []
         dupes = 0
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        fetched_at = datetime.now(UTC).isoformat()
 
         for item in soup.select("li.result"):
             title_el = item.select_one("h4")

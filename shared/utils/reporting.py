@@ -119,7 +119,7 @@ class ForensicReportGenerator:
         pdf.cell(200, 10, "EXECUTIVE SUMMARY", ln=True)
         pdf.set_font("Courier", "", 10)
         pdf.cell(200, 10, f"Total Threats Detected: {len(leaks)}", ln=True)
-        avg_sev = sum([l.severity_score for l in leaks]) / len(leaks) if leaks else 0
+        avg_sev = sum(leak.severity_score for leak in leaks) / len(leaks) if leaks else 0
         pdf.cell(200, 10, f"Average Severity Score: {avg_sev:.2f}/100", ln=True)
         pdf.ln(10)
 

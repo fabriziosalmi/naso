@@ -1,6 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from passlib.context import CryptContext
@@ -18,7 +17,7 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """Mint a NASO access token.
 
     Adds the full set of standard JWT claims:
@@ -32,7 +31,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         token without taking down the whole signing key.
     """
     to_encode = data.copy()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
 
     to_encode.update(
