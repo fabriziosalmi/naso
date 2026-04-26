@@ -45,8 +45,17 @@ ENV_EXAMPLE = REPO_ROOT / ".env.example"
 ENV_FILE = REPO_ROOT / ".env"
 
 
-def _write_secret(path: Path, content: str, mode: int = 0o600) -> None:
-    """Write *content* to *path* with the requested mode. Owner-only by default."""
+def _write_secret(path: Path, content: str, mode: int = 0o644) -> None:
+    """Write *content* to *path* with the requested mode.
+
+    Default 0o644 so the dev container, which now runs as a non-root
+    user (uid 10001), can still read the file via the
+    ``./.secrets-mock:/run/secrets:ro`` bind mount. The enclosing
+    directory stays 0o700 — owner-only — so the file path itself is
+    unreachable by other host accounts. These are mock secrets for the
+    dev/CI loop; production deployments should swap them out for real
+    Docker Secrets / Vault values and tighten the file mode there.
+    """
     path.write_text(content)
     os.chmod(path, mode)
 
@@ -69,9 +78,20 @@ def _generate_jwt_keys() -> tuple[str, str]:
 def _populate_secrets(force: bool) -> dict[str, str]:
     """Generate the secrets directory. Returns a dict of password values
     so the .env renderer can reuse the exact same strings.
+
+    Permissions notes (dev mock only):
+      * Dir mode 0o755 — the dev container runs as a non-root user
+        (uid 10001) and bind-mounts this dir read-only; with 0o700 a
+        Linux Docker host blocks the traversal. macOS Docker Desktop's
+        userns-remap papers over it, but we want the same recipe to
+        work on a CI Linux runner.
+      * File mode 0o644 (set in ``_write_secret``) for the same reason.
+
+    None of this should be used in production. There, set up Docker
+    Secrets / Vault / SOPS and replace the bind mount entirely.
     """
-    SECRETS_DIR.mkdir(mode=0o700, exist_ok=True)
-    os.chmod(SECRETS_DIR, 0o700)  # tighten in case the dir already existed
+    SECRETS_DIR.mkdir(mode=0o755, exist_ok=True)
+    os.chmod(SECRETS_DIR, 0o755)  # widen if a previous run created it as 0o700
 
     priv_pem, pub_pem = _generate_jwt_keys()
 

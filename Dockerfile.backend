@@ -1,17 +1,32 @@
 FROM python:3.11-slim
 
+# Non-root user. uid 10001 picked outside the Debian default range
+# (1000-1999 host overlap, 65534=nobody) so a host bind-mount won't
+# accidentally collide with a real account.
+ARG UID=10001
+RUN groupadd --system --gid ${UID} naso \
+ && useradd --system --uid ${UID} --gid naso --home /app --shell /sbin/nologin naso
+
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Build-time deps only (compilers + libpq headers for asyncpg). Removed
+# from the final layer to keep the image lean.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+ && rm -rf /var/lib/apt/lists/*
 
+# Install Python deps as root: pip needs write access to site-packages.
 COPY backend/requirements.txt ./requirements.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application source, then hand /app over to the non-root user.
 COPY backend/ ./
 COPY shared/ ./shared/
+RUN chown -R naso:naso /app
 
+USER naso:naso
+
+# read_only: true in docker-compose blocks /app writes; tmpfs covers /tmp.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

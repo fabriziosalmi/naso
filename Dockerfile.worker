@@ -1,40 +1,60 @@
 FROM python:3.11-slim
 
+# Non-root user. Same uid as the backend image; ``pwuser`` matches the
+# ``/home/pwuser/.cache`` tmpfs already declared in docker-compose.yml,
+# so Playwright's runtime cache lands in writeable memory even with
+# read_only: true on the container root filesystem.
+ARG UID=10001
+RUN groupadd --system --gid ${UID} pwuser \
+ && useradd --system --uid ${UID} --gid pwuser --home /home/pwuser --create-home --shell /sbin/nologin pwuser
+
 WORKDIR /app
 
-# Installazione dipendenze per Playwright e browser
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    yara \
-    wget \
-    gnupg \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    && rm -rf /var/lib/apt/lists/*
+# System deps: build tools for asyncpg, yara for the analyzer, plus the
+# full Chromium/Firefox shared-library set Playwright needs at runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        yara \
+        wget \
+        gnupg \
+        libnss3 \
+        libnspr4 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libxkbcommon0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxext6 \
+        libxfixes3 \
+        libxrandr2 \
+        libgbm1 \
+        libpango-1.0-0 \
+        libcairo2 \
+        libasound2 \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY workers/requirements.txt ./requirements.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Installazione dei browser Playwright
-RUN playwright install chromium firefox --with-deps
+# Pin the Playwright browser bundle to a path we can chown rather than
+# letting it land in /root/.cache (unreachable by pwuser) or the
+# pwuser home (wiped by the runtime tmpfs). PLAYWRIGHT_BROWSERS_PATH
+# also has to be set for the runtime so playwright actually finds the
+# bundles back at exec time.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} \
+ && playwright install chromium firefox --with-deps \
+ && chown -R pwuser:pwuser ${PLAYWRIGHT_BROWSERS_PATH}
 
 COPY workers/ ./workers/
 COPY shared/ ./shared/
+RUN chown -R pwuser:pwuser /app /home/pwuser
 
+USER pwuser:pwuser
+
+# /tmp and /home/pwuser/.cache are tmpfs in compose; /app is read-only.
 CMD ["celery", "-A", "shared.celery_app", "worker", "--loglevel=info"]
