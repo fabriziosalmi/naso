@@ -36,3 +36,6 @@ infrastructure/tor/data/
 
 # Local analysis files (not for version control)
 ISSUES.md
+
+# Workspace settings
+.claude/
