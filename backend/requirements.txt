@@ -48,3 +48,4 @@ opentelemetry-instrumentation-redis
 opentelemetry-instrumentation-requests
 opentelemetry-instrumentation-httpx
 opentelemetry-instrumentation-pika
+aiosqlite>=0.19
