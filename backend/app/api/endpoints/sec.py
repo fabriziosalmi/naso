@@ -14,10 +14,10 @@ this module is the HTTP path fabgpt-sec consumes.
                               connection without waiting for a real high-
                               severity ingestion event.
 """
+
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,7 +39,7 @@ MAX_LIMIT = 500
 
 @router.get("/findings")
 async def list_findings(
-    since: Optional[str] = Query(None, description="opaque cursor; pass back next_cursor from prev call"),
+    since: str | None = Query(None, description="opaque cursor; pass back next_cursor from prev call"),
     min_severity: int = Query(0, ge=0, le=100),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     db: AsyncSession = Depends(get_db),
@@ -108,7 +108,8 @@ async def test_fire_soar(
             r = await client.post(soar_url, content=body, headers=headers)
             return {
                 "url": soar_url,
-                "request_headers": {k: v for k, v in headers.items() if k != "X-Naso-Signature"} | {"X-Naso-Signature": "sha256=<redacted>"},
+                "request_headers": {k: v for k, v in headers.items() if k != "X-Naso-Signature"}
+                | {"X-Naso-Signature": "sha256=<redacted>"},
                 "request_body_size": len(body),
                 "response_status": r.status_code,
                 "response_text": r.text[:512],

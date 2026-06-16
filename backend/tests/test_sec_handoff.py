@@ -7,6 +7,7 @@ The HTTP endpoints in backend/app/api/endpoints/sec.py are thin glue over
 this helper + the DB session; they're exercised in the broader e2e suite when
 sec is wired up live.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -62,8 +63,14 @@ def test_finding_shape_matches_naso_contract():
     f = leak_to_naso_finding(_leak(), [_identity()])
     # exact field set fabgpt-sec/sensors/_naso_models.py expects
     assert set(f.keys()) == {
-        "id", "severity_score", "kind", "target", "observed_at",
-        "identity", "source_chain", "confidence",
+        "id",
+        "severity_score",
+        "kind",
+        "target",
+        "observed_at",
+        "identity",
+        "source_chain",
+        "confidence",
     }
     assert f["severity_score"] == 92
     assert f["observed_at"] == "2026-06-16T08:30:00Z"
@@ -80,7 +87,7 @@ def test_finding_redaction_strips_raw_pii():
     blob = json.dumps(f, ensure_ascii=False)
     assert "user@example.com" not in blob
     assert "192.168.1.1" not in blob
-    assert "raw user@example.com" not in blob       # content_snippet must not bleed in
+    assert "raw user@example.com" not in blob  # content_snippet must not bleed in
 
 
 def test_finding_handles_no_identities():

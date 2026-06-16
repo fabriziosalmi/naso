@@ -18,24 +18,23 @@ emitted under {kind, identifier_hash}. Free-text content_snippet is NOT
 emitted (it lives only in naso's storage). If a future field carries
 sensitive data, this module is the chokepoint to update.
 """
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
 import secrets
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 
 
 def _utc_iso(dt) -> str:
     """ISO-8601 UTC, second precision, suffix 'Z'."""
     if dt is None:
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
+    dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
