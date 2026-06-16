@@ -7,10 +7,9 @@ from shared.database import get_db
 from shared.models import Tenant
 from shared.schemas import Tenant as TenantSchema
 from shared.schemas import TenantCreate
+from shared.utils.audit import AuditLogger
 
 from ..deps import check_admin
-
-from shared.utils.audit import AuditLogger
 
 router = APIRouter()
 

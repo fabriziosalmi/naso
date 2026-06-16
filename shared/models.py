@@ -144,7 +144,9 @@ class Identity(Base):
         # Together with INSERT ... ON CONFLICT in the upsert path this makes
         # identity creation idempotent under arbitrary concurrency.
         UniqueConstraint(
-            "tenant_id", "type", "normalized_identifier",
+            "tenant_id",
+            "type",
+            "normalized_identifier",
             name="uq_identities_normalized",
         ),
     )

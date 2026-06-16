@@ -35,6 +35,7 @@ The new tools added in this round (Phase 8):
       an identity (or the whole tenant); surfaces provenance for "how did
       X end up merged under Y?".
 """
+
 from __future__ import annotations
 
 import logging
@@ -252,6 +253,7 @@ NASO_TOOLS = [
 #   Dispatcher
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 async def execute_tool(
     tool_name: str,
     tool_args: dict,
@@ -275,9 +277,7 @@ async def execute_tool(
                 q = q.where(Identity.risk_score >= tool_args["min_risk"])
             if tool_args.get("type"):
                 q = q.where(Identity.type == tool_args["type"])
-            identities = (
-                await db.execute(q.order_by(Identity.risk_score.desc()).limit(15))
-            ).scalars().all()
+            identities = (await db.execute(q.order_by(Identity.risk_score.desc()).limit(15))).scalars().all()
             return {
                 "tool": tool_name,
                 "count": len(identities),
@@ -305,9 +305,7 @@ async def execute_tool(
             if tool_args.get("status"):
                 q = q.where(LeakHit.status == tool_args["status"])
             limit = min(int(tool_args.get("limit", 10)), 25)
-            leaks = (
-                await db.execute(q.order_by(LeakHit.severity_score.desc()).limit(limit))
-            ).scalars().all()
+            leaks = (await db.execute(q.order_by(LeakHit.severity_score.desc()).limit(limit))).scalars().all()
             return {
                 "tool": tool_name,
                 "count": len(leaks),
@@ -361,9 +359,7 @@ async def execute_tool(
             identity_id = tool_args.get("identity_id", "")
             identity = (
                 await db.execute(
-                    select(Identity)
-                    .options(selectinload(Identity.leaks))
-                    .where(Identity.id == identity_id)
+                    select(Identity).options(selectinload(Identity.leaks)).where(Identity.id == identity_id)
                 )
             ).scalar_one_or_none()
             if not identity:
@@ -409,9 +405,7 @@ async def execute_tool(
         if tool_name == "flag_critical":
             leak_id = tool_args.get("leak_id", "")
             new_status = tool_args.get("status", "reviewing")
-            leak = (
-                await db.execute(select(LeakHit).where(LeakHit.id == leak_id))
-            ).scalar_one_or_none()
+            leak = (await db.execute(select(LeakHit).where(LeakHit.id == leak_id))).scalar_one_or_none()
             if not leak:
                 return {"tool": tool_name, "error": f"Leak {leak_id} not found"}
             old_status = leak.status
@@ -432,9 +426,7 @@ async def execute_tool(
         if tool_name == "toggle_identity_vip":
             identity_id = tool_args.get("identity_id", "")
             is_protected = bool(tool_args.get("is_protected", True))
-            identity = (
-                await db.execute(select(Identity).where(Identity.id == identity_id))
-            ).scalar_one_or_none()
+            identity = (await db.execute(select(Identity).where(Identity.id == identity_id))).scalar_one_or_none()
             if not identity:
                 return {"tool": tool_name, "error": f"Identity {identity_id} not found"}
             old_state = identity.is_protected
@@ -456,9 +448,7 @@ async def execute_tool(
         # ───── get_merge_cluster ──────────────────────────────────────────
         if tool_name == "get_merge_cluster":
             identity_id = tool_args.get("identity_id", "")
-            root = (
-                await db.execute(select(Identity).where(Identity.id == identity_id))
-            ).scalar_one_or_none()
+            root = (await db.execute(select(Identity).where(Identity.id == identity_id))).scalar_one_or_none()
             if not root:
                 return {"tool": tool_name, "error": f"Identity {identity_id} not found"}
 
@@ -469,21 +459,23 @@ async def execute_tool(
                 return {"tool": tool_name, "error": f"Identity {identity_id} not found"}
 
             cluster_ids = await gather_merged_cluster(db, identity_id)
-            members = (
-                await db.execute(select(Identity).where(Identity.id.in_(list(cluster_ids))))
-            ).scalars().all()
+            members = (await db.execute(select(Identity).where(Identity.id.in_(list(cluster_ids))))).scalars().all()
 
             events = (
-                await db.execute(
-                    select(MergeEvent)
-                    .where(
-                        MergeEvent.tenant_id == root.tenant_id,
-                        MergeEvent.master_id.in_(list(cluster_ids)),
+                (
+                    await db.execute(
+                        select(MergeEvent)
+                        .where(
+                            MergeEvent.tenant_id == root.tenant_id,
+                            MergeEvent.master_id.in_(list(cluster_ids)),
+                        )
+                        .order_by(MergeEvent.performed_at.desc())
+                        .limit(20)
                     )
-                    .order_by(MergeEvent.performed_at.desc())
-                    .limit(20)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             return {
                 "tool": tool_name,
@@ -533,8 +525,7 @@ async def execute_tool(
                     continue
                 master, slave = choose_master(a, b)
                 evidence = [
-                    {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
-                    for lid in shared_leaks
+                    {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH} for lid in shared_leaks
                 ]
                 conf = aggregate_confidence(evidence)
                 preview.append(
@@ -611,12 +602,8 @@ async def execute_tool(
             identity_id = tool_args.get("identity_id")
             q = select(MergeEvent).where(MergeEvent.tenant_id == current_user.tenant_id)
             if identity_id:
-                q = q.where(
-                    (MergeEvent.master_id == identity_id) | (MergeEvent.slave_id == identity_id)
-                )
-            events = (
-                await db.execute(q.order_by(MergeEvent.performed_at.desc()).limit(20))
-            ).scalars().all()
+                q = q.where((MergeEvent.master_id == identity_id) | (MergeEvent.slave_id == identity_id))
+            events = (await db.execute(q.order_by(MergeEvent.performed_at.desc()).limit(20))).scalars().all()
             return {
                 "tool": tool_name,
                 "count": len(events),

@@ -19,6 +19,7 @@ No-SDK fallback: even when ``NASO_OTEL_ENABLED=true``, if the SDK
 provider has not been registered (tests, scripts), OTel's API layer
 returns the built-in NoOpTracer so nothing crashes.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -28,6 +29,7 @@ from typing import Any
 try:
     from opentelemetry import trace
     from opentelemetry.trace import Status, StatusCode
+
     _OTEL_AVAILABLE = True
 except ImportError:  # pragma: no cover — opentelemetry-api is in requirements
     _OTEL_AVAILABLE = False
@@ -136,10 +138,8 @@ def annotate_result(span, result: dict[str, Any] | None) -> None:
     err = result.get("error")
     if err:
         span.set_attribute("naso.result.error", str(err)[:200])
-        try:
+        with contextlib.suppress(Exception):
             span.set_status(Status(StatusCode.ERROR))
-        except Exception:
-            pass
     if result.get("cached") is True:
         span.set_attribute("naso.cache.hit", True)
 

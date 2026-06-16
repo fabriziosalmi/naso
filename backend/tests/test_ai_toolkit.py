@@ -8,6 +8,7 @@ agentic loop will call it.
 Covers the 5 new tools introduced in Phase 8 plus tenant-isolation checks
 on the existing ones.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from shared.domain.services.ai_toolkit import execute_tool
 from shared.domain.services.entity_resolution import merge_identities
 from shared.domain.services.identity_upsert import upsert_identity
 from shared.domain.services.leak_ingest import ingest_leak
-from shared.models import Identity, LeakHit, identity_leaks
+from shared.models import identity_leaks
 from shared.utils.audit_chain import write_audit
 
 pytestmark = pytest.mark.asyncio
@@ -29,6 +30,7 @@ pytestmark = pytest.mark.asyncio
 @dataclass
 class FakeUser:
     """Minimal user object — the tool dispatcher only reads these fields."""
+
     id: str
     tenant_id: str
     role: str = "analyst"
@@ -39,6 +41,7 @@ SHARED_EVIDENCE = [{"type": "shared_leak", "leak_id": "leak-demo", "strength": 0
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 async def _link(db, identity_id: str, leak_id: str) -> None:
     await db.execute(identity_leaks.insert().values(identity_id=identity_id, leak_id=leak_id))
 
@@ -47,11 +50,13 @@ async def _link(db, identity_id: str, leak_id: str) -> None:
 #   Existing tools — spot-check tenant isolation still works after refactor
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 class TestSearchIdentities:
     async def test_non_admin_sees_only_own_tenant(self, corr_db, tenant, user):
         await upsert_identity(corr_db, tenant.id, "mine@example.com", "email")
         # An identity from a different tenant must be invisible.
         from shared.models import Tenant
+
         other_tenant = Tenant(id=str(uuid4()), name=f"other-{uuid4().hex[:6]}")
         corr_db.add(other_tenant)
         await corr_db.commit()
@@ -68,6 +73,7 @@ class TestSearchIdentities:
 #   Phase 8 — new tools
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 class TestGetMergeCluster:
     async def test_returns_root_and_slaves(self, corr_db, tenant, user):
         master = await upsert_identity(corr_db, tenant.id, "m@example.com", "email")
@@ -77,9 +83,7 @@ class TestGetMergeCluster:
         await merge_identities(corr_db, master=master, slave=slave2, evidence=SHARED_EVIDENCE)
 
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
-        result = await execute_tool(
-            "get_merge_cluster", {"identity_id": master.id}, corr_db, fake, None
-        )
+        result = await execute_tool("get_merge_cluster", {"identity_id": master.id}, corr_db, fake, None)
 
         assert "error" not in result
         assert result["root"]["id"] == master.id
@@ -94,22 +98,19 @@ class TestGetMergeCluster:
 
     async def test_unknown_identity_returns_error(self, corr_db, tenant, user):
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
-        result = await execute_tool(
-            "get_merge_cluster", {"identity_id": "not-a-real-id"}, corr_db, fake, None
-        )
+        result = await execute_tool("get_merge_cluster", {"identity_id": "not-a-real-id"}, corr_db, fake, None)
         assert "error" in result
 
     async def test_cross_tenant_is_hidden_from_non_admin(self, corr_db, tenant, user):
         from shared.models import Tenant
+
         other = Tenant(id=str(uuid4()), name=f"other-{uuid4().hex[:6]}")
         corr_db.add(other)
         await corr_db.commit()
         foreign = await upsert_identity(corr_db, other.id, "elsewhere@example.com", "email")
 
         fake = FakeUser(id=user.id, tenant_id=tenant.id)  # analyst, not admin
-        result = await execute_tool(
-            "get_merge_cluster", {"identity_id": foreign.id}, corr_db, fake, None
-        )
+        result = await execute_tool("get_merge_cluster", {"identity_id": foreign.id}, corr_db, fake, None)
         # "not found" — we do not leak the existence of the row.
         assert "error" in result
 
@@ -118,9 +119,7 @@ class TestProposeMergesPreview:
     async def test_lists_pairs_sharing_a_leak(self, corr_db, tenant, user):
         a = await upsert_identity(corr_db, tenant.id, "a@example.com", "email")
         b = await upsert_identity(corr_db, tenant.id, "b@example.com", "email")
-        leak = await ingest_leak(
-            corr_db, tenant_id=tenant.id, source="test", content="demo payload", severity_score=80
-        )
+        leak = await ingest_leak(corr_db, tenant_id=tenant.id, source="test", content="demo payload", severity_score=80)
         await _link(corr_db, a.id, leak.id)
         await _link(corr_db, b.id, leak.id)
         await corr_db.commit()
@@ -148,9 +147,7 @@ class TestProposeMergesPreview:
         """The whole point of the preview is that nothing changes."""
         a = await upsert_identity(corr_db, tenant.id, "a@example.com", "email")
         b = await upsert_identity(corr_db, tenant.id, "b@example.com", "email")
-        leak = await ingest_leak(
-            corr_db, tenant_id=tenant.id, source="test", content="demo", severity_score=80
-        )
+        leak = await ingest_leak(corr_db, tenant_id=tenant.id, source="test", content="demo", severity_score=80)
         await _link(corr_db, a.id, leak.id)
         await _link(corr_db, b.id, leak.id)
         await corr_db.commit()
@@ -197,13 +194,16 @@ class TestVerifyAuditChain:
 
         # Tamper with the middle row.
         from shared.models import AuditLog
+
         chain = (
-            await corr_db.execute(
-                select(AuditLog)
-                .where(AuditLog.tenant_id == tenant.id)
-                .order_by(AuditLog.timestamp, AuditLog.id)
+            (
+                await corr_db.execute(
+                    select(AuditLog).where(AuditLog.tenant_id == tenant.id).order_by(AuditLog.timestamp, AuditLog.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         chain[1].details = {"tampered": True}
         await corr_db.commit()
 
@@ -218,29 +218,25 @@ class TestFindNearDuplicates:
     SAMPLE = "password leak for acme corp, 14000 records, forum breach 2023"
 
     async def test_finds_near_duplicate(self, corr_db, tenant, user):
-        await ingest_leak(
-            corr_db, tenant_id=tenant.id, source="test", content=self.SAMPLE, severity_score=70
-        )
+        await ingest_leak(corr_db, tenant_id=tenant.id, source="test", content=self.SAMPLE, severity_score=70)
 
         variant = "  Password leak for ACME Corp.  14000 records, forum breach 2023  "
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
-        result = await execute_tool(
-            "find_near_duplicates", {"content": variant}, corr_db, fake, None
-        )
+        result = await execute_tool("find_near_duplicates", {"content": variant}, corr_db, fake, None)
 
         assert result["match_count"] >= 1
         assert result["matches"][0]["distance"] <= 5
 
     async def test_no_matches_for_unrelated_content(self, corr_db, tenant, user):
-        await ingest_leak(
-            corr_db, tenant_id=tenant.id, source="test", content=self.SAMPLE, severity_score=70
-        )
+        await ingest_leak(corr_db, tenant_id=tenant.id, source="test", content=self.SAMPLE, severity_score=70)
 
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
         result = await execute_tool(
             "find_near_duplicates",
             {"content": "cryptocurrency wallet addresses dumped from discord channel"},
-            corr_db, fake, None,
+            corr_db,
+            fake,
+            None,
         )
         assert result["match_count"] == 0
 
@@ -257,9 +253,7 @@ class TestMergeEventsHistory:
         event = await merge_identities(corr_db, master=master, slave=slave, evidence=SHARED_EVIDENCE)
 
         fake = FakeUser(id=user.id, tenant_id=tenant.id)
-        result = await execute_tool(
-            "get_merge_events_history", {"identity_id": master.id}, corr_db, fake, None
-        )
+        result = await execute_tool("get_merge_events_history", {"identity_id": master.id}, corr_db, fake, None)
 
         assert result["count"] == 1
         entry = result["events"][0]

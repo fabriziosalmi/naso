@@ -10,12 +10,10 @@ verify:
       (the API-layer NoOpSpan is still an object that supports
       set_attribute / set_status without a registered SDK).
 """
+
 from __future__ import annotations
 
 import importlib
-import os
-
-import pytest
 
 from shared.utils import tracing
 

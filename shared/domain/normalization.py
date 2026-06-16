@@ -19,6 +19,7 @@ Both functions are **pure** and **deterministic** — no DB, no network, no
 randomness. This matters: the UNIQUE constraint depends on the same bytes
 being produced for the same input across processes and DB upgrades.
 """
+
 from __future__ import annotations
 
 import re

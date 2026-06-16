@@ -2,6 +2,7 @@
 hash-chained rows via the new writer. Every existing endpoint that calls
 ``AuditLogger.log`` gains tamper-evidence for free.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -41,12 +42,14 @@ class TestLegacyEntrypointChains:
         assert result.ok is True, result.reason
 
         rows = (
-            await corr_db.execute(
-                select(AuditLog)
-                .where(AuditLog.tenant_id == tenant.id)
-                .order_by(AuditLog.timestamp, AuditLog.id)
+            (
+                await corr_db.execute(
+                    select(AuditLog).where(AuditLog.tenant_id == tenant.id).order_by(AuditLog.timestamp, AuditLog.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 3
         assert rows[0].prev_hash is None
         assert rows[1].prev_hash == rows[0].self_hash

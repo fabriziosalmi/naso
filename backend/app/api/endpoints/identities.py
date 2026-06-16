@@ -2,18 +2,19 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import bindparam as sa_bindparam, select, text
+from sqlalchemy import bindparam as sa_bindparam
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from shared.database import get_db
 from shared.domain.services.entity_resolution import (
+    CrossTenantMerge,
+    InsufficientEvidence,
+    VipInvariantViolation,
     aggregate_confidence,
     merge_identities,
     reverse_merge,
-    InsufficientEvidence,
-    CrossTenantMerge,
-    VipInvariantViolation,
 )
 from shared.domain.services.identity_upsert import upsert_identity
 from shared.domain.services.merge_proposer import (
@@ -44,6 +45,7 @@ class PairSelection(BaseModel):
 
 class ExecuteMergesBody(BaseModel):
     pairs: list[PairSelection]
+
 
 # ── BUG FIX: /graph MUST be declared before /{identity_id} routes ──
 # FastAPI routes are matched in declaration order. A literal path like /graph
@@ -102,17 +104,13 @@ async def get_identity_graph(
           FROM identity_leaks
          WHERE identity_id IN :ids
     """).bindparams(sa_bindparam("ids", expanding=True))
-    edges = (
-        await db.execute(edges_stmt, {"ids": ident_ids})
-    ).mappings().all()
+    edges = (await db.execute(edges_stmt, {"ids": ident_ids})).mappings().all()
 
     # 3. Leak nodes reached by the filtered link set.
     leak_ids = list({e["target"] for e in edges})
     leaks = []
     if leak_ids:
-        leaks = (
-            await db.execute(select(LeakHit).where(LeakHit.id.in_(leak_ids)))
-        ).scalars().all()
+        leaks = (await db.execute(select(LeakHit).where(LeakHit.id.in_(leak_ids)))).scalars().all()
 
     nodes = [
         {
@@ -126,13 +124,15 @@ async def get_identity_graph(
         for i in identities
     ]
     for lk in leaks:
-        nodes.append({
-            "id": lk.id,
-            "label": lk.source,
-            "type": "leak",
-            "risk": lk.severity_score,
-            "status": lk.status,
-        })
+        nodes.append(
+            {
+                "id": lk.id,
+                "label": lk.source,
+                "type": "leak",
+                "risk": lk.severity_score,
+                "status": lk.status,
+            }
+        )
 
     return {
         "nodes": nodes,
@@ -166,9 +166,7 @@ async def list_recent_merges(
     # the UI can show "alice@example.com ← bob@example.com" without N+1.
     all_ids = {e.master_id for e in events} | {e.slave_id for e in events}
     if all_ids:
-        rows = (
-            await db.execute(select(Identity).where(Identity.id.in_(all_ids)))
-        ).scalars().all()
+        rows = (await db.execute(select(Identity).where(Identity.id.in_(all_ids)))).scalars().all()
         ident_map = {i.id: i for i in rows}
     else:
         ident_map = {}
@@ -233,24 +231,29 @@ async def execute_selected_merges(
         master = await db.get(Identity, pair.master_id)
         slave = await db.get(Identity, pair.slave_id)
         if master is None or slave is None:
-            skipped_no_evidence.append({"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "identity missing"})
+            skipped_no_evidence.append(
+                {"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "identity missing"}
+            )
             continue
         if master.tenant_id != current_user.tenant_id and current_user.role != "admin":
-            skipped_no_evidence.append({"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "cross-tenant"})
+            skipped_no_evidence.append(
+                {"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "cross-tenant"}
+            )
             continue
 
         # Canonical-pair lookup ignores order; try both directions.
         key_a = (pair.master_id, pair.slave_id)
         key_b = (pair.slave_id, pair.master_id)
-        shared_leaks = shared_pair_map.get(key_a) or shared_pair_map.get(key_b) or shared_pair_map.get(tuple(sorted(key_a)))
+        shared_leaks = (
+            shared_pair_map.get(key_a) or shared_pair_map.get(key_b) or shared_pair_map.get(tuple(sorted(key_a)))
+        )
         if not shared_leaks:
-            skipped_no_evidence.append({"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "no shared leaks"})
+            skipped_no_evidence.append(
+                {"master_id": pair.master_id, "slave_id": pair.slave_id, "reason": "no shared leaks"}
+            )
             continue
 
-        evidence = [
-            {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
-            for lid in shared_leaks
-        ]
+        evidence = [{"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH} for lid in shared_leaks]
         try:
             event = await merge_identities(
                 db, master=master, slave=slave, evidence=evidence, performed_by=current_user.id
@@ -316,10 +319,7 @@ async def preview_auto_merges(
         if a.master_identity_id is not None or b.master_identity_id is not None:
             continue
         master, slave = choose_master(a, b)
-        evidence = [
-            {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
-            for lid in shared_leaks
-        ]
+        evidence = [{"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH} for lid in shared_leaks]
         conf = aggregate_confidence(evidence)
         preview.append(
             {
@@ -360,9 +360,7 @@ async def reverse_merge_event(
     Fails with 403 cross-tenant, 404 if the event is not found, 409 if
     the event is already reversed (caller can re-check history).
     """
-    event = (
-        await db.execute(select(MergeEvent).where(MergeEvent.id == event_id))
-    ).scalar_one_or_none()
+    event = (await db.execute(select(MergeEvent).where(MergeEvent.id == event_id))).scalar_one_or_none()
     if event is None:
         raise HTTPException(status_code=404, detail="Merge event not found")
     if current_user.role != "admin" and event.tenant_id != current_user.tenant_id:
@@ -400,9 +398,7 @@ async def identity_merge_history(
     'Merge history' tab.
     """
     # Tenant gate first — protect against existence-probing across tenants.
-    ident = (
-        await db.execute(select(Identity).where(Identity.id == identity_id))
-    ).scalar_one_or_none()
+    ident = (await db.execute(select(Identity).where(Identity.id == identity_id))).scalar_one_or_none()
     if ident is None:
         raise HTTPException(status_code=404, detail="Identity not found")
     if current_user.role != "admin" and ident.tenant_id != current_user.tenant_id:
@@ -412,20 +408,19 @@ async def identity_merge_history(
         select(MergeEvent)
         .where(
             MergeEvent.tenant_id == ident.tenant_id,
-            (MergeEvent.master_id == identity_id)
-            | (MergeEvent.slave_id == identity_id),
+            (MergeEvent.master_id == identity_id) | (MergeEvent.slave_id == identity_id),
         )
         .order_by(MergeEvent.performed_at.desc())
         .limit(100)
     )
     events = (await db.execute(stmt)).scalars().all()
 
-    counterpart_ids = {
-        (e.slave_id if e.master_id == identity_id else e.master_id) for e in events
-    }
+    counterpart_ids = {(e.slave_id if e.master_id == identity_id else e.master_id) for e in events}
     counterpart_rows = (
-        await db.execute(select(Identity).where(Identity.id.in_(counterpart_ids)))
-    ).scalars().all() if counterpart_ids else []
+        (await db.execute(select(Identity).where(Identity.id.in_(counterpart_ids)))).scalars().all()
+        if counterpart_ids
+        else []
+    )
     counter_map = {i.id: i for i in counterpart_rows}
 
     return [
@@ -534,9 +529,7 @@ async def trigger_auto_merge(db: AsyncSession = Depends(get_db), current_user=De
     sweep over every resulting master so the next ``recompute_dirty`` tick
     refreshes scores deterministically.
     """
-    report = await propose_and_merge(
-        db, current_user.tenant_id, performed_by=current_user.id
-    )
+    report = await propose_and_merge(db, current_user.tenant_id, performed_by=current_user.id)
     if report["merged_count"]:
         master_ids = [p["master_id"] for p in report["pairs"]]
         await mark_dirty(db, master_ids)

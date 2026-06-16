@@ -38,8 +38,6 @@ def scan_github_for_keyword(self, keyword_value, tenant_id):
         logger.error("Errore: GITHUB_TOKEN non configurato.")
         return
 
-    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-
     # quote() sanitizza la keyword per prevenire URL/parameter injection (G-09)
     safe_keyword = quote(str(keyword_value), safe="")
     search_url = f"https://api.github.com/search/code?q={safe_keyword}"

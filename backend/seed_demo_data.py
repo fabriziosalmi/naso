@@ -1,12 +1,13 @@
 import asyncio
-import uuid
 import random
-import json
+import uuid
 from datetime import datetime, timedelta, timezone
-from shared.database import async_session
-from shared.models import Tenant, Identity, LeakHit
+
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+from shared.database import async_session
+from shared.models import Identity, LeakHit, Tenant
 
 console = Console()
 
@@ -86,10 +87,7 @@ async def seed_demo():
             now = datetime.now(timezone.utc)
 
             for ident in identity_objects:
-                if ident.is_protected:
-                    num_leaks = random.randint(5, 15)
-                else:
-                    num_leaks = random.randint(1, 5)
+                num_leaks = random.randint(5, 15) if ident.is_protected else random.randint(1, 5)
 
                 for _ in range(num_leaks):
                     severity = random.randint(80, 100) if ident.is_protected else random.randint(20, 80)

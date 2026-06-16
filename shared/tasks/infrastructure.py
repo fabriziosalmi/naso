@@ -1,5 +1,4 @@
 import logging
-import os
 import socket
 from datetime import datetime, timezone
 
@@ -36,6 +35,7 @@ def _probe_common_ports(ip: str, ports: list[int] = None) -> list[dict]:
             return None
 
     from concurrent.futures import ThreadPoolExecutor
+
     with ThreadPoolExecutor(max_workers=len(ports)) as ex:
         return [r for r in ex.map(_probe, ports) if r is not None]
 

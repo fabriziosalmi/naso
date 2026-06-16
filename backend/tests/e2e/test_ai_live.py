@@ -30,10 +30,10 @@ Out of scope
 * Token accounting (different models, different tokenisers).
 * Streaming output mechanics (tested elsewhere against a mock).
 """
+
 from __future__ import annotations
 
 import os
-import uuid
 from dataclasses import dataclass
 
 import httpx
@@ -60,6 +60,7 @@ pytestmark = [
 
 # ─── LM Studio / Ollama client ─────────────────────────────────────────────
 
+
 async def _pick_model(base_url: str) -> str:
     model = os.getenv("LM_STUDIO_MODEL")
     if model:
@@ -83,6 +84,7 @@ async def live_llm_call():
     # A single httpx client reused across the agent loop's iterations.
     client = httpx.AsyncClient(timeout=60.0)
     try:
+
         async def call(messages: list[dict]) -> dict:
             resp = await client.post(
                 f"{base_url}/chat/completions",
@@ -100,6 +102,7 @@ async def live_llm_call():
             )
             resp.raise_for_status()
             return resp.json()
+
         yield call
     finally:
         await client.aclose()
@@ -140,7 +143,9 @@ async def _seed_dataset(db, tenant_id: str):
 
     # Shared leak linking alice + bob.
     shared = await ingest_leak(
-        db, tenant_id=tenant_id, source="github",
+        db,
+        tenant_id=tenant_id,
+        source="github",
         content="credentials leaked for alice@example.com and bob@example.com in 2023 dump",
         severity_score=82,
     )
@@ -149,7 +154,9 @@ async def _seed_dataset(db, tenant_id: str):
 
     # Pre-existing merge so the second prompt's provenance tool has data.
     await merge_identities(
-        db, master=alice, slave=bob,
+        db,
+        master=alice,
+        slave=bob,
         evidence=[{"type": "shared_leak", "leak_id": shared.id, "strength": 0.9}],
     )
 
@@ -159,10 +166,9 @@ async def _seed_dataset(db, tenant_id: str):
 
 # ─── Prompts exercised ──────────────────────────────────────────────────────
 
+
 @pytest.mark.timeout(60)
-async def test_investigation_triggers_identity_lookup(
-    corr_db, tenant, user, live_llm_call
-):
+async def test_investigation_triggers_identity_lookup(corr_db, tenant, user, live_llm_call):
     """Prompt 1: 'find the riskiest identity and show its cluster'.
 
     Shape expectation: the loop emits at least one ``tool_call`` event
@@ -178,7 +184,10 @@ async def test_investigation_triggers_identity_lookup(
     ]
     events = await _collect(
         run_agent_loop(
-            messages, db=corr_db, current_user=fake, llm_call=live_llm_call,
+            messages,
+            db=corr_db,
+            current_user=fake,
+            llm_call=live_llm_call,
             max_iterations=DEFAULT_MAX_ITERATIONS,
         )
     )
@@ -193,9 +202,7 @@ async def test_investigation_triggers_identity_lookup(
 
 
 @pytest.mark.timeout(60)
-async def test_audit_integrity_question_triggers_verify(
-    corr_db, tenant, user, live_llm_call
-):
+async def test_audit_integrity_question_triggers_verify(corr_db, tenant, user, live_llm_call):
     """Prompt 2: 'did anyone tamper with the audit log today?'.
 
     Shape expectation: verify_audit_chain is called. If the model also
@@ -206,25 +213,27 @@ async def test_audit_integrity_question_triggers_verify(
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": "Did anyone try to tamper with the audit log today? Verify the integrity of the ledger."},
+        {
+            "role": "user",
+            "content": "Did anyone try to tamper with the audit log today? Verify the integrity of the ledger.",
+        },
     ]
     events = await _collect(
         run_agent_loop(
-            messages, db=corr_db, current_user=fake, llm_call=live_llm_call,
+            messages,
+            db=corr_db,
+            current_user=fake,
+            llm_call=live_llm_call,
             max_iterations=DEFAULT_MAX_ITERATIONS,
         )
     )
 
     tool_names = [e["name"] for e in events if e["type"] == "tool_call"]
-    assert "verify_audit_chain" in tool_names, (
-        f"expected verify_audit_chain in {tool_names}"
-    )
+    assert "verify_audit_chain" in tool_names, f"expected verify_audit_chain in {tool_names}"
 
 
 @pytest.mark.timeout(60)
-async def test_near_dup_paste_triggers_find_near_duplicates(
-    corr_db, tenant, user, live_llm_call
-):
+async def test_near_dup_paste_triggers_find_near_duplicates(corr_db, tenant, user, live_llm_call):
     """Prompt 3: pastes a variant of an existing breach snippet and asks
     whether NASO has seen it before.
 
@@ -233,24 +242,23 @@ async def test_near_dup_paste_triggers_find_near_duplicates(
     _, _, shared = await _seed_dataset(corr_db, tenant.id)
     fake = FakeUser(id=user.id, tenant_id=tenant.id)
 
-    paste = (
-        "Credentials LEAKED for alice@example.com AND bob@example.com in 2023 dump"
-    )
+    paste = "Credentials LEAKED for alice@example.com AND bob@example.com in 2023 dump"
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"I just received this breach snippet — do we already have it?\n\n{paste}"},
     ]
     events = await _collect(
         run_agent_loop(
-            messages, db=corr_db, current_user=fake, llm_call=live_llm_call,
+            messages,
+            db=corr_db,
+            current_user=fake,
+            llm_call=live_llm_call,
             max_iterations=DEFAULT_MAX_ITERATIONS,
         )
     )
 
     tool_names = [e["name"] for e in events if e["type"] == "tool_call"]
-    assert "find_near_duplicates" in tool_names, (
-        f"expected find_near_duplicates in {tool_names}"
-    )
+    assert "find_near_duplicates" in tool_names, f"expected find_near_duplicates in {tool_names}"
     # When the tool runs, it must have found the seeded leak at Hamming ≤ 5.
     tool_results = [e for e in events if e["type"] == "tool_result" and e["name"] == "find_near_duplicates"]
     if tool_results:

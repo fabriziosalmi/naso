@@ -43,14 +43,15 @@ session per tool**. Three reasons:
 When ``session_factory`` is ``None`` the loop falls back to sequential
 execution on the shared ``db`` session — same behaviour as before.
 """
+
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
 import logging
-from collections.abc import AsyncGenerator
-from typing import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable
+from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -166,23 +167,20 @@ async def run_agent_loop(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     investigation_id=investigation_id,
-                    parallel=parallelize,
-                    ai_iteration=iteration,
+                    parallel=parallelize,  # noqa: B023 — captured at coroutine creation time, before next loop iter
+                    ai_iteration=iteration,  # noqa: B023 — captured at coroutine creation time, before next loop iter
                 ) as span:
-                    res = await execute_tool(
-                        tc_name, tc_args, session, current_user, investigation_id
-                    )
+                    res = await execute_tool(tc_name, tc_args, session, current_user, investigation_id)
                     annotate_result(span, res)
                     return tc_id, tc_name, res
 
             if parallelize:
+
                 async def _one(tc_id: str, tc_name: str, tc_args: dict):
                     async with session_factory() as fresh_db:
                         return await _run_with_span(tc_id, tc_name, tc_args, fresh_db)
 
-                results = await asyncio.gather(
-                    *[_one(i, n, a) for i, n, a in prepared]
-                )
+                results = await asyncio.gather(*[_one(i, n, a) for i, n, a in prepared])
                 # Emit in prepared order (= LLM tool_call order), not in
                 # completion order which is nondeterministic under gather.
                 by_id = {tc_id: (tc_name, res) for tc_id, tc_name, res in results}

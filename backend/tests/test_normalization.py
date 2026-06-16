@@ -5,6 +5,7 @@ that the rest of the correlation engine relies on: the UNIQUE constraint on
 identities, the fuzzy-dedup Hamming threshold for leaks, and the identity
 collapse rules operators care about (Gmail aliases, domain case folding).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -16,8 +17,8 @@ from shared.domain.normalization import (
     simhash64,
 )
 
-
 # ─── Identifier normalization ────────────────────────────────────────────────
+
 
 class TestNormalizeEmail:
     def test_lowercases_and_strips(self):
@@ -30,20 +31,13 @@ class TestNormalizeEmail:
         assert normalize_identifier("foo+newsletter@gmail.com", "email") == "foo@gmail.com"
 
     def test_gmail_combined_rules(self):
-        assert (
-            normalize_identifier("F.Bar+promo@GoogleMail.com", "email")
-            == "fbar@gmail.com"
-        )
+        assert normalize_identifier("F.Bar+promo@GoogleMail.com", "email") == "fbar@gmail.com"
 
     def test_non_gmail_keeps_dots(self):
-        assert (
-            normalize_identifier("f.oo@corp.local", "email") == "f.oo@corp.local"
-        )
+        assert normalize_identifier("f.oo@corp.local", "email") == "f.oo@corp.local"
 
     def test_non_gmail_still_strips_plus_alias(self):
-        assert (
-            normalize_identifier("foo+tag@corp.local", "email") == "foo@corp.local"
-        )
+        assert normalize_identifier("foo+tag@corp.local", "email") == "foo@corp.local"
 
     def test_empty_or_malformed_does_not_crash(self):
         assert normalize_identifier("", "email") == ""
@@ -86,6 +80,7 @@ class TestNormalizeUnknownType:
 
 # ─── Content + SimHash ───────────────────────────────────────────────────────
 
+
 class TestNormalizeContent:
     def test_collapses_whitespace(self):
         assert normalize_content("foo   \n\n bar\t") == "foo bar"
@@ -127,9 +122,7 @@ class TestSimhash:
         )
         a = simhash64(normalize_content(self.SAMPLE))
         b = simhash64(normalize_content(other))
-        assert hamming_distance(a, b) > 10, (
-            f"unrelated texts should be far apart, got {hamming_distance(a, b)}"
-        )
+        assert hamming_distance(a, b) > 10, f"unrelated texts should be far apart, got {hamming_distance(a, b)}"
 
     def test_fits_in_signed_bigint(self):
         # BigInteger maps to signed 64-bit in both Postgres and SQLite.
@@ -152,6 +145,7 @@ class TestHammingDistance:
 
 
 # ─── Contract: normalization is idempotent ──────────────────────────────────
+
 
 @pytest.mark.parametrize(
     "raw,type_",

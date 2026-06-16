@@ -13,6 +13,7 @@ Utilizzo:
 Lifecycle:
     Chiamare `await rabbitmq_pool.close()` nello shutdown dell'app (lifespan).
 """
+
 import asyncio
 import logging
 

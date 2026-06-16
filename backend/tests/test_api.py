@@ -1,10 +1,10 @@
 import pytest
 
 from shared.core.security import get_password_hash
-from shared.models import Keyword, LeakHit, Tenant, User
-
+from shared.models import LeakHit, Tenant, User
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 async def tenant(db):
@@ -65,6 +65,7 @@ async def analyst_headers(client, analyst_user):
 
 # ── System status ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_read_system_status(client):
     response = await client.get("/system/status")
@@ -82,6 +83,7 @@ async def test_system_status_no_error_field(client):
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_auth_protected_route(client):
@@ -134,6 +136,7 @@ async def test_logout_clears_cookie(client, admin_user):
 
 # ── Leaks ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_list_leaks_authenticated(client, auth_headers, tenant):
     res = await client.get("/leaks/", headers=auth_headers)
@@ -173,6 +176,7 @@ async def test_leaks_tenant_isolation(client, db, auth_headers, analyst_headers,
 
 # ── Identities ────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_identity(client, auth_headers):
     res = await client.post(
@@ -193,6 +197,7 @@ async def test_list_identities(client, auth_headers):
 
 
 # ── User profile ──────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_update_profile_name_no_password_needed(client, auth_headers):
@@ -240,6 +245,7 @@ async def test_update_email_correct_password(client, auth_headers):
 
 # ── Keywords ──────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_keyword(client, auth_headers, tenant, admin_user):
     res = await client.post(
@@ -258,6 +264,7 @@ async def test_analyst_cannot_access_admin_routes(client, analyst_headers):
 
 
 # ── Shodan IP validation ──────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_shodan_rejects_invalid_ip(client, auth_headers):

@@ -16,23 +16,23 @@ silently allows VIP demotion. These tests encode the rewrite's contract:
 
 All tests start RED until Phase 3 implements the service.
 """
+
 from __future__ import annotations
 
 import pytest
 from sqlalchemy import select
 
-from shared.models import Identity, MergeEvent
+from shared.models import MergeEvent
 
 pytest.importorskip("shared.domain.services.entity_resolution", reason="Phase 3 not implemented yet")
 from shared.domain.services.entity_resolution import (  # noqa: E402
+    CrossTenantMerge,
+    InsufficientEvidence,
+    VipInvariantViolation,
     merge_identities,
     reverse_merge,
-    InsufficientEvidence,
-    CrossTenantMerge,
-    VipInvariantViolation,
 )
 from shared.domain.services.identity_upsert import upsert_identity  # noqa: E402
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -65,12 +65,8 @@ class TestEvidenceRequired:
 class TestIdempotency:
     async def test_merging_same_pair_twice_is_noop(self, corr_db, tenant):
         a, b = await _make_pair(corr_db, tenant.id)
-        first = await merge_identities(
-            corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE
-        )
-        second = await merge_identities(
-            corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE
-        )
+        first = await merge_identities(corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE)
+        second = await merge_identities(corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE)
         assert first.id == second.id, "second merge should return the existing event"
 
         events = (await corr_db.execute(select(MergeEvent))).scalars().all()
@@ -94,9 +90,7 @@ class TestIdempotency:
 
 
 class TestVipInvariant:
-    async def test_protected_slave_under_unprotected_master_violates_invariant(
-        self, corr_db, tenant
-    ):
+    async def test_protected_slave_under_unprotected_master_violates_invariant(self, corr_db, tenant):
         a, b = await _make_pair(corr_db, tenant.id)
         a.is_protected = False
         b.is_protected = True
@@ -106,23 +100,20 @@ class TestVipInvariant:
         # protected, or rejects the merge outright. Both are acceptable; what
         # is NOT acceptable is the slave silently losing protection.
         try:
-            event = await merge_identities(
-                corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE
-            )
+            event = await merge_identities(corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE)
         except VipInvariantViolation:
             return  # acceptable outcome: refuse to merge
         # If the merge was accepted, the master MUST now carry protection.
         await corr_db.refresh(a)
-        assert a.is_protected is True, (
-            "accepting a VIP-slave merge requires promoting the master to protected"
-        )
+        assert a.is_protected is True, "accepting a VIP-slave merge requires promoting the master to protected"
         assert event is not None
 
 
 class TestCrossTenant:
     async def test_cross_tenant_merge_rejected(self, corr_db, corr_session_factory, tenant):
-        from shared.models import Tenant
         import uuid as _uuid
+
+        from shared.models import Tenant
 
         other = Tenant(id=str(_uuid.uuid4()), name=f"other-{_uuid.uuid4().hex[:6]}")
         corr_db.add(other)
@@ -132,17 +123,13 @@ class TestCrossTenant:
         b = await upsert_identity(corr_db, other.id, "b@example.com", "email")
 
         with pytest.raises(CrossTenantMerge):
-            await merge_identities(
-                corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE
-            )
+            await merge_identities(corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE)
 
 
 class TestReversibility:
     async def test_reverse_merge_restores_independence(self, corr_db, tenant):
         a, b = await _make_pair(corr_db, tenant.id)
-        event = await merge_identities(
-            corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE
-        )
+        event = await merge_identities(corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE)
         await corr_db.refresh(b)
         assert b.master_identity_id == a.id
 
@@ -158,17 +145,13 @@ class TestReversibility:
 class TestAuditLedger:
     async def test_merge_event_has_hash_chain_link(self, corr_db, tenant):
         a, b = await _make_pair(corr_db, tenant.id)
-        first = await merge_identities(
-            corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE
-        )
+        first = await merge_identities(corr_db, master=a, slave=b, evidence=SHARED_LEAK_EVIDENCE)
         assert first.self_hash, "every merge event must carry a self_hash"
 
         # Second merge in the same tenant should reference the first as prev_hash.
         c = await upsert_identity(corr_db, tenant.id, "c@example.com", "email")
         d = await upsert_identity(corr_db, tenant.id, "d@example.com", "email")
-        second = await merge_identities(
-            corr_db, master=c, slave=d, evidence=SHARED_LEAK_EVIDENCE
-        )
+        second = await merge_identities(corr_db, master=c, slave=d, evidence=SHARED_LEAK_EVIDENCE)
         assert second.prev_hash == first.self_hash, "merge ledger must be hash-chained"
 
 
@@ -176,6 +159,4 @@ class TestSelfMergeRejected:
     async def test_cannot_merge_identity_with_itself(self, corr_db, tenant):
         a, _ = await _make_pair(corr_db, tenant.id)
         with pytest.raises(ValueError):
-            await merge_identities(
-                corr_db, master=a, slave=a, evidence=SHARED_LEAK_EVIDENCE
-            )
+            await merge_identities(corr_db, master=a, slave=a, evidence=SHARED_LEAK_EVIDENCE)

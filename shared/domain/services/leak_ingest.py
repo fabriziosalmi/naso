@@ -26,6 +26,7 @@ The Hamming threshold (3) is the canonical SimHash near-duplicate cutoff
 for short-to-medium text. Increase it to widen the dedup net (more false
 positives); decrease it for strict matching (more duplicates slip through).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -49,9 +50,7 @@ NEAR_DUP_THRESHOLD: int = 3
 _SNIPPET_LIMIT: int = 500
 
 
-async def _find_near_duplicate(
-    db: AsyncSession, tenant_id: str, fingerprint: int
-) -> LeakHit | None:
+async def _find_near_duplicate(db: AsyncSession, tenant_id: str, fingerprint: int) -> LeakHit | None:
     """Return the first tenant leak within ``NEAR_DUP_THRESHOLD`` Hamming
     distance of *fingerprint*, or ``None``.
 
@@ -110,11 +109,7 @@ async def ingest_leak(
         # a subsequent, weaker observation. This matches the operator mental
         # model: evidence accumulates, it doesn't unravel.
         if severity_score > (existing.severity_score or 0):
-            await db.execute(
-                update(LeakHit)
-                .where(LeakHit.id == existing.id)
-                .values(severity_score=severity_score)
-            )
+            await db.execute(update(LeakHit).where(LeakHit.id == existing.id).values(severity_score=severity_score))
             await db.commit()
             await db.refresh(existing)
         return existing

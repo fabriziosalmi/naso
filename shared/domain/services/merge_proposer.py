@@ -22,6 +22,7 @@ The master of a pair is the identity with the higher ``risk_score`` —
 tie-broken by earliest ``first_seen`` so the more-established record wins.
 VIP-preserving promotion is handled inside ``merge_identities`` itself.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -42,9 +43,7 @@ from shared.models import Identity, identity_leaks
 SHARED_LEAK_STRENGTH = 0.7
 
 
-async def gather_shared_leak_pairs(
-    db: AsyncSession, tenant_id: str
-) -> dict[tuple[str, str], list[str]]:
+async def gather_shared_leak_pairs(db: AsyncSession, tenant_id: str) -> dict[tuple[str, str], list[str]]:
     """Return a ``{(id_a, id_b): [shared_leak_id, ...]}`` map for every
     ordered pair of currently-active (master-level) identities in this
     tenant that share at least one leak.
@@ -132,10 +131,7 @@ async def propose_and_merge(
             continue
 
         master, slave = choose_master(a, b)
-        evidence = [
-            {"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH}
-            for lid in shared_leaks
-        ]
+        evidence = [{"type": "shared_leak", "leak_id": lid, "strength": SHARED_LEAK_STRENGTH} for lid in shared_leaks]
         try:
             event = await merge_identities(
                 db,

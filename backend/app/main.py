@@ -24,7 +24,7 @@ if _sentry_enabled:
 from shared.config import settings
 from shared.database import engine
 
-from .api.endpoints import ai, auth, identities, keywords, leaks, system, tenants, users, yara
+from .api.endpoints import ai, auth, identities, keywords, leaks, sec, system, tenants, users, yara
 from .infrastructure.rabbitmq import rabbitmq_pool
 from .limiter import limiter
 

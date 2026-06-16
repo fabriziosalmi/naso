@@ -15,9 +15,11 @@ The contracts exercised here:
   * Existing rows have ``last_seen`` bumped and ``confidence`` unchanged when
     re-observed.
 """
+
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -28,7 +30,6 @@ from shared.models import Identity
 # first run; that is the RED state we want before Phase 3.
 pytest.importorskip("shared.domain.services.identity_upsert", reason="Phase 3 not implemented yet")
 from shared.domain.services.identity_upsert import upsert_identity  # noqa: E402
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -64,9 +65,7 @@ class TestIdempotency:
 
 
 class TestRaceSafety:
-    async def test_gather_of_same_identifier_creates_one_row(
-        self, corr_session_factory, tenant
-    ):
+    async def test_gather_of_same_identifier_creates_one_row(self, corr_session_factory, tenant):
         """Simulate N concurrent workers ingesting leaks that all extract the
         same email. After the dust settles we expect exactly one Identity row.
 
@@ -76,9 +75,7 @@ class TestRaceSafety:
 
         async def _one_upsert():
             async with corr_session_factory() as session:
-                await upsert_identity(
-                    session, tenant.id, "racing@example.com", "email"
-                )
+                await upsert_identity(session, tenant.id, "racing@example.com", "email")
 
         # 8 workers = enough concurrency to reliably expose the race on SQLite.
         await asyncio.gather(*[_one_upsert() for _ in range(8)])

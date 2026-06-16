@@ -25,6 +25,8 @@ os.environ.setdefault("JWT_PUBLIC_KEY", "test-secret")
 # module scope and are always available to every test file. The FastAPI app
 # and its dependencies (httpx, jwt_manager) are deferred to the ``client``
 # fixture so the correlation-engine test files can run on a minimal install.
+import contextlib
+
 from shared.database import get_db
 from shared.models import Base, Tenant, User
 
@@ -63,9 +65,9 @@ async def client(db):
     # Deferred imports — the full FastAPI app is only needed when a test
     # actually exercises an HTTP endpoint. Correlation-engine tests can run
     # without these modules installed.
+    from app.main import app
     from httpx import ASGITransport, AsyncClient
 
-    from app.main import app
     from shared.core.jwt_manager import jwt_blacklist
 
     jwt_blacklist.is_blacklisted = AsyncMock(return_value=False)
@@ -91,9 +93,10 @@ async def client(db):
 # the very races we are trying to detect. Every correlation test therefore
 # gets its own file-backed SQLite so we can open genuinely parallel sessions.
 
+
 @pytest_asyncio.fixture
 async def corr_engine():
-    tmp = tempfile.NamedTemporaryFile(prefix="naso_corr_", suffix=".sqlite", delete=False)
+    tmp = tempfile.NamedTemporaryFile(prefix="naso_corr_", suffix=".sqlite", delete=False)  # noqa: SIM115 — delete=False fixture; closed immediately, removed at teardown
     tmp.close()
     url = f"sqlite+aiosqlite:///{tmp.name}"
     eng = create_async_engine(url, echo=False)
@@ -103,10 +106,8 @@ async def corr_engine():
         yield eng
     finally:
         await eng.dispose()
-        try:
+        with contextlib.suppress(FileNotFoundError):
             Path(tmp.name).unlink()
-        except FileNotFoundError:
-            pass
 
 
 @pytest_asyncio.fixture

@@ -1,14 +1,14 @@
 # ruff: noqa: E402
 import asyncio
 import hashlib
-import httpx
 import io
 import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
+import httpx
 from elasticsearch import AsyncElasticsearch
 from minio import Minio
 from sqlalchemy import select

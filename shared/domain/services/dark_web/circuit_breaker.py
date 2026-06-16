@@ -21,12 +21,14 @@ The separate existing ``shared/utils/circuit_breaker.py`` is kept for its
 Elasticsearch / MinIO instances; this one is scoped to dark-web traffic so
 Tor cluster health does not contaminate the ES breaker and vice versa.
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable
 from enum import Enum
-from typing import Awaitable, Callable, TypeVar
+from typing import Callable, TypeVar
 
 T = TypeVar("T")
 

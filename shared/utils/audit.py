@@ -15,6 +15,7 @@ writer — with ``flush_only=True`` so existing callers that wrapped
 Keep using ``AuditLogger.log`` from existing endpoints; migrate to the
 direct ``write_audit`` API when touching a file for other reasons.
 """
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import AuditLog
