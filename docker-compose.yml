@@ -84,9 +84,7 @@ services:
     restart: always
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
-      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbit_password
-    secrets:
-      - rabbit_password
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}
     security_opt:
       - no-new-privileges:true
     cap_drop:

@@ -1,0 +1,13 @@
+services:
+  db:
+    cap_drop: []
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER, SETFCAP]
+  redis:
+    cap_drop: []
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER, SETFCAP]
+  rabbitmq:
+    cap_drop: []
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER, SETFCAP]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}

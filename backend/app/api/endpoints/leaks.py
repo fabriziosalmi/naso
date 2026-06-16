@@ -20,7 +20,7 @@ from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
 
 from ..deps import get_current_user
-from ..infrastructure.rabbitmq import rabbitmq_pool
+from ...infrastructure.rabbitmq import rabbitmq_pool
 
 router = APIRouter()
 

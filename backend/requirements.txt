@@ -41,3 +41,10 @@ pytest-cov
 -r shared/requirements-shared.txt
 mcp>=1.2.0
 sentry-sdk[fastapi]>=1.40.4
+beautifulsoup4>=4.12
+opentelemetry-instrumentation-celery>=0.63b1
+opentelemetry-instrumentation-elasticsearch
+opentelemetry-instrumentation-redis
+opentelemetry-instrumentation-requests
+opentelemetry-instrumentation-httpx
+opentelemetry-instrumentation-pika

@@ -15,7 +15,7 @@ from shared.models import User
 from shared.schemas import Token
 
 from ..deps import oauth2_scheme
-from ..limiter import limiter
+from ...limiter import limiter
 
 router = APIRouter()
 
