@@ -45,6 +45,26 @@ This is a single-maintainer project, not a funded security team. These are
 good-faith targets, not a contractual SLA. If a deadline slips you will be told
 why rather than left waiting.
 
+## Automated scanning
+
+`.github/workflows/security-scan.yml` runs on every push and pull request to
+`main`, and weekly on Monday regardless of activity — the weekly run is the one
+that matters, because a new advisory against a transitive dependency arrives
+without anyone touching the repository. It covers:
+
+| Scanner | Target | Fails the job on |
+|---------|--------|------------------|
+| `pip-audit` | the three Python requirement sets | any known advisory |
+| `npm audit` | `frontend/` and `docs/` | `high` and above |
+| Trivy | both container images | `HIGH`/`CRITICAL` **with a fix available** |
+| Gitleaks | the working tree | any credential pattern |
+
+It is a separate workflow from `Draconian NASO CI` on purpose. The merge gate
+has to fail only for reasons the pull-request author can fix; folding advisory
+scanning into it would mean either red builds nobody can act on, or muted
+advisories. Trivy findings with no upstream fix are reported as a SARIF
+artifact rather than failing the build, for the same reason.
+
 ## Scope
 
 **In scope** — anything in this repository:
@@ -93,7 +113,10 @@ operators are expected to:
   directory of 0444 files, mirroring how Docker mounts real secrets, so that a
   `cap_drop: ALL` container — which has no CAP_DAC_OVERRIDE and so cannot
   ignore file permissions — can read them regardless of which host user
-  created them. That is appropriate for development credentials on a
+  created them. `elastic_password.txt` is the one exception, written 0600
+  because Elasticsearch validates the mode of its own password file and
+  crash-loops on anything but 400 or 600; its container keeps its capabilities,
+  so it can still read it. That is appropriate for development credentials on a
   developer's own machine and is **not** a production secret store: in
   production, mount real Docker secrets or a secret manager at `/run/secrets`;
 - set `NASO_COOKIE_SECURE=true` and terminate TLS in front of the API;
@@ -109,11 +132,10 @@ operators are expected to:
   docker compose build --build-arg TOR_CONTROL_PASSWORD=<strong-pw>
   ```
 
-- be aware that the application containers currently run as **root** inside
-  the container. `cap_drop: ALL`, `no-new-privileges:true`, and a `read_only`
-  root filesystem limit what that buys an attacker, but a dedicated non-root
-  UID is not yet in place. Treat container escape as a live risk and do not
-  run the stack on a host that carries anything else you care about;
+- note that the application containers run as a non-root uid 10001 (`naso` in
+  the API image, `pwuser` in the worker image) with `cap_drop: ALL`,
+  `no-new-privileges:true`, and a `read_only` root filesystem. The datastore
+  containers are the exception — see the capability note below;
 - note that Postgres, Redis, and RabbitMQ are granted CHOWN, SETUID, SETGID,
   DAC_OVERRIDE, FOWNER and SETFCAP in docker-compose.yml. Their official
   entrypoints need those to chown their data directory and drop from root to

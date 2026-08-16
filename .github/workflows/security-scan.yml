@@ -1,0 +1,205 @@
+name: Security Scan
+
+# Separate from Draconian NASO CI on purpose. That pipeline gates merges and
+# must stay deterministic: it fails only when the code in the pull request is
+# wrong. This one fails when the outside world changes — a new CVE lands in a
+# transitive dependency on a Tuesday with nobody touching the repo. Mixing the
+# two means either the merge gate goes red for reasons the author cannot fix,
+# or advisories get muted to keep the gate green.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Monday 06:17 UTC. Off the hour because scheduled jobs at :00 queue behind
+    # everyone else's cron on shared runners.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-dependencies:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit==2.9.0
+
+      # backend/requirements.txt and workers/requirements.txt both contain
+      # `-r shared/requirements-shared.txt`, which pip resolves relative to the
+      # including file. That path only exists inside the images, where the
+      # Dockerfiles COPY shared/ next to the requirements. Reproduce that
+      # layout here rather than editing the requirements to suit the scanner.
+      - name: Stage the requirements the way the images see them
+        run: |
+          for svc in backend workers; do
+            mkdir -p /tmp/audit/$svc/shared
+            cp $svc/requirements.txt /tmp/audit/$svc/
+            cp shared/requirements-shared.txt /tmp/audit/$svc/shared/
+          done
+          mkdir -p /tmp/audit/shared
+          cp shared/requirements-shared.txt /tmp/audit/shared/
+
+      # `if: always()` so one vulnerable service does not hide the state of the
+      # other two — the whole point is knowing everything that needs patching.
+      - name: Audit backend requirements
+        run: pip-audit --requirement /tmp/audit/backend/requirements.txt
+
+      - name: Audit shared requirements
+        if: always()
+        run: pip-audit --requirement /tmp/audit/shared/requirements-shared.txt
+
+      - name: Audit worker requirements
+        if: always()
+        run: pip-audit --requirement /tmp/audit/workers/requirements.txt
+
+  javascript-dependencies:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      # --audit-level=high, not the default: a moderate advisory in a build
+      # tool is worth knowing about but is not worth blocking a merge on.
+      - name: Audit frontend
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      # --omit=dev for the docs site specifically, and it is not a way of
+      # dodging a red job. docs/package.json declares *no* production
+      # dependencies at all — vitepress and vue are both devDependencies, and
+      # what ships is a directory of static HTML built from them. Nothing in
+      # docs/node_modules ever executes anywhere a reader can reach.
+      #
+      # Without this the gate is permanently red on GHSA-67mh-4wv8-2f99: an
+      # esbuild advisory about the *development server* accepting requests from
+      # any origin, reaching us transitively through vite through vitepress 1,
+      # with "No fix available". Clearing it needs vitepress 2, which is still
+      # alpha — an alpha static site generator is the worse trade. A gate that
+      # cannot go green teaches everyone to ignore it.
+      - name: Audit docs (what actually ships)
+        if: always()
+        working-directory: docs
+        run: npm audit --omit=dev --audit-level=high
+
+      # The dev-dependency advisories still get printed, they just do not fail
+      # the build. Visible and non-blocking beats suppressed.
+      - name: Audit docs build toolchain (informational)
+        if: always()
+        continue-on-error: true
+        working-directory: docs
+        run: npm audit --audit-level=high
+
+  container-images:
+    name: Trivy
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile.backend
+            image: naso-backend
+          - dockerfile: Dockerfile.worker
+            image: naso-worker
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build ${{ matrix.image }}
+        run: docker build -f ${{ matrix.dockerfile }} -t ${{ matrix.image }}:scan .
+
+      # Trivy runs from its own image rather than through trivy-action, so
+      # there is no action version to keep in step with the scanner version,
+      # and the Docker socket mount is what lets it read the image just built.
+      #
+      # The tag is pinned, not :latest. A scanner that updates itself makes the
+      # weekly run fail for reasons that have nothing to do with the code — the
+      # exact failure mode that an unpinned ruff already caused once on the
+      # merge gate. Dependabot's docker ecosystem does not read workflow files,
+      # so bumping this is a manual and deliberate act.
+      #
+      # Two passes: a SARIF report that is always produced and kept as an
+      # artifact, and a gate that fails only on HIGH/CRITICAL findings which
+      # actually have a fix available. A base-image CVE with no fixed version
+      # is real information but nothing a pull request can act on, so it is
+      # reported without turning the job red.
+      #
+      # The SARIF is an artifact, not a code-scanning upload: uploading to the
+      # Security tab needs GitHub Advanced Security while the repository is
+      # private. Once it is public, add a github/codeql-action/upload-sarif
+      # step here — code scanning is free on public repositories.
+      - name: Scan ${{ matrix.image }} (report)
+        run: |
+          mkdir -p trivy-out
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/trivy-out:/out" \
+            aquasec/trivy:0.74.0 image \
+              --format sarif --output /out/${{ matrix.image }}.sarif \
+              --severity CRITICAL,HIGH \
+              ${{ matrix.image }}:scan
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.image }}
+          path: trivy-out/
+          retention-days: 30
+
+      - name: Gate on fixable HIGH/CRITICAL
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.74.0 image \
+              --format table \
+              --severity CRITICAL,HIGH \
+              --ignore-unfixed \
+              --exit-code 1 \
+              ${{ matrix.image }}:scan
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The upstream gitleaks-action needs a licence key for organisation-owned
+      # repositories. Running the scanner's own image sidesteps that entirely
+      # and pins the behaviour to the tool rather than to a wrapper. The tag is
+      # pinned for the same reason as Trivy's: a scanner whose rule set moves
+      # under you turns a quiet week into a red build.
+      #
+      # --no-git: the working tree, not the history. History was audited by
+      # hand before publication and the only matches are documented development
+      # defaults — the seeded admin password that backend/init_db.py no longer
+      # has, the `naso-dev` Tor control password that SECURITY.md tells you to
+      # override, and the PEM header literals in shared/rules/secrets.yar, which
+      # are detection rules rather than keys. No .env, .pem or key file has ever
+      # been committed. Scanning history here would make this job permanently
+      # red on those four known strings and train everyone to ignore it; what
+      # is worth gating is that nothing new arrives.
+      #
+      # --config points at the same .gitleaks.toml the pre-commit hook picks
+      # up, so a finding suppressed locally is suppressed here and vice versa.
+      # Every allowlist entry in it carries its reason.
+      - name: Gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
+            detect --no-git --source /repo --config /repo/.gitleaks.toml \
+            --redact --verbose --no-banner

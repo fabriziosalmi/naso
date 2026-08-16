@@ -32,6 +32,7 @@ export default {
     logo: '/logo.svg',
     nav: [
       { text: "Overview", link: "/guide/" },
+      { text: "Deploy", link: "/guide/deployment" },
       { text: "API Reference", link: "/api/" }
     ],
     search: {
@@ -52,9 +53,28 @@ export default {
         items: [
           { text: "Identity Hub", link: "/guide/identity-hub" },
           { text: "Dark Web Recon", link: "/guide/dark-recon" },
+          { text: "AI Co-Analyst", link: "/guide/ai-coanalyst" },
           { text: "MCP & GenAI", link: "/guide/mcp-integration" },
           { text: "SOAR & CTI Hooks", link: "/guide/soar-and-cti" },
           { text: "Compliance Data", link: "/guide/reporting" }
+        ]
+      },
+      {
+        text: "Running NASO",
+        collapsed: false,
+        items: [
+          { text: "Configuration", link: "/guide/configuration" },
+          { text: "Deployment", link: "/guide/deployment" },
+          { text: "Security Model", link: "/guide/security" },
+          { text: "Operator Runbook", link: "/guide/runbook" }
+        ]
+      },
+      {
+        text: "Project",
+        collapsed: false,
+        items: [
+          { text: "Contributing", link: "/guide/contributing" },
+          { text: "Changelog", link: "https://github.com/fabriziosalmi/naso/blob/main/CHANGELOG.md" }
         ]
       }
     ],

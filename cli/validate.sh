@@ -3,7 +3,7 @@
 # ==============================================================================
 # NASO FORENSIC ENGINE - DRACONIAN VALIDATION SCRIPT
 # ==============================================================================
-# This script executes the entire Draconian testing suite across Backend, 
+# This script executes the entire Draconian testing suite across Backend,
 # Frontend, and end-to-end user flows. It is intended to be run before every
 # commit to guarantee zero regressions.
 # ==============================================================================
@@ -14,7 +14,6 @@ set -o pipefail
 CYAN="\033[1;36m"
 GREEN="\033[1;32m"
 RED="\033[1;31m"
-YELLOW="\033[1;33m"
 MAGENTA="\033[1;35m"
 RESET="\033[0m"
 BOLD="\033[1m"
@@ -49,7 +48,7 @@ check_docker_status() {
         print_error "Docker is not running or not accessible."
         exit 1
     fi
-    
+
     if ! docker ps | grep -q "naso-api"; then
         print_error "The 'naso-api' container is not running. Please run 'make up' first."
         exit 1
@@ -71,7 +70,7 @@ run_backend_tests() {
 run_frontend_unit_tests() {
     print_step "FRONTEND" "Executing Vitest Component & Store Suite"
     cd frontend || exit 1
-    
+
     # Run vitest in run mode (single execution, no watch)
     if npm run test -- --run --reporter=verbose; then
         print_success "Frontend React layer passed."
@@ -84,10 +83,10 @@ run_frontend_unit_tests() {
 run_e2e_tests() {
     print_step "PLAYWRIGHT" "Executing End-to-End Analyst UI Flows"
     cd frontend || exit 1
-    
+
     # Ensure Playwright browsers are installed silently, then run the UI test
     npx playwright install chromium >/dev/null 2>&1
-    
+
     if npx playwright test; then
         print_success "E2E User flows passed smoothly."
     else
@@ -100,7 +99,7 @@ print_summary() {
     echo -e "${MAGENTA}======================================================${RESET}"
     echo -e "${BOLD}DRACONIAN VALIDATION SUMMARY${RESET}"
     echo -e "${MAGENTA}======================================================${RESET}"
-    
+
     if [ "$TESTS_FAILED" -eq 0 ]; then
         echo -e "${GREEN}ALL SYSTEMS NOMINAL. YOU ARE CLEARED TO PUSH.${RESET} 🚀"
         echo -e "Modules passed: ${TESTS_PASSED}"

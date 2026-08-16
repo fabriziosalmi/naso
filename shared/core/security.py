@@ -26,7 +26,39 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     jti = str(uuid.uuid4())
-    to_encode.update({"exp": expire, "jti": jti, "iat": datetime.now(timezone.utc)})
+    now = datetime.now(timezone.utc)
+    # iss/aud scope the token to this deployment; nbf closes the window in
+    # which a token is signed but not yet nominally valid. decode_access_token
+    # verifies all three, so they are not decoration.
+    to_encode.update(
+        {
+            "exp": expire,
+            "jti": jti,
+            "iat": now,
+            "nbf": now,
+            "iss": settings.JWT_ISSUER,
+            "aud": settings.JWT_AUDIENCE,
+        }
+    )
 
     encoded_jwt = jwt.encode(to_encode, settings.JWT_PRIVATE_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+def decode_access_token(token: str) -> dict:
+    """Verify and decode an access token.
+
+    The single decode path for the whole codebase. Call sites used to pass
+    their own argument set to ``jwt.decode``, which is how you end up with one
+    endpoint checking the audience and another not. Raises ``jwt.PyJWTError``
+    (or a subclass) on anything invalid — callers translate that into a 401.
+    """
+    return jwt.decode(
+        token,
+        settings.JWT_PUBLIC_KEY,
+        algorithms=[settings.ALGORITHM],
+        audience=settings.JWT_AUDIENCE,
+        issuer=settings.JWT_ISSUER,
+        leeway=settings.JWT_LEEWAY_SECONDS,
+        options={"require": ["exp", "iat", "nbf", "iss", "aud", "jti", "sub"]},
+    )

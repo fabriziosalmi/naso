@@ -1,0 +1,99 @@
+# Pre-commit hooks.
+#
+# Install once per clone:
+#
+#     pip install pre-commit && pre-commit install
+#
+# The purpose here is narrow: catch locally, in under a second, the things that
+# would otherwise burn a seven-minute CI round trip. Every hook below either
+# mirrors a CI gate exactly or prevents a class of commit that is painful to
+# undo (a committed secret, a 5 MB binary). Nothing that merely reformats to
+# taste, and nothing slow — a hook set that takes ten seconds gets bypassed
+# with `--no-verify` within a week, and then it protects nothing.
+
+repos:
+  # ── Ruff: byte-identical to the CI quality gate ───────────────────────────
+  #
+  # The rev is pinned to the same version as backend/requirements-dev.txt and
+  # the `pip install ruff==` line in .github/workflows/draconian-ci.yml. All
+  # three must move together. They have diverged once already: CI installed an
+  # unpinned ruff, 0.16 started formatting Python inside Markdown fences, and
+  # the gate went red on a day nobody had touched the code.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.3
+    hooks:
+      - id: ruff
+        name: ruff (lint, autofix)
+        args: [--fix]
+      - id: ruff-format
+        name: ruff (format)
+
+  # ── Generic file hygiene ──────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Markdown uses two trailing spaces as a hard line break.
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+      # Parse checks. A malformed workflow file does not fail the build — it
+      # silently stops the workflow from running at all, which is worse.
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+        exclude: ^(frontend|docs)/(dist|\.vitepress/dist)/
+      - id: check-toml
+
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+      # 500 KB. Large enough for a legitimate fixture, small enough that a
+      # stray build artifact or screenshot dump gets stopped at the door.
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+      # The single most expensive mistake this list prevents. A committed .env
+      # or private key is not undone by a follow-up commit — it is in the
+      # history, and on a public repository it is scraped within minutes.
+      - id: detect-private-key
+        # secrets.yar is the YARA rule that *detects* leaked private keys, so
+        # it necessarily contains the PEM header strings it matches on. It is a
+        # signature file, not a key.
+        exclude: ^shared/rules/secrets\.yar$
+      - id: check-vcs-permalinks
+
+  # ── Secrets ───────────────────────────────────────────────────────────────
+  #
+  # Same scanner the Security Scan workflow runs, so a finding surfaces before
+  # the push rather than after it. Working tree only, matching that workflow —
+  # see the comment there for why history is excluded.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+
+  # ── Shell ─────────────────────────────────────────────────────────────────
+  #
+  # cli/validate.sh is what CI runs to decide whether the stack works, and it
+  # is the script a new user is told to run. An unquoted expansion in it fails
+  # in a way that looks like a broken application.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+
+# Committed build output lives in the repository (frontend/dist,
+# docs/.vitepress/dist). Reformatting generated files is noise, and the
+# large-file hook would reject bundles that are meant to be there.
+exclude: |
+  (?x)^(
+    frontend/dist/|
+    docs/\.vitepress/dist/|
+    docs/\.vitepress/cache/|
+    .*/node_modules/
+  )

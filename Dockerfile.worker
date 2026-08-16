@@ -1,9 +1,16 @@
 FROM python:3.11-slim
 
+# Non-root user. The name is `pwuser` to match the account Playwright's own
+# images use, and because docker-compose.yml already mounts a tmpfs at
+# /home/pwuser/.cache for it. uid 10001 matches Dockerfile.backend.
+ARG UID=10001
+RUN groupadd --system --gid ${UID} pwuser \
+ && useradd --system --uid ${UID} --gid pwuser --create-home --home /home/pwuser --shell /sbin/nologin pwuser
+
 WORKDIR /app
 
 # Playwright and browser dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     yara \
@@ -27,14 +34,43 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
+# Dependencies are installed as root: pip needs write access to site-packages.
+# The --trusted-host flags that used to be here are gone on purpose — they
+# disable certificate verification for PyPI, which is not a trade this project
+# should be making.
 COPY workers/requirements.txt ./requirements.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install the Playwright browsers
-RUN playwright install chromium firefox --with-deps
+# The same base-image toolchain advisories the API image carries. None is an
+# application dependency. See the equivalent note in Dockerfile.backend for why
+# these are explicit floors and why pip itself is left alone.
+RUN pip install --no-cache-dir --upgrade \
+        "setuptools>=78.1.1,<82" "wheel>=0.46.2" \
+ && (pip uninstall -y jaraco.context || true)
+
+RUN rm -rf /usr/local/lib/python3.11/ensurepip
+
+# Browsers go to an explicit shared location rather than the default
+# ~/.cache/ms-playwright. Two reasons: `playwright install` has to run as root
+# (--with-deps calls apt-get), so the default would put them under /root where
+# pwuser cannot read them; and /home/pwuser/.cache is a tmpfs at runtime, so
+# anything installed there at build time is masked the moment the container
+# starts.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN mkdir -p ${PLAYWRIGHT_BROWSERS_PATH} \
+ && playwright install chromium firefox --with-deps \
+ && chown -R pwuser:pwuser ${PLAYWRIGHT_BROWSERS_PATH}
 
 COPY workers/ ./workers/
 COPY shared/ ./shared/
+RUN chown -R pwuser:pwuser /app
+
+# Chromium wants a home directory it can write to. The root filesystem is
+# read_only in docker-compose.yml, so only the /home/pwuser/.cache tmpfs is
+# actually writable — which is where Playwright and Chromium put their
+# scratch state — plus /tmp.
+ENV HOME=/home/pwuser
+USER pwuser:pwuser
 
 CMD ["celery", "-A", "shared.celery_app", "worker", "--loglevel=info"]

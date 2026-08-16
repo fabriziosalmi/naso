@@ -51,6 +51,12 @@ async def auth_headers(client, admin_user):
         data={"username": "admin@acme.example.com", "password": "Admin$ecure99"},
     )
     token = res.json()["access_token"]
+    # Drop the cookies login just set. These tests authenticate with the
+    # Authorization header, and leaving the auth cookie in the jar would make
+    # every mutating request look like a browser session to CSRFMiddleware,
+    # which would then demand the X-Naso-CSRF header. The cookie path is
+    # covered on its own in test_csrf.py.
+    client.cookies.clear()
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -61,6 +67,7 @@ async def analyst_headers(client, analyst_user):
         data={"username": "analyst@acme.example.com", "password": "Analyst$ecure99"},
     )
     token = res.json()["access_token"]
+    client.cookies.clear()
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -131,7 +138,16 @@ async def test_logout_clears_cookie(client, admin_user):
         data={"username": "admin@acme.example.com", "password": "Admin$ecure99"},
     )
     token = login.json()["access_token"]
-    res = await client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    # This test keeps the cookies login set, so it is a browser session as far
+    # as CSRFMiddleware is concerned and has to echo the token back — exactly
+    # what the SPA does. Logging out without it is a 403, which is the point.
+    res = await client.post(
+        "/auth/logout",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Naso-CSRF": login.cookies["naso_csrf"],
+        },
+    )
     assert res.status_code == 200
 
 

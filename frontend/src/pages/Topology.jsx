@@ -72,7 +72,7 @@ const NodeInspector = ({ node, onClose }) => {
 
       {/* Content */}
       <div className="p-5 flex-1 overflow-y-auto space-y-6">
-        
+
         {/* Risk & Degree Panel */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-black/40 rounded-xl p-3 border border-white/[0.04]">
@@ -91,7 +91,7 @@ const NodeInspector = ({ node, onClose }) => {
         <div className="space-y-3">
           <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Properties</p>
           <div className="bg-white/[0.02] rounded-xl border border-white/[0.04] p-1">
-            
+
             <div className="flex items-center justify-between p-2">
               <span className="text-[12px] text-zinc-400">Type</span>
               <span className="text-[12px] font-medium text-white capitalize">{node.type}</span>

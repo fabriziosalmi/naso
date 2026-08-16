@@ -1,0 +1,47 @@
+# Gitleaks configuration.
+#
+# Used by both the Security Scan workflow and the pre-commit hook, so a finding
+# suppressed in one is suppressed in the other. Divergence between the two is
+# how a developer learns to distrust the local hook.
+#
+# Everything below is an allowlist entry with a stated reason. A suppression
+# without one is indistinguishable from a real leak somebody got tired of.
+
+[extend]
+useDefault = true
+
+[[rules]]
+# Placeholder to keep the default rule set intact while extending; gitleaks
+# requires at least a rules table when a config file is present.
+id = "naso-placeholder"
+description = "Never matches. Present so [extend] applies cleanly."
+regex = '''\$naso-never-matches-this-literal\$'''
+
+[allowlist]
+description = "Documented false positives"
+
+paths = [
+  # This file is the YARA signature that DETECTS leaked private keys, so it
+  # necessarily contains the PEM header strings it matches on as string
+  # literals. It is a detection rule, not a key.
+  #
+  # (Quoting one of those headers here would make this config trip the same
+  # scanners it configures — which is how the first version of this file
+  # failed its own pre-commit hook.)
+  '''shared/rules/secrets\.yar''',
+
+  # The generated frontend and docs bundles. Minified third-party code trips
+  # entropy heuristics constantly and none of it is authored here. Both are
+  # gitignored; this covers a local working tree that has been built.
+  '''frontend/dist/''',
+  '''docs/\.vitepress/(dist|cache)/''',
+  '''node_modules/''',
+]
+
+regexes = [
+  # Truncated example JWTs in documentation. Every JWT begins with the base64
+  # of {"alg":..., so any illustrative token in a code fence starts "eyJ" and
+  # scores high on entropy. These are cut off with an ellipsis and were never
+  # valid.
+  '''eyJ[A-Za-z0-9_-]{5,}\.{3}''',
+]

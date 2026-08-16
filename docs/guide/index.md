@@ -39,7 +39,7 @@ The deletion of a tenant triggers a distributed transaction that ensures data co
 
 ## AI Co-Analyst Engine
 
-NASO utilizes local Large Language Models (LLMs) to perform automated triage and function as a proactive Co-Analyst. 
+NASO utilizes local Large Language Models (LLMs) to perform automated triage and function as a proactive Co-Analyst.
 
 ### Local AI Networking & Privacy
 The platform connects to any OpenAI-compatible local AI model server (e.g., LM Studio, Ollama). By default, the system leverages `host.docker.internal:1234/v1` to tunnel from the Dockerized NASO backend to the host's inference engine — ensuring zero data leakage to third parties.
@@ -50,6 +50,6 @@ The NASO Co-Analyst uses Server-Sent Events (SSE) to provide an immediate, react
 1.  **Identity Queries** (`search_identities` / `get_identity_insights`): Looks up high-risk profile fragments, unifying names and evaluating historical severity scores.
 2.  **Dataset Interrogation** (`get_leaks`): Performs filtered lookups against intercepted dumps from external platforms (e.g., GitHub, Pastebin, Telegram).
 3.  **Active Reconnaissance** (`dark_web_probe`): Dynamically tasks the worker pipeline to initiate localized Tor-based keyword probes (e.g., via Ahmia).
-4.  **Investigation Operations** (`create_task` / `flag_critical`): Automatically curates dedicated investigation plans, logging and tracking steps as collaborative task items. 
+4.  **Investigation Operations** (`create_task` / `flag_critical`): Automatically curates dedicated investigation plans, logging and tracking steps as collaborative task items.
 
 The AI Engine combines these autonomous actions with direct PII identification, rendering immediate insights on validity and origin vector directly into the front-end dashboard.

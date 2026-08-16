@@ -2,8 +2,38 @@ import { create } from 'zustand';
 import axios from 'axios';
 import { toast } from './useToastStore';
 
-// Tutti i request axios inviano automaticamente il cookie httpOnly naso_access_token
+// Every axios request carries the httpOnly naso_access_token cookie.
 axios.defaults.withCredentials = true;
+
+// CSRF double-submit cookie. The backend issues a non-httpOnly `naso_csrf`
+// cookie at login; we read it with document.cookie and echo it back as
+// X-Naso-CSRF on every state-changing request. Safe methods are skipped —
+// the middleware short-circuits GET/HEAD/OPTIONS anyway, so there is no
+// point sending a header it will ignore.
+const CSRF_COOKIE_NAME = 'naso_csrf';
+const CSRF_HEADER_NAME = 'X-Naso-CSRF';
+const SAFE_METHODS = new Set(['get', 'head', 'options']);
+
+export function readCsrfToken() {
+  if (typeof document === 'undefined' || !document.cookie) return null;
+  const prefix = `${CSRF_COOKIE_NAME}=`;
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) return decodeURIComponent(trimmed.slice(prefix.length));
+  }
+  return null;
+}
+
+axios.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toLowerCase();
+  if (SAFE_METHODS.has(method)) return config;
+  const token = readCsrfToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers[CSRF_HEADER_NAME] = token;
+  }
+  return config;
+});
 
 const useNasoStore = create((set, get) => ({
   user: null,
@@ -54,7 +84,7 @@ const useNasoStore = create((set, get) => ({
 
     const maxRetries = 5;
     let attempt = 0;
-    
+
     while (attempt < maxRetries) {
       try {
         const response = await fetch('/ai/chat', {
@@ -139,7 +169,7 @@ const useNasoStore = create((set, get) => ({
           }
         }
         // Success breaks the retry loop
-        break; 
+        break;
       } catch (err) {
         attempt++;
         if (attempt >= maxRetries) {
@@ -158,7 +188,7 @@ const useNasoStore = create((set, get) => ({
         }
       }
     }
-    
+
     set({ isAiStreaming: false });
   },
 
@@ -244,7 +274,7 @@ const useNasoStore = create((set, get) => ({
       const params = new URLSearchParams();
       params.append('username', email);
       params.append('password', password);
-      
+
       await axios.post('/auth/login', params, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
@@ -267,7 +297,7 @@ const useNasoStore = create((set, get) => ({
   fetchLeaks: async () => {
     const { isAuthenticated } = get();
     if (!isAuthenticated) return;
-    
+
     set({ isLoading: true });
     try {
       const response = await axios.get('/leaks/');
@@ -293,7 +323,7 @@ const useNasoStore = create((set, get) => ({
       toast.error('Registration failed', 'Could not add identity to the ledger.');
     }
   },
-  
+
   fetchIdentities: async (params = {}) => {
     const { isAuthenticated } = get();
     if (!isAuthenticated) return;
@@ -631,7 +661,7 @@ const useNasoStore = create((set, get) => ({
   exportAuditCsv: () => {
     const { auditLogs } = get();
     if (!auditLogs || auditLogs.length === 0) return;
-    
+
     const headers = ['Timestamp', 'Operator', 'Action', 'Asset Vector', 'Details'];
     const rows = auditLogs.map(log => [
       log.timestamp,
@@ -640,10 +670,10 @@ const useNasoStore = create((set, get) => ({
       log.resource_type || '',
       log.details ? JSON.stringify(log.details).replace(/"/g, '""') : ''
     ]);
-    
-    const csvContent = headers.join(',') + '\n' + 
+
+    const csvContent = headers.join(',') + '\n' +
       rows.map(e => e.map(cell => `"${cell}"`).join(',')).join('\n');
-      
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

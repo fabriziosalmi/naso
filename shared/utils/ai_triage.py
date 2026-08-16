@@ -38,19 +38,19 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
     NASO FORENSIC ANALYSIS v1.0
     Role: Threat Intelligence & Data Breach Analyst
     Task: assess whether the following content is a leak of REAL sensitive data.
-    
+
     VALIDATION CRITERIA:
     - Presence of credentials (email:password)
     - Financial data (credit cards, IBAN)
     - PII (identity documents, addresses, phone numbers)
     - Proprietary source code or secrets (API keys)
-    
+
     Answer in exactly this format:
     VALID: [YES/NO]
     SEVERITY: [0-100]
     CATEGORY: [CREDENTIALS/FINANCIAL/PII/SOURCE/OTHER]
     RATIONALE: brief technical explanation.
-    
+
     CONTENT:
     {content_snippet}
     """

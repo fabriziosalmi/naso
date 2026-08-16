@@ -66,8 +66,8 @@ const ScreenshotLightbox = ({ leakId, leaks, onClose }) => {
             </div>
           ) : imgUrl ? (
             <div className="relative w-full h-full p-8">
-                <img 
-                    src={imgUrl} 
+                <img
+                    src={imgUrl}
                     alt="Forensic Evidence"
                     className="w-full h-full object-contain rounded-xl"
                 />
@@ -216,11 +216,11 @@ export default function App() {
     fetchLeaks();
     fetchSystemStatus();
     fetchIdentities({ only_masters: true });
-    
+
     // Initial fetch based on route if necessary
     if (location.pathname === '/audit') fetchAuditLogs();
     if (location.pathname === '/topology') fetchGraphData();
-    
+
     const interval = setInterval(() => {
       fetchLeaks();
       fetchSystemStatus();
@@ -384,7 +384,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="p-5 border-t border-white/[0.08] flex justify-end gap-3">
                 <Button variant="outline" className="border-white/10 h-9 px-5 text-[13px] font-medium rounded-full hover:bg-white/5 text-zinc-300" onClick={clearSelectedIdentity}>Close</Button>
                 <Button className="bg-[#0A84FF] hover:bg-[#007AFF] text-white h-9 px-5 text-[13px] font-medium rounded-full shadow-sm">
@@ -431,7 +431,7 @@ export default function App() {
           </div>
           <div className="flex justify-end gap-3 px-6 pb-6">
             <Button variant="ghost" onClick={() => setIsAddIdentityOpen(false)} className="h-9 px-5 text-[13px] rounded-full border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
-            <Button 
+            <Button
               className="h-9 px-6 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm"
               disabled={isLoading || !newIdentityIdentifier}
               onClick={() => {
@@ -467,7 +467,7 @@ export default function App() {
           </div>
           <div className="flex justify-end gap-3 px-6 pb-6">
             <Button variant="ghost" onClick={() => setIsEditProfileOpen(false)} className="h-9 px-5 text-[13px] rounded-full border border-white/10 text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
-            <Button 
+            <Button
               className="h-9 px-6 text-[13px] font-medium bg-[#0A84FF] hover:bg-[#007AFF] text-white rounded-full shadow-sm"
               disabled={isLoading}
               onClick={() => {

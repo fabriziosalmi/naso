@@ -15,4 +15,13 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
   },
+  // The upload-artifact step in draconian-ci.yml points at playwright-report/,
+  // which nothing was writing: the default reporter prints to stdout and
+  // leaves no directory behind, so every CI run ended with "No files were
+  // found with the provided path" and a failure nobody could inspect
+  // afterwards. `list` keeps the console output the validate.sh summary reads;
+  // `html` produces the directory the workflow uploads.
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+    : [['list']],
 });
