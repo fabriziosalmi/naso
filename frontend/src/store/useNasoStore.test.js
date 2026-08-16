@@ -76,7 +76,7 @@ describe('useNasoStore', () => {
     axios.post.mockResolvedValueOnce({});
 
     await useNasoStore.getState().logout();
-    
+
     const state = useNasoStore.getState();
     expect(state.token).toBeNull();
     expect(state.isAuthenticated).toBe(false);

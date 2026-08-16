@@ -76,7 +76,7 @@ const LeakRow = ({ leak, onInspect }) => (
 );
 
 const OnboardingCard = ({ icon: Icon, title, desc, onClick }) => (
-  <div 
+  <div
     onClick={onClick}
     className="group relative cursor-pointer flex flex-col p-8 bg-[#111111]/80 backdrop-blur-xl border border-white/[0.05] hover:border-[#0A84FF]/50 rounded-[24px] overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_40px_-20px_rgba(10,132,255,0.3)]"
   >
@@ -105,19 +105,19 @@ const OnboardingHero = ({ navigate }) => {
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
-        <OnboardingCard 
+        <OnboardingCard
           icon={Globe}
           title="Probe the Dark Web"
           desc="Launch a targeted probe across the Tor network to extract unstructured intelligence."
           onClick={() => navigate('/dark-search')}
         />
-        <OnboardingCard 
+        <OnboardingCard
           icon={Activity}
           title="Build Neural Graph"
           desc="Register a target alias or email in the central ledger to trigger threat correlations."
           onClick={() => navigate('/identities')}
         />
-        <OnboardingCard 
+        <OnboardingCard
           icon={Brain}
           title="Awaken the AI"
           desc="Open a session with the Co-Analyst to explore automated triage and tool dispatch."

@@ -37,14 +37,24 @@ git clone https://github.com/fabriziosalmi/naso.git
 cd naso
 
 # 1. Generate .secrets-mock/ (docker-compose mounts it at /run/secrets and
-#    will not start without it) and create .env from the template.
+#    will not start without it) and render .env with the generated values.
 make bootstrap
 
-# 2. Edit .env and fill in the CHANGE_ME values.
+# 2. Install the pre-commit hooks. They mirror the CI gates and run in about
+#    a second, which is cheaper than a seven-minute round trip.
+pip install pre-commit && pre-commit install
 
 # 3. Bring up the backing services, API, and workers.
 make up
 ```
+
+`make bootstrap` fills in the credentials for you — it renders `.env` from
+`.env.example` substituting the passwords it just generated, so the values the
+containers are provisioned with and the ones the application connects with
+cannot drift apart. It leaves an existing `.env` alone, so delete the file
+first if you want it regenerated. The `CHANGE_ME` values that remain afterwards
+are the third-party API keys (Shodan, Telegram), which only matter if you are
+working on those integrations.
 
 The frontend is **not** part of the Compose stack — it runs as a Vite dev server
 on the host:
@@ -86,6 +96,13 @@ cd frontend && npx playwright test
 `ruff format` will fix formatting for you; `ruff check --fix` will fix most lint
 findings. Configuration lives in `pyproject.toml` — 120-column lines, double
 quotes, and the `E`, `F`, `I`, `UP`, `B`, `SIM` rule sets.
+
+Ruff's version is pinned in three places that must move together:
+`.github/workflows/draconian-ci.yml`, `backend/requirements-dev.txt`, and
+`.pre-commit-config.yaml`. They have diverged once — CI installed an unpinned
+ruff, 0.16 began formatting Python inside Markdown fences, and the gate went
+red on a day nobody had touched the code. If you bump one, bump all three in
+the same commit.
 
 ## Code conventions
 
