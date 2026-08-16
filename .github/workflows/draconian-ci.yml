@@ -17,7 +17,7 @@ jobs:
       # Matches the python:3.11-slim base image both Dockerfiles build on.
       # This job used to install 3.9, linting code that never runs on 3.9.
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
