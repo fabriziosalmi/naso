@@ -4,8 +4,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from shared.config import settings
 from shared.core.jwt_manager import jwt_blacklist
+from shared.core.security import decode_access_token
 from shared.database import get_db
 from shared.models import User
 from shared.schemas import TokenData
@@ -38,7 +38,7 @@ async def get_current_user(
         raise credentials_exception
 
     try:
-        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
         jti: str = payload.get("jti")
         email: str = payload.get("sub")
 

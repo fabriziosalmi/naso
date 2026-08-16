@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     ALGORITHM: str = "EdDSA"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Issuer and audience are asserted on every token and verified on every
+    # decode. Without them a token minted by any other service that happens to
+    # share this key pair would be accepted here, and a NASO token would be
+    # replayable against a sibling deployment. Override both when you run more
+    # than one instance.
+    JWT_ISSUER: str = "naso"
+    JWT_AUDIENCE: str = "naso-api"
+    # Tolerance for clock skew between whatever mints the token and whatever
+    # validates it, applied to exp/nbf/iat. Seconds.
+    JWT_LEEWAY_SECONDS: int = 30
+
     # Redis Blacklist
     REDIS_HOST: str = "redis://naso-cache:6379/0"
 

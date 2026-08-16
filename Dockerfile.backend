@@ -1,27 +1,45 @@
 FROM python:3.11-slim
 
+# Non-root user. uid 10001 sits outside the Debian default range (1000-1999,
+# which can overlap a real host account through a bind mount) and away from
+# 65534/nobody.
+ARG UID=10001
+RUN groupadd --system --gid ${UID} naso \
+ && useradd --system --uid ${UID} --gid naso --home /app --shell /sbin/nologin naso
+
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+ && rm -rf /var/lib/apt/lists/*
 
 # Set to "true" to also install the test and lint tooling. docker-compose.yml
 # does this, because cli/validate.sh runs the suite inside the container.
 # A production build should leave it at the default.
 ARG INSTALL_DEV=false
 
+# Dependencies are installed as root: pip needs write access to site-packages.
+# The --trusted-host flags that used to be here are gone on purpose — they
+# disable certificate verification for PyPI, which is not a trade this project
+# should be making.
 COPY backend/requirements.txt ./requirements.txt
 COPY backend/requirements-dev.txt ./requirements-dev.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt \
+RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$INSTALL_DEV" = "true" ]; then \
-         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements-dev.txt; \
+         pip install --no-cache-dir -r requirements-dev.txt; \
        fi
 
 COPY backend/ ./
 COPY shared/ ./shared/
+RUN chown -R naso:naso /app
+
+# naso's home is /app, which docker-compose mounts read_only. Libraries that
+# drop a dotfile in $HOME would fail on that, so point HOME at the /tmp tmpfs,
+# the one writable path the container has.
+ENV HOME=/tmp
+USER naso:naso
 
 # /system/status is unauthenticated and touches the database, so it is a real
 # readiness signal rather than a liveness ping. Uses urllib because the slim
@@ -33,4 +51,5 @@ COPY shared/ ./shared/
 HEALTHCHECK --interval=10s --timeout=5s --start-period=40s --retries=6 \
     CMD python -c "import json,sys,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/system/status', timeout=4); sys.exit(0 if r.status == 200 and json.load(r).get('status') == 'operational' else 1)"
 
+# read_only: true in docker-compose blocks writes to /app; /tmp is a tmpfs.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

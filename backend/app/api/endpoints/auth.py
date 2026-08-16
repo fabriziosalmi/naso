@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 
 from shared.config import settings
 from shared.core.jwt_manager import jwt_blacklist
-from shared.core.security import create_access_token, verify_password
+from shared.core.security import create_access_token, decode_access_token, verify_password
 from shared.database import get_db
 from shared.models import User
 from shared.schemas import Token
@@ -77,7 +77,7 @@ async def logout(request: Request, response: Response, token: str = Depends(oaut
 
     try:
         # Verify the signature before blacklisting (C-01 fix retained)
-        payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
         jti = payload.get("jti")
         exp = payload.get("exp")
 
