@@ -13,10 +13,11 @@ help:
 	@echo "  make test      - Run the full test suite (pytest, vitest, playwright)"
 
 # Compose mounts .secrets-mock/ at /run/secrets and will not start without it.
+# The script also renders .env from .env.example with the generated values, so
+# the credentials the containers are provisioned with and the ones the
+# application connects with actually agree. An existing .env is left alone.
 bootstrap:
 	python cli/generate_secrets.py
-	@test -f .env || cp .env.example .env
-	@echo "Secrets generated. Now edit .env and replace every CHANGE_ME."
 
 up:
 	docker compose up -d

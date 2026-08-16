@@ -29,6 +29,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 SECRETS_DIR = ".secrets-mock"
+ENV_FILE = ".env"
+ENV_TEMPLATE = ".env.example"
 
 # Docker mounts real secrets as 0444 files under a 0755 mount point.
 DIR_MODE = 0o755
@@ -62,16 +64,88 @@ def main():
         encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
 
+    # The *.pem names are for humans. pydantic-settings resolves secrets_dir
+    # entries by settings-field name, so the application only picks these up
+    # from files named exactly after the fields.
     create_secret("jwt_private_key.pem", priv_pem.decode("utf-8"))
     create_secret("jwt_public_key.pem", pub_pem.decode("utf-8"))
+    create_secret("JWT_PRIVATE_KEY", priv_pem.decode("utf-8"))
+    create_secret("JWT_PUBLIC_KEY", pub_pem.decode("utf-8"))
 
-    # 2. Generate hardened passwords
-    create_secret("db_password.txt", secrets.token_urlsafe(24))
-    create_secret("rabbit_password.txt", secrets.token_urlsafe(24))
-    create_secret("minio_password.txt", secrets.token_urlsafe(24))
-    create_secret("elastic_password.txt", secrets.token_urlsafe(24))
+    # 2. Generate hardened passwords. The *.txt names are the ones
+    # docker-compose.yml references in its top-level `secrets:` block.
+    passwords = {
+        "db": secrets.token_urlsafe(24),
+        "rabbit": secrets.token_urlsafe(24),
+        "minio": secrets.token_urlsafe(24),
+        "elastic": secrets.token_urlsafe(24),
+    }
+    create_secret("db_password.txt", passwords["db"])
+    create_secret("rabbit_password.txt", passwords["rabbit"])
+    create_secret("minio_password.txt", passwords["minio"])
+    create_secret("elastic_password.txt", passwords["elastic"])
 
     print(f"Development secrets generated in {SECRETS_DIR}/ (dir 0755, files 0444).")
+    write_env(passwords)
+
+
+def write_env(passwords):
+    """Render .env from .env.example with the generated values filled in.
+
+    Without this the two halves disagree: Postgres, Elasticsearch and MinIO are
+    provisioned from the generated secret files, while the application reads
+    DATABASE_URL and friends from .env — which ships CHANGE_ME. The API then
+    starts, answers 200, and reports {"status": "degraded"} forever because
+    every database connection fails authentication.
+
+    An existing .env is never modified; this only fills in a fresh one.
+    """
+    if os.path.exists(ENV_FILE):
+        print(f"{ENV_FILE} already exists, leaving it untouched.")
+        return
+    if not os.path.exists(ENV_TEMPLATE):
+        print(f"{ENV_TEMPLATE} not found, skipping {ENV_FILE} generation.")
+        return
+
+    replacements = {
+        "DB_PASSWORD": passwords["db"],
+        "ELASTIC_PASSWORD": passwords["elastic"],
+        "ES_PASSWORD": passwords["elastic"],
+        "RABBIT_PASSWORD": passwords["rabbit"],
+        "RABBITMQ_PASS": passwords["rabbit"],
+        "MINIO_ROOT_PASSWORD": passwords["minio"],
+        "MINIO_SECRET_KEY": passwords["minio"],
+        "NASO_WEBHOOK_SIGNING_SECRET": secrets.token_hex(32),
+        "NASO_ADMIN_PASSWORD": secrets.token_urlsafe(18),
+    }
+    # .env wins over secrets_dir in pydantic-settings, so an empty
+    # JWT_PRIVATE_KEY= line here would shadow the file in /run/secrets.
+    commented = {"JWT_PRIVATE_KEY", "JWT_PUBLIC_KEY"}
+
+    with open(ENV_TEMPLATE, encoding="utf-8") as f:
+        template_lines = f.read().splitlines()
+
+    out = []
+    for line in template_lines:
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            out.append(line)
+            continue
+        key = stripped.split("=", 1)[0].strip()
+        if key in commented:
+            out.append(f"# {line}  # provided via /run/secrets/{key}")
+        elif key in replacements:
+            out.append(f"{key}={replacements[key]}")
+        elif "CHANGE_ME" in line:
+            # DATABASE_URL embeds the password inside a connection string.
+            out.append(line.replace("CHANGE_ME", passwords["db"]))
+        else:
+            out.append(line)
+
+    with open(ENV_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+    os.chmod(ENV_FILE, 0o600)
+    print(f"{ENV_FILE} written from {ENV_TEMPLATE} with the generated values (0600).")
 
 
 if __name__ == "__main__":
