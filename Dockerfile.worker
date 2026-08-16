@@ -42,12 +42,14 @@ COPY workers/requirements.txt ./requirements.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Same two base-image advisories the API image carries -- CVE-2026-24049 in
-# wheel, CVE-2026-23949 in jaraco.context. Neither is an application
-# dependency; both arrive with the build toolchain. See the equivalent note in
-# Dockerfile.backend.
+# The same base-image toolchain advisories the API image carries. None is an
+# application dependency. See the equivalent note in Dockerfile.backend for why
+# these are explicit floors and why pip itself is left alone.
 RUN pip install --no-cache-dir --upgrade \
-        pip setuptools "wheel>=0.46.2" "jaraco.context>=6.1.0"
+        "setuptools>=78.1.1" "wheel>=0.46.2" \
+ && (pip uninstall -y jaraco.context || true)
+
+RUN rm -rf /usr/local/lib/python3.11/ensurepip
 
 # Browsers go to an explicit shared location rather than the default
 # ~/.cache/ms-playwright. Two reasons: `playwright install` has to run as root

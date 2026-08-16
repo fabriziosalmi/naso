@@ -31,21 +31,35 @@ RUN pip install --no-cache-dir -r requirements.txt \
          pip install --no-cache-dir -r requirements-dev.txt; \
        fi
 
-# The build toolchain that ships in python:3.11-slim carries two fixable HIGH
-# advisories of its own -- CVE-2026-24049 in wheel and CVE-2026-23949 in
-# jaraco.context, which the base image's setuptools installs. Neither is an
-# application dependency; they are here only because the image was built with
-# pip. Trivy gates on exactly this class, so they get upgraded rather than
-# ignored.
+# The build toolchain that ships in python:3.11-slim carries fixable HIGH
+# advisories of its own -- CVE-2026-24049 in wheel, CVE-2026-23949 in
+# jaraco.context, CVE-2025-47273 in setuptools. None is an application
+# dependency; they are here only because the image was built with pip.
+#
+# Explicit floors, and deliberately NOT `--upgrade pip`. The first attempt at
+# this asked pip to upgrade itself and to install jaraco.context alongside
+# setuptools; that made the resolver backtrack setuptools to 70.3.0 to keep a
+# standalone jaraco.context installable, and swapped two advisories for two
+# different ones. Modern setuptools vendors jaraco.context rather than
+# depending on it, so the stale distribution is removed instead of upgraded.
 #
 # After the requirements install, deliberately: doing it before lets the
 # requirements resolution walk a version back.
-#
-# The real fix is a multi-stage build that leaves the toolchain and
-# build-essential behind in the builder stage entirely. That is a larger change
-# and is tracked separately.
 RUN pip install --no-cache-dir --upgrade \
-        pip setuptools "wheel>=0.46.2" "jaraco.context>=6.1.0"
+        "setuptools>=78.1.1" "wheel>=0.46.2" \
+ && (pip uninstall -y jaraco.context || true)
+
+# ensurepip's bundled wheels are an offline copy of pip/setuptools/wheel, kept
+# so `python -m ensurepip` can work without a network. Nothing in these
+# containers creates a virtualenv, so they are never installed and never
+# execute -- but they are still scannable artifacts carrying whatever versions
+# the base image froze. Removing them is free.
+RUN rm -rf /usr/local/lib/python3.11/ensurepip
+
+# NOTE: the durable fix for this whole class is a multi-stage build that leaves
+# build-essential and the install toolchain behind in the builder stage, so the
+# runtime image contains the application and nothing that built it. That is a
+# larger change than this pass and is tracked separately.
 
 COPY backend/ ./
 COPY shared/ ./shared/
