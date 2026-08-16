@@ -6,6 +6,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest_asyncio
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,9 +18,31 @@ for path in (str(ROOT_DIR), str(BACKEND_DIR)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-os.environ.setdefault("ALGORITHM", "HS256")
-os.environ.setdefault("JWT_PRIVATE_KEY", "test-secret")
-os.environ.setdefault("JWT_PUBLIC_KEY", "test-secret")
+# Set, not setdefault. Inside the API container .env supplies ALGORITHM=EdDSA,
+# so setdefault left the algorithm at EdDSA while still injecting the string
+# "test-secret" as the key, and every token operation died with
+# "InvalidKeyError: Not a public or private key". Outside a container ALGORITHM
+# is unset, setdefault chose HS256, and the same suite passed — which is how a
+# 15-test failure hid until the container ran it.
+#
+# Minting a real ephemeral Ed25519 pair keeps the suite hermetic and exercises
+# the algorithm production actually uses. These values must be in the
+# environment before shared.config builds its settings singleton on import.
+_test_signing_key = ed25519.Ed25519PrivateKey.generate()
+os.environ["ALGORITHM"] = "EdDSA"
+os.environ["JWT_PRIVATE_KEY"] = _test_signing_key.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+).decode()
+os.environ["JWT_PUBLIC_KEY"] = (
+    _test_signing_key.public_key()
+    .public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    .decode()
+)
 
 # Models + DB session factory are lightweight (no FastAPI), so they stay at
 # module scope and are always available to every test file. The FastAPI app
