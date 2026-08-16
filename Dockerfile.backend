@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+COPY pyproject.toml ./
 COPY backend/requirements.txt ./requirements.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
 RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt

@@ -43,6 +43,9 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+# Run all async test functions as asyncio tests automatically so tests work
+# correctly with pytest-asyncio 1.x (which defaults to strict mode).
+asyncio_mode = "auto"
 # Register the custom markers we use so pytest stops emitting
 # "Unknown pytest.mark.*" warnings. Each line is "name: description".
 markers = [
