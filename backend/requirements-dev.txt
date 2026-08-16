@@ -1,0 +1,17 @@
+# Test and quality tooling. Not installed in a production image.
+#
+# The API image installs this only when built with:
+#   docker build --build-arg INSTALL_DEV=true -f Dockerfile.backend .
+# docker-compose.yml sets that argument, because cli/validate.sh runs the
+# backend suite with `docker exec naso-api pytest tests/`.
+
+-r requirements.txt
+
+pytest
+pytest-asyncio
+pytest-cov
+pytest-timeout
+
+ruff
+bandit
+pip-audit

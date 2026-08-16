@@ -118,6 +118,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+      args:
+        # This Compose file is the development and evaluation stack, so the
+        # image ships pytest — cli/validate.sh runs the suite with
+        # `docker exec naso-api pytest tests/`. Production builds omit this.
+        INSTALL_DEV: "true"
     container_name: naso-api
     restart: always
     env_file: .env

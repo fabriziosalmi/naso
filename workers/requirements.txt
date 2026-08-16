@@ -1,24 +1,22 @@
+# Runtime dependencies for the Celery worker images.
+
+-r shared/requirements-shared.txt
+
 celery
 redis
-rabbitmq
+
+# Scraping and browser automation
 requests
-sqlalchemy
-psycopg2-binary
-elasticsearch
-pyyaml
-yara-python
-python-dotenv
 playwright
 playwright-stealth
 beautifulsoup4
-opentelemetry-api
-opentelemetry-sdk
+
+# Analysis
+yara-python
+
+# Dark web / messaging sources
+telethon
+
 opentelemetry-instrumentation-celery
 opentelemetry-instrumentation-elasticsearch
 opentelemetry-instrumentation-sqlalchemy
-opentelemetry-exporter-otlp
-telethon
-
-httpx
-tenacity
--r shared/requirements-shared.txt

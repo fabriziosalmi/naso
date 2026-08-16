@@ -7,9 +7,18 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Set to "true" to also install the test and lint tooling. docker-compose.yml
+# does this, because cli/validate.sh runs the suite inside the container.
+# A production build should leave it at the default.
+ARG INSTALL_DEV=false
+
 COPY backend/requirements.txt ./requirements.txt
+COPY backend/requirements-dev.txt ./requirements-dev.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt \
+    && if [ "$INSTALL_DEV" = "true" ]; then \
+         pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements-dev.txt; \
+       fi
 
 COPY backend/ ./
 COPY shared/ ./shared/

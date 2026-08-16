@@ -1,0 +1,94 @@
+version: 2
+
+updates:
+  # ── Python ──────────────────────────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      opentelemetry:
+        patterns: ["opentelemetry-*"]
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: pip
+    directory: /shared
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: pip
+    directory: /workers
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # ── JavaScript ──────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "javascript"]
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # Majors stay separate so they get reviewed on their own.
+      npm-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    labels: ["dependencies", "javascript", "documentation"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      docs-minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # ── CI and container base images ────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /infrastructure/tor
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(docker)"
