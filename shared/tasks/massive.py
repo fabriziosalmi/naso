@@ -22,7 +22,7 @@ BATCH_SIZE = 100
 
 
 def _flush_batch(batch: list[str], tenant_id: str, source: str, up_to_line: int) -> None:
-    """Dispatcha un batch di righe sospette alla pipeline come unico task."""
+    """Dispatch a batch of suspicious lines into the pipeline as a single task."""
     hit_data = {
         "tenant_id": tenant_id,
         "source": f"Massive Dump Stream: {source}",
@@ -34,7 +34,7 @@ def _flush_batch(batch: list[str], tenant_id: str, source: str, up_to_line: int)
 
 def _open_stream(file_url_or_path: str):
     """
-    Ritorna un iteratore di righe (str) dal path locale o dall'URL HTTP/HTTPS.
+    Return an iterator of lines (str) from a local path or an HTTP/HTTPS URL.
     Non carica mai l'intero file in memoria.
     """
     parsed = urlparse(file_url_or_path)
@@ -51,8 +51,8 @@ def _open_stream(file_url_or_path: str):
 def process_blob_stream(self, file_url_or_path: str, tenant_id: str):
     """
     Streaming Processor OOM-safe.
-    Legge un dump gigabyte riga per riga da un file locale o URL HTTP/HTTPS.
-    Applica Fast Regex e inoltra alla pipeline solo i chunk rilevanti.
+    Reads a gigabyte-scale dump line by line from a local file or an HTTP/HTTPS URL.
+    Applies a fast regex pass and forwards only the relevant chunks to the pipeline.
     """
     stream = None
     try:
@@ -65,7 +65,7 @@ def process_blob_stream(self, file_url_or_path: str, tenant_id: str):
         stream = _open_stream(file_url_or_path)
 
         for line in stream:
-            # Tronca righe abnormalmente lunghe per evitare OOM nel worker AI
+            # Truncate abnormally long lines to keep the AI worker from running out of memory
             if len(line) > MAX_LINE_BYTES:
                 line = line[:MAX_LINE_BYTES]
 
@@ -87,7 +87,7 @@ def process_blob_stream(self, file_url_or_path: str, tenant_id: str):
             f"[MASSIVE INGESTION] Complete. Lines read: {total_lines_read}. "
             f"Suspicious hits delegated: {suspicious_chunks_found}."
         )
-        return f"Processato {file_url_or_path} - Delegati {suspicious_chunks_found} hit alla pipeline primaria."
+        return f"Processed {file_url_or_path} - delegated {suspicious_chunks_found} hits to the primary pipeline."
 
     except Exception as e:
         logger.error(f"[MASSIVE OOM-SAFE FAILED] Stream collapse on {file_url_or_path}: {e}")

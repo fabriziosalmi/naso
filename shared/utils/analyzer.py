@@ -44,7 +44,7 @@ class NasoAnalyzer:
             sources[f"dynamic_{name}"] = content
 
         if not sources:
-            # Fallback rule per evitare crash se non ci sono regole
+            # Fallback rule so the analyzer does not crash when no rules are loaded
             sources["fallback"] = "rule fallback { condition: false }"
 
         return yara.compile(sources=sources)

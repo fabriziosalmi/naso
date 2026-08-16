@@ -12,7 +12,7 @@ from .pipeline import process_potential_leak
 
 logger = logging.getLogger("naso-darkweb")
 
-# Configurazione Proxy Tor (Load Balanced via HAProxy)
+# Tor proxy configuration (load balanced via HAProxy)
 TOR_PROXY = os.getenv("TOR_PROXY", "socks5h://naso-tor-lb:8118")
 stealth_browser = NasoStealthBrowser(proxy=TOR_PROXY)
 
@@ -24,8 +24,8 @@ from bs4 import BeautifulSoup
 @celery_app.task(bind=True, max_retries=3, name="tasks.darkweb.deep_portal_crawl")
 def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
     """
-    Crawler ricorsivo per portali Onion (#22).
-    Esplora il sito partendo dalla root e invia ogni pagina rilevante alla pipeline.
+    Recursive crawler for onion portals (#22).
+    Walks the site from its root and pushes every relevant page into the pipeline.
     """
     try:
         visited = set()
@@ -50,9 +50,9 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                 visited.add(url)
 
             if content:
-                # Limita la dimensione del contenuto per prevenire OOM del worker (G-07)
-                # Una pagina onion malevola da >1MB verrebbe troncata prima di essere
-                # passata alla pipeline AI e indicizzata.
+                # Cap the content size to keep the worker from running out of memory (G-07)
+                # A malicious onion page over 1MB would be truncated before it is
+                # handed to the AI pipeline and indexed.
                 MAX_CONTENT_BYTES = 1 * 1024 * 1024  # 1 MB
                 if len(content) > MAX_CONTENT_BYTES:
                     logger.warning(
@@ -63,7 +63,7 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                 pages_crawled += 1
                 logger.info(f"[DEEP CRAWL] Scanned {url} ({pages_crawled}/{max_pages})")
 
-                # Invia alla pipeline
+                # Push into the pipeline
                 hit_data = {
                     "tenant_id": tenant_id,
                     "source": f"DarkWeb Deep: {root_url}",
@@ -72,13 +72,13 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                 }
                 process_potential_leak.delay(hit_data, content)
 
-                # Estrazione link interni
+                # Extract internal links
                 soup = BeautifulSoup(content, "html.parser")
                 for link in soup.find_all("a", href=True):
                     href = link["href"]
                     full_url = urljoin(url, href)
 
-                    # Filtriamo per restare nello stesso dominio .onion
+                    # Stay within the same .onion domain
                     if urlparse(full_url).netloc == urlparse(root_url).netloc:
                         if full_url not in visited and full_url not in to_visit:
                             to_visit.append(full_url)
@@ -95,11 +95,11 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
 @celery_app.task(bind=True, max_retries=5, name="tasks.darkweb.crawl_onion_stealth")
 def crawl_onion_stealth(self, onion_url, tenant_id):
     """
-    Scansiona una sorgente .onion usando il motore stealth di Naso (#22).
-    Invia il risultato alla pipeline di analisi principale.
+    Scan an .onion source using the NASO stealth engine (#22).
+    Forwards the result to the main analysis pipeline.
     """
     try:
-        # Percorso temporaneo per lo screenshot (W)
+        # Temporary path for the screenshot (W)
         import time
 
         screenshot_filename = f"leak_{tenant_id}_{int(time.time())}.png"
@@ -123,7 +123,7 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
                 )
             )
 
-            # Prepariamo i dati per la pipeline
+            # Prepare the payload for the pipeline
             hit_data = {
                 "tenant_id": tenant_id,
                 "source": f"DarkWeb: {onion_url}",
@@ -135,7 +135,7 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
                 },
             }
 
-            # Invio asincrono alla pipeline di analisi
+            # Asynchronous dispatch into the analysis pipeline
             process_potential_leak.delay(hit_data, content)
 
             return f"Crawl successful for {onion_url}"
@@ -143,7 +143,7 @@ def crawl_onion_stealth(self, onion_url, tenant_id):
             raise Exception("Empty content or browser failure")
 
     except Exception as e:
-        retry_delay = 300 + secrets.randbelow(601)  # Retry più frequente in dev
+        retry_delay = 300 + secrets.randbelow(601)  # More frequent retries in development
         logger.warning(
             json.dumps(
                 {"event": "darkweb_crawl_retry", "url": onion_url, "error": str(e), "next_retry_seconds": retry_delay}

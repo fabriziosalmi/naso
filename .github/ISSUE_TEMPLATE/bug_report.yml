@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in NASO does not behave as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report a security vulnerability here.** Follow
+        [SECURITY.md](https://github.com/fabriziosalmi/naso/blob/main/SECURITY.md)
+        and report it privately instead.
+
+        **Do not paste real data.** Logs, payloads, and screenshots must not
+        contain real personal data, real credentials, or excerpts from a real
+        breach corpus. Redact or replace them with synthetic values.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Ideally against the synthetic seed data (`make demo`).
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit SHA
+      description: Output of `git rev-parse --short HEAD`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Backend API (FastAPI)
+        - Celery worker / task
+        - Frontend (React)
+        - Dark web / Tor
+        - AI / MCP
+        - Docker / deployment
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS:
+        Docker / Compose version:
+        Python:
+        Node:
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redacted. Rendered as a code block, no backticks needed.
+      render: shell

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/fabriziosalmi/naso/security/advisories/new
+    about: Report privately through a GitHub security advisory. Never in a public issue.
+  - name: Documentation
+    url: https://fabriziosalmi.github.io/naso/
+    about: Architecture, module guides, and the API reference.
+  - name: Legal notice and acceptable use
+    url: https://github.com/fabriziosalmi/naso/blob/main/LEGAL.md
+    about: Read this before deploying NASO against any data.

@@ -1,7 +1,7 @@
 {
   "name": "docs",
   "version": "1.0.0",
-  "description": "",
+  "description": "NASO documentation site (VitePress)",
   "main": "index.js",
   "scripts": {
     "dev": "vitepress dev",
@@ -9,8 +9,8 @@
     "preview": "vitepress preview"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Fabrizio Salmi",
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "devDependencies": {
     "vitepress": "^1.6.4",

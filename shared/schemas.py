@@ -108,6 +108,11 @@ class IdentityBase(BaseModel):
     is_protected: bool = False
 
 
+class IdentityCreate(BaseModel):
+    identifier: str
+    type: str = "person"
+
+
 class IdentityUpdate(BaseModel):
     is_protected: bool
 

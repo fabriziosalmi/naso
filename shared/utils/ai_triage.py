@@ -15,7 +15,7 @@ ai_client = httpx.AsyncClient(timeout=90.0, limits=httpx.Limits(max_keepalive_co
 
 
 class AIServiceError(Exception):
-    """Eccezione specifica per fallimenti del servizio AI."""
+    """Exception raised when the AI service fails."""
 
     pass
 
@@ -28,30 +28,30 @@ class AIServiceError(Exception):
 )
 async def analyze_leak_with_gemma_thinking(content_snippet):
     """
-    Sfrutta il ragionamento di Gemma 4 per validare i leak.
-    Implementa Graceful Degradation (#15): se l'AI fallisce dopo i retry,
-    il sistema declassa il leak ma non blocca la pipeline.
+    Use Gemma 4's reasoning to validate a leak.
+    Implements graceful degradation (#15): if the AI fails after the retries,
+    the leak is downgraded rather than blocking the pipeline.
     """
     # P-09: truncation is the caller's responsibility (raw_content[:2500] in pipeline.py).
     # Receiving an already-trimmed snippet here avoids allocating a 1MB string argument.
     prompt = f"""
-    ANALISI FORENSE NASO v1.0
-    Ruolo: Esperto Threat Intelligence & Data Breach Analyst
-    Task: Valuta se il contenuto seguente è un leak di dati sensibili REALI.
+    NASO FORENSIC ANALYSIS v1.0
+    Role: Threat Intelligence & Data Breach Analyst
+    Task: assess whether the following content is a leak of REAL sensitive data.
     
-    CRITERI DI VALIDAZIONE:
-    - Presenza di credenziali (email:password)
-    - Dati finanziari (CC, IBAN)
-    - Dati PII (Documenti, Indirizzi, Telefoni)
-    - Codice sorgente proprietario o segreti (API Keys)
+    VALIDATION CRITERIA:
+    - Presence of credentials (email:password)
+    - Financial data (credit cards, IBAN)
+    - PII (identity documents, addresses, phone numbers)
+    - Proprietary source code or secrets (API keys)
     
-    Rispondi in questo formato:
-    VALIDO: [SI/NO]
-    SEVERITA: [0-100]
-    CATEGORIA: [CREDENTIALS/FINANCIAL/PII/SOURCE/OTHER]
-    MOTIVAZIONE: Breve spiegazione tecnica.
+    Answer in exactly this format:
+    VALID: [YES/NO]
+    SEVERITY: [0-100]
+    CATEGORY: [CREDENTIALS/FINANCIAL/PII/SOURCE/OTHER]
+    RATIONALE: brief technical explanation.
     
-    CONTENUTO:
+    CONTENT:
     {content_snippet}
     """
     messages = [{"role": "user", "content": prompt}]

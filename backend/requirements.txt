@@ -1,51 +1,50 @@
-fastapi>=0.111.0
-uvicorn[standard]==0.27.0
-uvloop==0.19.0
-sqlalchemy[asyncio]==2.0.25
-asyncpg==0.29.0
-httpx>=0.27.0
-elasticsearch[async]==8.12.0
-pydantic[email]>=2.5.3
-pydantic-settings>=2.5.2
-PyJWT[crypto]>=2.8.0
-passlib[bcrypt]==1.7.4
-python-multipart>=0.0.18
-alembic==1.13.1
-minio==7.2.3
-celery
-fpdf2==2.7.7
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-sqlalchemy
-opentelemetry-exporter-otlp
+# Runtime dependencies for the NASO API image.
+# Test and lint tooling lives in requirements-dev.txt and is installed only
+# when the image is built with --build-arg INSTALL_DEV=true.
 
-pika==1.3.2
-redis>=5.0.0
-pip-audit
-rich
-ruff
+-r shared/requirements-shared.txt
+
+# ── Web layer ────────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+# Pinned at 0.27.0 until now, which held `mcp` back to a version with four
+# known advisories. uvloop follows uvicorn[standard].
+uvicorn[standard]>=0.34.0
+uvloop>=0.19.0
+python-multipart>=0.0.18
 slowapi>=0.1.9
-aio-pika>=9.3.0
 orjson>=3.9.15
+
+# ── Persistence ──────────────────────────────────────────────────────────────
+alembic==1.13.1
+aiosqlite>=0.19
+redis>=5.0.0
+
+# ── Messaging ────────────────────────────────────────────────────────────────
+# aio_pika is the only AMQP client the code imports; celery brings its own
+# broker transport (kombu).
+celery
+aio-pika>=9.3.0
+
+# ── Reporting and CLI output ─────────────────────────────────────────────────
+# rich is used by seed_demo_data.py, which runs inside this container.
+fpdf2==2.7.7
+rich
+
+# ── Integrations ─────────────────────────────────────────────────────────────
+mcp>=1.28.1
+beautifulsoup4>=4.12
 # stem: Tor control-port client used by shared.domain.services.dark_web.tor_control
 # to issue NEWNYM circuit-rotation signals. Imported lazily so clearnet-only
 # deployments don't pay the import cost, but required when
 # NASO_DARKWEB_ROTATE_CIRCUIT is on.
 stem>=1.8.2
-bandit
-tenacity==8.2.3
-pytest
-pytest-asyncio
-pytest-cov
--r shared/requirements-shared.txt
-mcp>=1.2.0
+
+# ── Observability ────────────────────────────────────────────────────────────
+# Only the four instrumentors that shared/utils/*_tracing.py actually
+# activates. Nothing bootstraps auto-instrumentation, so an installed but
+# unregistered instrumentor is dead weight.
 sentry-sdk[fastapi]>=1.40.4
-beautifulsoup4>=4.12
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-sqlalchemy
 opentelemetry-instrumentation-celery>=0.63b1
 opentelemetry-instrumentation-elasticsearch
-opentelemetry-instrumentation-redis
-opentelemetry-instrumentation-requests
-opentelemetry-instrumentation-httpx
-opentelemetry-instrumentation-pika
-aiosqlite>=0.19

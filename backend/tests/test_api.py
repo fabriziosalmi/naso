@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 
 from shared.core.security import get_password_hash
 from shared.models import LeakHit, Tenant, User
@@ -6,7 +7,7 @@ from shared.models import LeakHit, Tenant, User
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def tenant(db):
     t = Tenant(name="AcmeCorp Security")
     db.add(t)
@@ -15,10 +16,10 @@ async def tenant(db):
     return t
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def admin_user(db, tenant):
     u = User(
-        email="admin@acme.local",
+        email="admin@acme.example.com",
         hashed_password=get_password_hash("Admin$ecure99"),
         tenant_id=tenant.id,
         role="admin",
@@ -29,10 +30,10 @@ async def admin_user(db, tenant):
     return u
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def analyst_user(db, tenant):
     u = User(
-        email="analyst@acme.local",
+        email="analyst@acme.example.com",
         hashed_password=get_password_hash("Analyst$ecure99"),
         tenant_id=tenant.id,
         role="analyst",
@@ -43,21 +44,21 @@ async def analyst_user(db, tenant):
     return u
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def auth_headers(client, admin_user):
     res = await client.post(
         "/auth/login",
-        data={"username": "admin@acme.local", "password": "Admin$ecure99"},
+        data={"username": "admin@acme.example.com", "password": "Admin$ecure99"},
     )
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def analyst_headers(client, analyst_user):
     res = await client.post(
         "/auth/login",
-        data={"username": "analyst@acme.local", "password": "Analyst$ecure99"},
+        data={"username": "analyst@acme.example.com", "password": "Analyst$ecure99"},
     )
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -77,7 +78,7 @@ async def test_read_system_status(client):
 
 @pytest.mark.asyncio
 async def test_system_status_no_error_field(client):
-    """G-09: /system/status non deve esporre dettagli interni di errore."""
+    """G-09: /system/status must not leak internal error details."""
     response = await client.get("/system/status")
     assert "error" not in response.json()
 
@@ -95,12 +96,12 @@ async def test_auth_protected_route(client):
 async def test_login_returns_token_and_cookie(client, admin_user):
     res = await client.post(
         "/auth/login",
-        data={"username": "admin@acme.local", "password": "Admin$ecure99"},
+        data={"username": "admin@acme.example.com", "password": "Admin$ecure99"},
     )
     assert res.status_code == 200
     assert "access_token" in res.json()
     assert res.json()["token_type"] == "bearer"
-    # Cookie httpOnly deve essere impostato (C-05)
+    # The httpOnly cookie must be set (C-05)
     assert "naso_access_token" in res.cookies
 
 
@@ -108,7 +109,7 @@ async def test_login_returns_token_and_cookie(client, admin_user):
 async def test_login_wrong_password(client, admin_user):
     res = await client.post(
         "/auth/login",
-        data={"username": "admin@acme.local", "password": "wrongpassword"},
+        data={"username": "admin@acme.example.com", "password": "wrongpassword"},
     )
     assert res.status_code == 401
     assert res.json()["detail"] == "Incorrect email or password"
@@ -118,7 +119,7 @@ async def test_login_wrong_password(client, admin_user):
 async def test_login_unknown_user(client):
     res = await client.post(
         "/auth/login",
-        data={"username": "ghost@nowhere.local", "password": "whatever"},
+        data={"username": "ghost@nowhere.example.com", "password": "whatever"},
     )
     assert res.status_code == 401
 
@@ -127,7 +128,7 @@ async def test_login_unknown_user(client):
 async def test_logout_clears_cookie(client, admin_user):
     login = await client.post(
         "/auth/login",
-        data={"username": "admin@acme.local", "password": "Admin$ecure99"},
+        data={"username": "admin@acme.example.com", "password": "Admin$ecure99"},
     )
     token = login.json()["access_token"]
     res = await client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"})
@@ -152,7 +153,7 @@ async def test_list_leaks_unauthenticated(client):
 
 @pytest.mark.asyncio
 async def test_leaks_tenant_isolation(client, db, auth_headers, analyst_headers, tenant):
-    """Multi-tenancy: un analista non deve vedere i leak di un altro tenant."""
+    """Multi-tenancy: an analyst must not see another tenant's leaks."""
     other_tenant = Tenant(name="OtherCorp")
     db.add(other_tenant)
     await db.commit()
@@ -201,7 +202,7 @@ async def test_list_identities(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_update_profile_name_no_password_needed(client, auth_headers):
-    """Cambiare solo il full_name non richiede password."""
+    """Changing only full_name does not require the password."""
     res = await client.put(
         "/users/me",
         json={"full_name": "New Name"},
@@ -213,10 +214,10 @@ async def test_update_profile_name_no_password_needed(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_update_email_requires_current_password(client, auth_headers):
-    """C-12: cambiare email senza current_password deve essere rifiutato."""
+    """C-12: changing the email without current_password must be rejected."""
     res = await client.put(
         "/users/me",
-        json={"email": "new@acme.local"},
+        json={"email": "new@acme.example.com"},
         headers=auth_headers,
     )
     assert res.status_code == 422
@@ -226,7 +227,7 @@ async def test_update_email_requires_current_password(client, auth_headers):
 async def test_update_email_wrong_password_rejected(client, auth_headers):
     res = await client.put(
         "/users/me",
-        json={"email": "new@acme.local", "current_password": "wrongpass"},
+        json={"email": "new@acme.example.com", "current_password": "wrongpass"},
         headers=auth_headers,
     )
     assert res.status_code == 401
@@ -236,11 +237,11 @@ async def test_update_email_wrong_password_rejected(client, auth_headers):
 async def test_update_email_correct_password(client, auth_headers):
     res = await client.put(
         "/users/me",
-        json={"email": "updated@acme.local", "current_password": "Admin$ecure99"},
+        json={"email": "updated@acme.example.com", "current_password": "Admin$ecure99"},
         headers=auth_headers,
     )
     assert res.status_code == 200
-    assert res.json()["email"] == "updated@acme.local"
+    assert res.json()["email"] == "updated@acme.example.com"
 
 
 # ── Keywords ──────────────────────────────────────────────────────────────────
@@ -250,7 +251,7 @@ async def test_update_email_correct_password(client, auth_headers):
 async def test_create_keyword(client, auth_headers, tenant, admin_user):
     res = await client.post(
         "/keywords/",
-        json={"value": "acmecorp_breach", "tenant_id": tenant.id},
+        json={"value": "acmecorp_breach", "type": "keyword", "tenant_id": tenant.id},
         headers=auth_headers,
     )
     assert res.status_code in (200, 201)
@@ -258,7 +259,7 @@ async def test_create_keyword(client, auth_headers, tenant, admin_user):
 
 @pytest.mark.asyncio
 async def test_analyst_cannot_access_admin_routes(client, analyst_headers):
-    """RBAC: un analyst non deve accedere alle route /tenants/ (solo admin)."""
+    """RBAC: an analyst must not reach the /tenants/ routes (admin only)."""
     res = await client.get("/tenants/", headers=analyst_headers)
     assert res.status_code == 403
 
@@ -268,7 +269,7 @@ async def test_analyst_cannot_access_admin_routes(client, analyst_headers):
 
 @pytest.mark.asyncio
 async def test_shodan_rejects_invalid_ip(client, auth_headers):
-    """G-03: il parametro ip deve essere validato."""
+    """G-03: the ip parameter must be validated."""
     res = await client.get("/leaks/recon/shodan?ip=not_an_ip", headers=auth_headers)
     assert res.status_code == 400
     assert "Invalid IP address" in res.json()["detail"]

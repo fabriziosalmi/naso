@@ -42,3 +42,11 @@ ISSUES.md
 
 # Workspace settings - 2026-05-07
 tmp/
+
+# Playwright output
+frontend/playwright-report/
+frontend/test-results/
+
+# Personal, uncommitted Compose customization. Compose applies a file with
+# this name automatically, so it must never be committed.
+docker-compose.override.yml

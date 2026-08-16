@@ -49,7 +49,7 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
     metadata = payload.get("metadata", {})
     metadata["tenant_id"] = current_user.tenant_id
 
-    # 1. Ottieni un canale dal pool condiviso (evita una connessione TCP per ogni request)
+    # 1. Take a channel from the shared pool (avoids one TCP connection per request)
     channel = await rabbitmq_pool.get_channel()
     try:
         exchange = await channel.get_exchange("celery", ensure=False)  # standard celery exchange
@@ -132,9 +132,9 @@ async def darkweb_recon(q: str, db: AsyncSession = Depends(get_db), current_user
 @router.get("/recon/shodan")
 async def shodan_recon(ip: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
-    Esegue una scansione infrastrutturale OSINT tramite Shodan (DD).
+    Run an OSINT infrastructure scan through Shodan (DD).
     """
-    # Validazione IP: accetta solo indirizzi IPv4/IPv6 validi per prevenire SSRF e abuso quota
+    # IP validation: accept only well-formed IPv4/IPv6 addresses to prevent SSRF and quota abuse
     try:
         ipaddress.ip_address(ip.strip())
     except ValueError:
@@ -157,7 +157,7 @@ async def shodan_recon(ip: str, db: AsyncSession = Depends(get_db), current_user
 @router.get("/recon/telegram")
 async def telegram_recon(channel: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
-    Intercetta il traffico pubblico di un canale Telegram (Threat Actor Chatter).
+    Capture the public traffic of a Telegram channel (threat actor chatter).
     """
     results = await TelegramOSINTService.scrape_public_channel(channel)
 
@@ -175,9 +175,9 @@ async def telegram_recon(channel: str, db: AsyncSession = Depends(get_db), curre
 @router.get("/export/dossier")
 async def export_massive_dossier(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
-    Genera il Dossier Forense Massivo (BB) per il tenant.
+    Generate the bulk forensic dossier (BB) for the tenant.
     """
-    # 1. Recupera tutti i leak del tenant con join al tenant stesso
+    # 1. Fetch every leak for the tenant, joined against the tenant itself
 
     query = (
         select(LeakHit)
@@ -189,14 +189,14 @@ async def export_massive_dossier(db: AsyncSession = Depends(get_db), current_use
     leaks = result.scalars().all()
 
     if not leaks:
-        raise HTTPException(status_code=404, detail="Nessun artefatto leak indicizzato per l'esportazione.")
+        raise HTTPException(status_code=404, detail="No indexed leak artefacts available for export.")
 
     tenant_name = leaks[0].tenant.name if leaks[0].tenant else "Unknown Tenant"
 
-    # 2. Generazione PDF Massiva
+    # 2. Generate the bulk PDF
     pdf_bytes = ForensicReportGenerator.generate_bulk_pdf(tenant_name, leaks)
 
-    # 3. Firma Digitale del Dossier
+    # 3. Digitally sign the dossier
     signature = ForensicReportGenerator.sign_report(pdf_bytes)
 
     await AuditLogger.log(
@@ -223,10 +223,10 @@ async def update_leak_status(
     leak = result.scalar_one_or_none()
 
     if not leak:
-        raise ResourceNotFoundError(f"Leak {leak_id} non trovato")
+        raise ResourceNotFoundError(f"Leak {leak_id} not found")
 
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
-        raise AuthorizationError("Accesso negato")
+        raise AuthorizationError("Access denied")
 
     old_status = leak.status
     leak.status = status
@@ -254,10 +254,10 @@ async def acknowledge_leak(leak_id: str, db: AsyncSession = Depends(get_db), cur
     leak = result.scalar_one_or_none()
 
     if not leak:
-        raise ResourceNotFoundError(f"Leak {leak_id} non trovato")
+        raise ResourceNotFoundError(f"Leak {leak_id} not found")
 
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
-        raise AuthorizationError("Accesso negato")
+        raise AuthorizationError("Access denied")
 
     from sqlalchemy.sql import func
 
@@ -351,17 +351,17 @@ async def get_leak_intelligence(
     leak_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """
-    Restituisce i dettagli dell'analisi AI e YARA per un leak specifico.
+    Return the AI and YARA analysis detail for a specific leak.
     """
     result = await db.execute(select(LeakHit).where(LeakHit.id == leak_id))
     leak = result.scalar_one_or_none()
 
     if not leak:
-        raise ResourceNotFoundError(f"Leak {leak_id} non trovato")
+        raise ResourceNotFoundError(f"Leak {leak_id} not found")
 
     # Security check (Hardened)
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
-        raise AuthorizationError("Accesso negato al leak del tenant")
+        raise AuthorizationError("Access denied to this tenant's leak")
 
     return {
         "id": leak.id,
@@ -374,25 +374,25 @@ async def get_leak_intelligence(
 @router.get("/{leak_id}/export")
 async def export_leak_report(leak_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
-    Genera e scarica un report PDF forense firmato (#31).
+    Generate and download a signed forensic PDF report (#31).
     """
     # Fetch leak with tenant info
     result = await db.execute(select(LeakHit).options(joinedload(LeakHit.tenant)).where(LeakHit.id == leak_id))
     leak = result.scalar_one_or_none()
 
     if not leak:
-        raise ResourceNotFoundError(f"Leak {leak_id} non trovato")
+        raise ResourceNotFoundError(f"Leak {leak_id} not found")
 
     # Security check
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
-        raise AuthorizationError("Accesso negato al leak del tenant")
+        raise AuthorizationError("Access denied to this tenant's leak")
 
-    # Recupero dati per il report
+    # Gather the data for the report
     ai_analysis = leak.metadata_json.get("ai_analysis", {})
     content = leak.content_snippet or "[RAW CONTENT NOT ACCESSIBLE IN SNIPPET]"
     tenant_name = leak.tenant.name if leak.tenant else "Unknown Tenant"
 
-    # Generazione PDF
+    # Generate the PDF
     pdf_bytes = ForensicReportGenerator.generate_pdf(
         leak_data={"id": leak.id, "source": leak.source, "discovered_at": leak.discovered_at.isoformat()},
         ai_analysis=ai_analysis,
@@ -456,16 +456,16 @@ async def bulk_export_leaks(
 @router.get("/{leak_id}/screenshot")
 async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
-    Recupera lo screenshot forense (W) da MinIO e lo serve all'analista.
+    Fetch the forensic screenshot (W) from MinIO and serve it to the analyst.
     """
     result = await db.execute(select(LeakHit).where(LeakHit.id == leak_id))
     leak = result.scalar_one_or_none()
 
     if not leak or not leak.screenshot_path:
-        raise ResourceNotFoundError(f"Screenshot non disponibile per il leak {leak_id}")
+        raise ResourceNotFoundError(f"No screenshot available for leak {leak_id}")
 
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
-        raise AuthorizationError("Accesso negato")
+        raise AuthorizationError("Access denied")
 
     # Proxy da MinIO
     import os
@@ -477,11 +477,13 @@ async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), 
     MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 
     if not MINIO_ACCESS_KEY or not MINIO_SECRET_KEY:
-        raise HTTPException(status_code=500, detail="Configurazione MinIO mancante. Ambiente corrotto o compromesso.")
+        raise HTTPException(
+            status_code=500, detail="MinIO configuration is missing. The environment is corrupt or compromised."
+        )
 
     minio_client = Minio(MINIO_ENDPOINT, access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY, secure=False)
 
-    # screenshot_path è del tipo minio://bucket/object
+    # screenshot_path has the form minio://bucket/object
     path_parts = leak.screenshot_path.replace("minio://", "").split("/")
     bucket_name = path_parts[0]
     object_name = "/".join(path_parts[1:])
@@ -504,7 +506,7 @@ async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), 
 
         return Response(content=data, media_type="image/png")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore nel recupero dello screenshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve the screenshot: {str(e)}")
     finally:
         if response:
             response.close()

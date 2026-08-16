@@ -59,8 +59,9 @@ check_docker_status() {
 
 run_backend_tests() {
     print_step "BACKEND" "Executing PyTest Draconian Suite (API & AI Core)"
-    # Discard warnings to keep the output beautiful, run in verbose mode for clarity
-    if docker exec naso-api pytest tests/ -v -W ignore::DeprecationWarning; then
+    # -p no:cacheprovider: the API container has a read_only root filesystem, so
+    # pytest cannot write .pytest_cache and emits two warnings per run about it.
+    if docker exec naso-api pytest tests/ -v -W ignore::DeprecationWarning -p no:cacheprovider; then
         print_success "Backend Core tests passed."
     else
         print_error "Backend Core tests failed."

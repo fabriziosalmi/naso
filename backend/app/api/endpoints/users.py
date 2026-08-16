@@ -32,7 +32,7 @@ async def update_operator_profile(
     old_email = user.email
 
     if user_update.email and user_update.email != user.email:
-        # Verifica password obbligatoria per il cambio email (OWASP A07)
+        # Password confirmation is mandatory for an email change (OWASP A07)
         if not user_update.current_password:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

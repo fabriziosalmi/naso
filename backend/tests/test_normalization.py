@@ -34,10 +34,10 @@ class TestNormalizeEmail:
         assert normalize_identifier("F.Bar+promo@GoogleMail.com", "email") == "fbar@gmail.com"
 
     def test_non_gmail_keeps_dots(self):
-        assert normalize_identifier("f.oo@corp.local", "email") == "f.oo@corp.local"
+        assert normalize_identifier("f.oo@corp.example.com", "email") == "f.oo@corp.example.com"
 
     def test_non_gmail_still_strips_plus_alias(self):
-        assert normalize_identifier("foo+tag@corp.local", "email") == "foo@corp.local"
+        assert normalize_identifier("foo+tag@corp.example.com", "email") == "foo@corp.example.com"
 
     def test_empty_or_malformed_does_not_crash(self):
         assert normalize_identifier("", "email") == ""

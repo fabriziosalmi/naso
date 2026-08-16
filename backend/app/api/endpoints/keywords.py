@@ -16,7 +16,7 @@ router = APIRouter()
 async def create_keyword(
     keyword: KeywordCreate, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
-    # Verifica che l'utente appartenga al tenant o sia admin
+    # Check that the user belongs to the tenant, or is an admin
     if current_user.role != "admin" and current_user.tenant_id != keyword.tenant_id:
         raise HTTPException(status_code=403, detail="Not authorized for this tenant")
 

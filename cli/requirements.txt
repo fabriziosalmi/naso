@@ -1,7 +1,11 @@
-rich
-textual
+# Dependencies for the operator CLI (cli/naso.py) and the secret bootstrap
+# (cli/generate_secrets.py).
+
+# generate_secrets.py — Ed25519 key generation
+cryptography>=42.0
+
+# naso.py
 click
+rich
 art
 psutil
-httpx
-pyfiglet

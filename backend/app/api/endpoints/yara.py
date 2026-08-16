@@ -18,7 +18,7 @@ async def create_yara_rule(
     rule: YaraRuleCreate, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """
-    Crea una nuova regola YARA. Gli admin possono creare regole globali.
+    Create a new YARA rule. Admins can create global rules.
     """
     if not current_user.role == "admin" and rule.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Not authorized to create rule for this tenant")
@@ -50,7 +50,7 @@ async def create_yara_rule(
 @router.get("/", response_model=list[YaraRuleSchema])
 async def list_yara_rules(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
-    Lista le regole YARA attive (globali + specifiche del tenant).
+    List the active YARA rules (global plus tenant-specific).
     """
     query = select(YaraRule).where(YaraRule.is_active)
     if current_user.role != "admin":

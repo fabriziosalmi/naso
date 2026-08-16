@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Installazione dipendenze per Playwright e browser
+# Playwright and browser dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -31,7 +31,7 @@ COPY workers/requirements.txt ./requirements.txt
 COPY shared/requirements-shared.txt ./shared/requirements-shared.txt
 RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
 
-# Installazione dei browser Playwright
+# Install the Playwright browsers
 RUN playwright install chromium firefox --with-deps
 
 COPY workers/ ./workers/

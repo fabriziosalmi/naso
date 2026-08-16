@@ -49,10 +49,10 @@ if settings.MINIO_ACCESS_KEY and settings.MINIO_SECRET_KEY:
 else:
     minio_client = None
 
-# Engine per i worker (Command Side)
-# NullPool: ogni task crea e chiude la propria connessione.
-# Il pool standard erediterebbe fd e socket dal processo padre (Celery prefork)
-# causando corruzione del pool — NullPool previene completamente questo problema (G-11).
+# Engine for the workers (command side)
+# NullPool: every task opens and closes its own connection.
+# The standard pool would inherit file descriptors and sockets from the parent (Celery prefork)
+# which corrupts the pool — NullPool avoids the problem entirely (G-11).
 engine = create_async_engine(
     settings.DATABASE_URL,
     poolclass=NullPool,
@@ -74,7 +74,7 @@ _soar_client = httpx.AsyncClient(timeout=3.0)
 
 
 def generate_idempotency_key(content: str):
-    """Genera una chiave di idempotenza basata sull'hash del contenuto (#1)."""
+    """Build an idempotency key from the hash of the content (#1)."""
     return hashlib.sha256(content.encode()).hexdigest()
 
 
@@ -132,7 +132,7 @@ def process_potential_leak(self, hit_data, raw_content):
             hit_data["metadata_json"] = {}
         hit_data["metadata_json"]["yara_matches"] = yara_matches
 
-        # 2. AI Thinking con Circuit Breaker e Graceful Degradation
+        # 2. AI reasoning with a circuit breaker and graceful degradation
         try:
             ai_result = await analyze_leak_with_gemma_thinking(raw_content[:2500])  # P-09: truncate at call site
             hit_data["severity_score"] = 100 if ai_result["is_valid"] else 10
@@ -185,8 +185,8 @@ def process_potential_leak(self, hit_data, raw_content):
 
         return hit_data["severity_score"]
 
-    # Creiamo sempre un loop fresco per evitare deadlock con il pool prefork di Celery.
-    # asyncio.run() può riutilizzare loop ereditati dal processo padre causando blocchi.
+    # Always create a fresh loop to avoid deadlocking against Celery's prefork pool.
+    # asyncio.run() can reuse a loop inherited from the parent process and deadlock.
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(_run_async_pipeline())
@@ -196,7 +196,7 @@ def process_potential_leak(self, hit_data, raw_content):
 
 async def store_and_index(hit_data, raw_content):
     """
-    Salvataggio e indicizzazione protetti da Circuit Breaker (#2).
+    Storage and indexing, guarded by a circuit breaker (#2).
     """
     # P-15: encode once, reuse bytes in both MinIO upload and avoid double-encoding
     content_bytes = raw_content.encode("utf-8")
@@ -258,14 +258,14 @@ async def store_and_index(hit_data, raw_content):
     else:
         logger.warning(f"ES indexing skipped for tenant {hit_data['tenant_id']} (ES disabled)")
 
-    # 3. Persisti il LeakHit via la nuova ingest con fuzzy-dedup.
+    # 3. Persist the LeakHit through the ingest path with fuzzy dedup.
     # ingest_leak:
-    #   * popola normalized_content + simhash64 a ogni scrittura,
-    #   * collassa su una riga esistente se il Hamming ≤ 3 (near-duplicate
-    #     di un leak già visto, anche se arriva da una sorgente diversa o
-    #     con formatting leggermente differente),
-    #   * bumpa la severity in modo monotono (mai downgrade).
-    # Sostituisce il pattern a stable_id=SHA-256(content) che catturava solo
+    #   * populates normalized_content + simhash64 on every write,
+    #   * collapses onto an existing row when the Hamming distance is ≤ 3 (a
+    #     near-duplicate of a leak already seen, even from a different source
+    #     or with slightly different formatting),
+    #   * raises the severity monotonically (never downgrades it).
+    # Replaces the stable_id=SHA-256(content) pattern, which only caught
     # i duplicati byte-identici.
     async with AsyncSessionLocal() as db:
         leak = await ingest_leak(

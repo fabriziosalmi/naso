@@ -1,0 +1,26 @@
+# Test and quality tooling. Not installed in a production image.
+#
+# The API image installs this only when built with:
+#   docker build --build-arg INSTALL_DEV=true -f Dockerfile.backend .
+# docker-compose.yml sets that argument, because cli/validate.sh runs the
+# backend suite with `docker exec naso-api pytest tests/`.
+
+-r requirements.txt
+
+pytest
+# 1.x removed the event_loop fixture override this suite relied on; the
+# replacement is asyncio_default_*_loop_scope in pyproject.toml.
+pytest-asyncio>=0.24,<1.0
+pytest-cov
+pytest-timeout
+
+# test_workers.py imports shared.tasks.pipeline, which pulls in
+# shared/utils/analyzer.py and therefore yara. The API image does not need
+# yara at runtime -- only to run this suite.
+yara-python
+
+# Pinned to the same version the CI quality gate installs, so a ruff
+# release cannot turn the gate red without anyone changing the code.
+ruff==0.16.3
+bandit
+pip-audit

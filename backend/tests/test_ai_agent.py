@@ -5,7 +5,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_ai_tool_dispatch_search_identities(db, test_user):
-    from app.api.endpoints.ai import execute_tool
+    from shared.domain.services.ai_toolkit import execute_tool
 
     # Execute the tool with mocked inputs
     result = await execute_tool(
@@ -23,7 +23,7 @@ async def test_ai_tool_dispatch_search_identities(db, test_user):
 
 @pytest.mark.asyncio
 async def test_ai_tool_dispatch_unknown():
-    from app.api.endpoints.ai import execute_tool
+    from shared.domain.services.ai_toolkit import execute_tool
 
     # Execute a tool that does not exist
     result = await execute_tool(

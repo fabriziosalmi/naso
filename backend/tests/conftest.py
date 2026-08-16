@@ -1,4 +1,3 @@
-import asyncio
 import os
 import sys
 import tempfile
@@ -7,6 +6,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest_asyncio
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,9 +18,31 @@ for path in (str(ROOT_DIR), str(BACKEND_DIR)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-os.environ.setdefault("ALGORITHM", "HS256")
-os.environ.setdefault("JWT_PRIVATE_KEY", "test-secret")
-os.environ.setdefault("JWT_PUBLIC_KEY", "test-secret")
+# Set, not setdefault. Inside the API container .env supplies ALGORITHM=EdDSA,
+# so setdefault left the algorithm at EdDSA while still injecting the string
+# "test-secret" as the key, and every token operation died with
+# "InvalidKeyError: Not a public or private key". Outside a container ALGORITHM
+# is unset, setdefault chose HS256, and the same suite passed — which is how a
+# 15-test failure hid until the container ran it.
+#
+# Minting a real ephemeral Ed25519 pair keeps the suite hermetic and exercises
+# the algorithm production actually uses. These values must be in the
+# environment before shared.config builds its settings singleton on import.
+_test_signing_key = ed25519.Ed25519PrivateKey.generate()
+os.environ["ALGORITHM"] = "EdDSA"
+os.environ["JWT_PRIVATE_KEY"] = _test_signing_key.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+).decode()
+os.environ["JWT_PUBLIC_KEY"] = (
+    _test_signing_key.public_key()
+    .public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    .decode()
+)
 
 # Models + DB session factory are lightweight (no FastAPI), so they stay at
 # module scope and are always available to every test file. The FastAPI app
@@ -27,6 +50,7 @@ os.environ.setdefault("JWT_PUBLIC_KEY", "test-secret")
 # fixture so the correlation-engine test files can run on a minimal install.
 import contextlib
 
+from shared.core.security import get_password_hash
 from shared.database import get_db
 from shared.models import Base, Tenant, User
 
@@ -37,20 +61,24 @@ engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-@pytest_asyncio.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def _shared_engine_teardown():
+    yield
+    # aiosqlite runs each connection on its own non-daemon thread. Without
+    # dispose() that thread outlives the suite and threading._shutdown blocks
+    # forever, so pytest prints its summary and then never exits.
+    await engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="session")
-async def db_engine():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield engine
+@pytest_asyncio.fixture
+async def db_engine(_shared_engine_teardown):
+    # Per test, not per session. The fixtures in test_api.py and test_auth.py
+    # commit users with fixed email addresses, so a schema shared across the
+    # whole run makes every test after the first fail on the UNIQUE index.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
 
 
 @pytest_asyncio.fixture
@@ -65,10 +93,18 @@ async def client(db):
     # Deferred imports — the full FastAPI app is only needed when a test
     # actually exercises an HTTP endpoint. Correlation-engine tests can run
     # without these modules installed.
+    from app.limiter import limiter
     from app.main import app
     from httpx import ASGITransport, AsyncClient
 
     from shared.core.jwt_manager import jwt_blacklist
+
+    # /auth/login is capped at 10/minute and every request in the suite comes
+    # from the same synthetic address, so the limiter starts returning 429
+    # partway through the run and every later login assertion collapses.
+    # Nothing here covers the HTTP rate limit — test_rate_limiter.py exercises
+    # the dark-web TokenBucket, which is unrelated.
+    limiter.enabled = False
 
     jwt_blacklist.is_blacklisted = AsyncMock(return_value=False)
     jwt_blacklist.blacklist_token = AsyncMock()
@@ -78,9 +114,37 @@ async def client(db):
 
     app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # Must be a host that TrustedHostMiddleware accepts (see app/main.py).
+    # The previous "http://test" produced a Host header the middleware
+    # rejected, so every request in this suite came back 400 regardless of
+    # what the test was asserting.
+    async with AsyncClient(transport=transport, base_url="http://localhost") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def test_user(db):
+    """A single admin operator on a fresh tenant.
+
+    Lives here rather than in test_auth.py because test_ai_agent.py needs it
+    too, and a fixture defined in a test module is not visible to its siblings.
+    """
+    tenant = Tenant(name="Test TenantCorp")
+    db.add(tenant)
+    await db.commit()
+    await db.refresh(tenant)
+
+    user = User(
+        email="operator@test.example.com",
+        hashed_password=get_password_hash("securepass123"),
+        tenant_id=tenant.id,
+        role="admin",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -134,7 +198,7 @@ async def tenant(corr_db):
 async def user(corr_db, tenant):
     u = User(
         id=str(uuid.uuid4()),
-        email=f"op-{uuid.uuid4().hex[:6]}@naso.local",
+        email=f"op-{uuid.uuid4().hex[:6]}@naso.example.com",
         hashed_password="x",
         full_name="Test Operator",
         role="analyst",

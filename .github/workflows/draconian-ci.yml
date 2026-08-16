@@ -5,24 +5,32 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # Lets a branch be validated before a pull request exists.
+  workflow_dispatch:
 
 jobs:
   ruff-quality-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python 3.9+
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+
+      # Matches the python:3.11-slim base image both Dockerfiles build on.
+      # This job used to install 3.9, linting code that never runs on 3.9.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.9"
-          
+          python-version: "3.11"
+
+      # Pinned deliberately. An unpinned `pip install ruff` turned this gate
+      # red on a day nobody touched the code: 0.16 began formatting Python
+      # inside Markdown fences and the job jumped from 107 files to 122.
+      # Keep this in step with backend/requirements-dev.txt.
       - name: Install Ruff
-        run: pip install ruff
-        
+        run: pip install ruff==0.16.3
+
       - name: Draconian Format Check
         run: ruff format --check .
-        
+
       - name: Draconian Lint Control
         run: ruff check .
 
@@ -30,14 +38,19 @@ jobs:
     needs: ruff-quality-gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Node 20 (vitest + playwright)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
 
       - name: Install frontend deps (npm ci)
         working-directory: frontend
@@ -49,17 +62,58 @@ jobs:
 
       - name: Bootstrap Zero-Trust Mock Env
         run: |
-          python3 cli/generate_secrets.py
-          cp .env.example .env
+          # generate_secrets.py imports cryptography; do not rely on whatever
+          # the runner image happens to ship.
+          pip install -r cli/requirements.txt
+          # Same target the README tells a new user to run, so a break in it
+          # fails CI instead of only failing them.
+          make bootstrap
 
       - name: Ignition Engine (Docker Compose)
         run: |
           docker compose up -d db redis elasticsearch minio rabbitmq
-          sleep 15
           docker compose up -d --build backend worker-pipeline
-          sleep 5
+
+      - name: Wait for the API to report operational
+        run: |
+          # /system/status answers 200 with {"status": "degraded"} when the
+          # database probe fails, so the status line alone is not a readiness
+          # signal -- the body has to say "operational".
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8000/system/status 2>/dev/null \
+               | python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin).get('status') == 'operational' else 1)" 2>/dev/null; then
+              echo "API reported operational after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::The API never reported operational on :8000"
+          curl -s http://localhost:8000/system/status || true
+          exit 1
+
+      - name: Diagnostics
+        # Always, so a failure above is explained rather than guessed at. The
+        # previous pipeline slept a fixed 5s and then ran `docker exec`, which
+        # produced a 0.4s failure with no output whenever the container was not
+        # actually up yet.
+        if: always()
+        run: |
+          echo "── container state ─────────────────────────────"
+          docker compose ps
+          for svc in db redis elasticsearch rabbitmq minio backend worker-pipeline; do
+            echo "── $svc ────────────────────────────────────────"
+            docker compose logs --no-color --tail=40 "$svc" 2>&1 | tail -40
+          done
 
       - name: Pipeline Structural Verification (cli/validate.sh)
         run: |
           chmod +x cli/validate.sh
           ./cli/validate.sh
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
