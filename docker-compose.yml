@@ -271,7 +271,6 @@ services:
     networks:
       - naso-net
 
-  # ... (altri nodi tor qui per brevità)
 
 networks:
   naso-net:

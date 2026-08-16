@@ -31,14 +31,14 @@ def _get_github_client() -> httpx.Client:
 @celery_app.task(bind=True, max_retries=3)
 def scan_github_for_keyword(self, keyword_value, tenant_id):
     """
-    Scansiona GitHub per una specifica keyword legata a un tenant.
-    Usa httpx (non-blocking) al posto di requests (sincrono bloccante) — G-08.
+    Scan GitHub for a specific keyword belonging to a tenant.
+    Uses httpx (non-blocking) instead of requests (synchronous, blocking) — G-08.
     """
     if not GITHUB_TOKEN:
-        logger.error("Errore: GITHUB_TOKEN non configurato.")
+        logger.error("GITHUB_TOKEN is not configured.")
         return
 
-    # quote() sanitizza la keyword per prevenire URL/parameter injection (G-09)
+    # quote() sanitises the keyword to prevent URL/parameter injection (G-09)
     safe_keyword = quote(str(keyword_value), safe="")
     search_url = f"https://api.github.com/search/code?q={safe_keyword}"
 
@@ -61,7 +61,7 @@ def scan_github_for_keyword(self, keyword_value, tenant_id):
                 "content_snippet": item.get("path"),
                 "raw_data_url": item.get("html_url"),
                 "metadata_json": {"repository": item.get("repository", {}).get("full_name"), "sha": item.get("sha")},
-                "severity_score": 5,  # Score base da raffinare con YARA
+                "severity_score": 5,  # Baseline score, refined later by YARA
             }
             hits.append(hit_data)
             logger.info(f"Trovato potenziale leak su GitHub: {item.get('html_url')}")
@@ -69,5 +69,5 @@ def scan_github_for_keyword(self, keyword_value, tenant_id):
         return len(hits)
 
     except Exception as e:
-        logger.error(f"Errore durante lo scan GitHub per {keyword_value}: {e}")
+        logger.error(f"GitHub scan failed for {keyword_value}: {e}")
         raise self.retry(exc=e, countdown=300)

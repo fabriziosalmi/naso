@@ -20,7 +20,7 @@ from ..deps import oauth2_scheme
 router = APIRouter()
 
 _COOKIE_NAME = "naso_access_token"
-_COOKIE_SAMESITE = "lax"  # 'strict' romperebbe il proxy Vite in sviluppo
+_COOKIE_SAMESITE = "lax"  # 'strict' would break the Vite dev proxy
 
 
 @router.post("/login", response_model=Token)
@@ -47,7 +47,7 @@ async def login_for_access_token(
         data={"sub": user.email, "tenant_id": user.tenant_id, "role": user.role}, expires_delta=access_token_expires
     )
 
-    # Imposta il token come cookie httpOnly — il JS non può leggerlo (protezione XSS)
+    # Set the token as an httpOnly cookie — JS cannot read it (XSS protection)
     response.set_cookie(
         key=_COOKIE_NAME,
         value=access_token,
@@ -63,11 +63,11 @@ async def login_for_access_token(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(request: Request, response: Response, token: str = Depends(oauth2_scheme)):
-    # Cancella il cookie httpOnly
+    # Clear the httpOnly cookie
     response.delete_cookie(key=_COOKIE_NAME, httponly=True, samesite=_COOKIE_SAMESITE, path="/")
 
     try:
-        # Verifica la firma prima di aggiungere alla blacklist (fix C-01 mantenuto)
+        # Verify the signature before blacklisting (C-01 fix retained)
         payload = jwt.decode(token, settings.JWT_PUBLIC_KEY, algorithms=[settings.ALGORITHM])
         jti = payload.get("jti")
         exp = payload.get("exp")
@@ -81,5 +81,5 @@ async def logout(request: Request, response: Response, token: str = Depends(oaut
                 await jwt_blacklist.blacklist_token(jti, ttl)
         return {"msg": "Successfully logged out"}
     except jwt.PyJWTError:
-        # Cookie già cancellato — il logout è comunque effettivo
+        # Cookie already cleared — the logout is effective either way
         return {"msg": "Logged out"}

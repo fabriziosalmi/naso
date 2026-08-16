@@ -1,5 +1,5 @@
 class NasoBaseException(Exception):
-    """Classe base per tutte le eccezioni del sistema Naso."""
+    """Base class for every NASO exception."""
 
     def __init__(self, message: str, details: dict = None):
         super().__init__(message)
@@ -8,36 +8,36 @@ class NasoBaseException(Exception):
 
 
 class AuthenticationError(NasoBaseException):
-    """Sollevata quando l'autenticazione fallisce."""
+    """Raised when authentication fails."""
 
     pass
 
 
 class AuthorizationError(NasoBaseException):
-    """Sollevata per violazioni di permessi o isolamento multi-tenant."""
+    """Raised on a permission violation or a multi-tenant isolation breach."""
 
     pass
 
 
 class ResourceNotFoundError(NasoBaseException):
-    """Sollevata quando una risorsa (Tenant, Leak, Keyword) non esiste."""
+    """Raised when a resource (Tenant, Leak, Keyword) does not exist."""
 
     pass
 
 
 class ProcessingError(NasoBaseException):
-    """Errore durante l'analisi YARA o il Thinking dell'AI."""
+    """Error during YARA analysis or AI reasoning."""
 
     pass
 
 
 class InfrastructureError(NasoBaseException):
-    """Errore di connessione a DB, Elasticsearch, MinIO o Tor."""
+    """Connection error against the database, Elasticsearch, MinIO or Tor."""
 
     pass
 
 
 class CrawlerError(NasoBaseException):
-    """Errore specifico dei worker di scraping/ingestion."""
+    """Error specific to the scraping/ingestion workers."""
 
     pass

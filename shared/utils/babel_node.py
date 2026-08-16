@@ -27,7 +27,7 @@ class BabelNode:
 
     @classmethod
     def detect_languages(cls, text: str) -> list[str]:
-        """Scansiona i blocchi Unicode per capire in quale lingua "criptica" è scritto il leak."""
+        """Scan the Unicode blocks to work out which script the leak is written in."""
         detected = set()
 
         # O(N) pass, we sample max 1000 chars per speed in workers
@@ -46,7 +46,7 @@ class BabelNode:
         if "ñ" in sample_text or "¿" in sample_text:
             detected.add("Latin (Spanish)")
 
-        # Fallback se ci sono solo ascii
+        # Fallback when the text is pure ASCII
         if not detected and sample_text.strip():
             detected.add("Latin (English/Generic)")
 
@@ -54,7 +54,7 @@ class BabelNode:
 
     @classmethod
     def extract_entities(cls, text: str) -> dict:
-        """Estrae gli asset infrastrutturali/economici dal testo."""
+        """Extract infrastructure and financial assets from the text."""
         return {
             "emails": list(set(cls.REGEX_EMAIL.findall(text))),
             "ips": list(set(cls.REGEX_IPV4.findall(text))),
@@ -64,7 +64,7 @@ class BabelNode:
 
     @classmethod
     def process_leak(cls, raw_content: str) -> dict:
-        """EntryPoint per il NLP pre-Triage."""
+        """Entry point for the pre-triage NLP pass."""
         try:
             langs = cls.detect_languages(raw_content)
             entities = cls.extract_entities(raw_content)

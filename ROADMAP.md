@@ -1,11 +1,13 @@
-# Next sprint — optional hardening
+# Roadmap
 
-Everything in the correlation / audit / Tor / AI macro-roadmap is shipped
-and tested. The four items below are **deferrable polish**: none of them
-are blocking production, but each meaningfully upgrades either operator
-trust (observability, audit UI), rollout confidence (E2E), or operator
-workflow (merge drawer). Pick one per mini-sprint or bundle them if time
-allows.
+The correlation, audit, Tor, and AI macro-roadmap is shipped and tested. The
+four items below are **deferrable hardening**: none of them block production,
+but each meaningfully upgrades either operator trust (observability, audit UI),
+rollout confidence (E2E), or operator workflow (merge drawer).
+
+They are listed in no particular order — pick one per mini-sprint, or bundle
+them. If you want to work on one, say so on an issue first so two people do not
+start the same item.
 
 ---
 

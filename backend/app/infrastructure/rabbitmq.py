@@ -1,17 +1,17 @@
-"""Pool di connessione RabbitMQ condiviso a livello applicazione.
+"""Application-wide shared RabbitMQ connection pool.
 
-Usa una singola connessione robusta (auto-reconnect) e un canale per richiesta.
-La connessione viene inizializzata al primo utilizzo e protetta con asyncio.Lock
-per evitare race condition in contesti multi-coroutine.
+Uses a single robust connection (auto-reconnect) and one channel per request.
+The connection is initialised on first use and guarded by an asyncio.Lock to
+avoid a race between concurrent coroutines.
 
 Utilizzo:
     from app.infrastructure.rabbitmq import rabbitmq_pool
     channel = await rabbitmq_pool.get_channel()
-    # usa il channel ...
-    await channel.close()  # i canali sono leggeri e vanno chiusi dopo l'uso
+    # use the channel ...
+    await channel.close()  # channels are cheap and should be closed after use
 
 Lifecycle:
-    Chiamare `await rabbitmq_pool.close()` nello shutdown dell'app (lifespan).
+    Call `await rabbitmq_pool.close()` on application shutdown (lifespan).
 """
 
 import asyncio
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class _RabbitMQPool:
-    """Singleton: una connessione robusta condivisa, canali usa-e-getta per richiesta."""
+    """Singleton: one shared robust connection, throwaway channels per request."""
 
     def __init__(self) -> None:
         self._connection: aio_pika.abc.AbstractRobustConnection | None = None
@@ -40,27 +40,27 @@ class _RabbitMQPool:
         return f"amqp://{user}:{passwd}@{host}/"
 
     async def get_channel(self) -> aio_pika.abc.AbstractChannel:
-        """Ritorna un nuovo canale dalla connessione condivisa.
+        """Return a new channel from the shared connection.
 
-        Double-checked locking: la connessione viene creata una sola volta anche
-        in presenza di molte coroutine concorrenti che chiamano get_channel
-        simultaneamente all'avvio.
+        Double-checked locking: the connection is created exactly once even when
+        many concurrent coroutines call get_channel
+        at startup.
         """
         if self._connection is None or self._connection.is_closed:
             async with self._lock:
-                # Seconda verifica dopo aver acquisito il lock (pattern DCL)
+                # Second check after acquiring the lock (DCL pattern)
                 if self._connection is None or self._connection.is_closed:
                     self._connection = await aio_pika.connect_robust(self._amqp_url)
-                    logger.info("RabbitMQ: connessione robusta stabilita")
+                    logger.info("RabbitMQ: robust connection established")
 
         return await self._connection.channel()
 
     async def close(self) -> None:
-        """Chiude la connessione in modo ordinato durante lo shutdown dell'app."""
+        """Close the connection cleanly during application shutdown."""
         if self._connection and not self._connection.is_closed:
             await self._connection.close()
-            logger.info("RabbitMQ: connessione chiusa ordinatamente")
+            logger.info("RabbitMQ: connection closed cleanly")
 
 
-# Istanza globale — importata da leaks.py e dal lifespan di main.py
+# Global instance — imported by leaks.py and by the lifespan in main.py
 rabbitmq_pool = _RabbitMQPool()

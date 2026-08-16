@@ -9,7 +9,7 @@ from fpdf import FPDF
 
 class ForensicReportGenerator:
     """
-    Engine per la generazione di Report Forensi Certificati (#31).
+    Engine that generates certified forensic reports (#31).
     """
 
     @staticmethod
@@ -23,7 +23,7 @@ class ForensicReportGenerator:
         pdf.cell(200, 10, "[NASO FORENSIC ENGINE] - CONFIDENTIAL EVIDENCE REPORT", ln=True, align="C")
         pdf.ln(10)
 
-        # Metadata del Report
+        # Report metadata
         pdf.set_font("Courier", "", 10)
         pdf.set_text_color(0, 0, 0)
         report_id = f"NASO-REP-{datetime.now().strftime('%Y%m%d')}-{leak_data['id'][:8]}"
@@ -68,13 +68,13 @@ class ForensicReportGenerator:
     @staticmethod
     def sign_report(pdf_bytes: bytes):
         """
-        Applica una firma digitale crittografica al report forense.
+        Apply a cryptographic digital signature to the forensic report.
         Garantisce l'integrità di grado aerospaziale.
         """
         private_key_path = os.getenv("NASO_PRIVATE_KEY_PATH")
         if private_key_path and os.path.exists(private_key_path):
-            # Controllo permessi: la chiave privata deve essere leggibile solo dal proprietario (G-13).
-            # Permessi troppo aperti (es. 0o644) compromettono l'affidabilità legale delle prove forensi.
+            # Permission check: the private key must be readable by its owner only (G-13).
+            # Looser permissions (e.g. 0o644) undermine the legal weight of the evidence.
             file_stat = os.stat(private_key_path)
             # Bit 0o077: qualsiasi permesso a gruppo o altri
             if file_stat.st_mode & 0o077:
@@ -98,7 +98,7 @@ class ForensicReportGenerator:
     @staticmethod
     def generate_bulk_pdf(tenant_name: str, leaks: list):
         """
-        Genera un Dossier Forense Massivo (BB) contenente tutti i leak del periodo.
+        Generate the bulk forensic dossier (BB) covering every leak in the period.
         """
         pdf = FPDF()
         pdf.add_page()
@@ -126,7 +126,7 @@ class ForensicReportGenerator:
         # Leak Detailed List
         for idx, leak in enumerate(leaks):
             if idx > 0 and idx % 2 == 0:
-                pdf.add_page()  # Nuova pagina ogni 2 leak
+                pdf.add_page()  # New page every 2 leaks
 
             pdf.set_font("Courier", "B", 11)
             pdf.cell(200, 10, f"INCIDENT #{leak.id[:8]} - {leak.source}", ln=True)

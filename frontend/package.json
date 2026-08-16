@@ -2,6 +2,8 @@
   "name": "naso-dashboard",
   "private": true,
   "version": "0.1.0",
+  "description": "NASO Forensic Engine dashboard",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",

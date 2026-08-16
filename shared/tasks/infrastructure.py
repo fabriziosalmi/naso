@@ -12,7 +12,7 @@ logger = logging.getLogger("naso-infrastructure")
 
 
 def _resolve_target(target: str) -> str:
-    """Risolve hostname → IP. Ritorna 'Unknown' se la risoluzione fallisce."""
+    """Resolve a hostname to an IP. Returns 'Unknown' if resolution fails."""
     try:
         return socket.gethostbyname(target)
     except Exception:
@@ -20,7 +20,7 @@ def _resolve_target(target: str) -> str:
 
 
 def _probe_common_ports(ip: str, ports: list[int] = None) -> list[dict]:
-    """Proba le porte in PARALLELO con ThreadPoolExecutor (P-07).
+    """Probe the ports IN PARALLEL with a ThreadPoolExecutor (P-07).
     Tempo totale: max(timeout singolo) invece di N×timeout sequenziale.
     Worst case passa da 26s (13 porte × 2s) a 1s.
     """
@@ -43,7 +43,7 @@ def _probe_common_ports(ip: str, ports: list[int] = None) -> list[dict]:
 @celery_app.task(bind=True, max_retries=3, queue="osint", name="tasks.infrastructure.scan_exposed_surface")
 def scan_exposed_surface(self, target_ip_or_domain: str, tenant_id: str):
     """
-    Scansione passiva della superficie d'attacco tramite risoluzione DNS e
+    Passive attack-surface scan using DNS resolution and a
     probe TCP sulle porte comuni. Se SHODAN_API_KEY è configurata, arricchisce
     il risultato con i dati Shodan.
     """

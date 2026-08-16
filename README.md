@@ -17,6 +17,18 @@
 
 **NASO** is a Data-Sovereign, High-Performance Intelligence Engine built for enterprise SecOps and Red Teams. It fuses a non-blocking asynchronous architecture with Local AI (Model Context Protocol), bringing unstructured dark web telemetry into a crisp, actionable canvas.
 
+> [!IMPORTANT]
+> **Authorised and defensive use only.** NASO is a dual-use tool. It is built for
+> monitoring your own organisation's exposure, incident response, and engagements
+> you have written authorisation to perform. Finding a credential in a breach
+> corpus does not entitle you to use it, and scanning infrastructure you do not
+> own is a criminal offence in most jurisdictions.
+>
+> Breach data is **personal data**. If you deploy NASO you are the data
+> controller under the GDPR and equivalent regimes, with everything that implies.
+>
+> Read **[LEGAL.md](LEGAL.md)** before pointing NASO at anything.
+
 ## Key Features
 
 **🛡️ Draconian Zero-Trust Architecture**
@@ -123,3 +135,43 @@ The `main` branch is protected by a strict validation pipeline:
 * [Dark Web Recon](https://fabriziosalmi.github.io/naso/guide/dark-recon)
 * [SOAR & CTI](https://fabriziosalmi.github.io/naso/guide/soar-and-cti)
 * [MCP Integration](https://fabriziosalmi.github.io/naso/guide/mcp-integration)
+
+## Roadmap
+
+Planned hardening work is tracked in [ROADMAP.md](ROADMAP.md).
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development setup, the quality bar, and the commit conventions, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for how we expect people to behave.
+
+One rule up front: **never contribute real data**. Fixtures, tests, and issue
+reports must use synthetic values — never real personal data, real credentials,
+or excerpts from a real breach corpus.
+
+## Security
+
+Found a vulnerability? **Do not open a public issue.** Report it privately
+through a [GitHub security advisory](https://github.com/fabriziosalmi/naso/security/advisories/new)
+or by email. See [SECURITY.md](SECURITY.md) for the process, scope, and safe
+harbour terms — and for the hardening checklist you should work through before
+running NASO against real data.
+
+## Legal and acceptable use
+
+NASO processes personal data and can reach systems you do not own.
+[LEGAL.md](LEGAL.md) covers intended use, authorisation, prohibited uses, your
+obligations as a data controller under the GDPR, third-party service terms, and
+the absence of any warranty. It is not optional reading.
+
+## License
+
+NASO is licensed under the **[GNU Affero General Public License v3.0](LICENSE)**.
+
+In short: you may use, study, modify, and redistribute NASO freely — but if you
+run a modified version as a network service, you must make your modified source
+available to its users. See the [full text](LICENSE) for the terms that actually
+bind; this summary does not.
+
+Copyright © 2026 Fabrizio Salmi.

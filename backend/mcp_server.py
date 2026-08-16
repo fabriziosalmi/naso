@@ -16,7 +16,7 @@ from shared.domain.services.telegram_search import TelegramOSINTService
 from shared.models import Identity, LeakHit
 from shared.utils.audit import AuditLogger
 
-# Configurazione Logger per non inquinare stdio (che romperrebbe MCP protocol)
+# Configure the logger so it never writes to stdio, which would break the MCP protocol
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger("naso-mcp")
 
@@ -25,7 +25,7 @@ app = Server("naso-forensic-mcp")
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
-    """Lista dei tool OSINT esposti da NASO MCP."""
+    """List the OSINT tools exposed over NASO MCP."""
     return [
         Tool(
             name="naso_darkweb_recon",
@@ -107,7 +107,7 @@ async def list_tools() -> list[Tool]:
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Gestore unificato delle chiamate Tool."""
+    """Unified handler for tool calls."""
 
     # ── Database Session Wrapper ──
     async def get_db_session():
@@ -123,10 +123,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return [TextContent(type="text", text="Error: Query is required.")]
 
         try:
-            # MCP Bypass: DarkWebSearchService non richiede db nel signature primario, ma esegue call esterne.
+            # MCP bypass: DarkWebSearchService takes no db in its primary signature, but does make external calls.
             results = await DarkWebSearchService.search_onion_links(query)
 
-            # Formattiamo logica per LLM
+            # Format the result for the LLM
             if not results:
                 return [TextContent(type="text", text=f"No results found for query: {query}")]
 

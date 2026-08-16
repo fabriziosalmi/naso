@@ -19,7 +19,7 @@ _SIGNING_SECRET = os.getenv("NASO_WEBHOOK_SIGNING_SECRET", "").encode()
 
 
 def _compute_signature(payload_bytes: bytes, timestamp: str) -> str:
-    """Calcola HMAC-SHA256 sul payload firmando anche il timestamp per prevenire replay attacks."""
+    """Compute HMAC-SHA256 over the payload, signing the timestamp too to prevent replay attacks."""
     if not _SIGNING_SECRET:
         return ""
     message = f"{timestamp}.{payload_bytes.decode('utf-8', errors='replace')}".encode()
@@ -34,7 +34,7 @@ class WebhookService:
 
     @classmethod
     async def trigger_critical_leak(cls, db: AsyncSession, tenant_id: str, leak_data: dict):
-        # 1. Recupera webhook attivi per il tenant
+        # 1. Fetch the tenant's active webhooks
         result = await db.execute(select(Webhook).where(Webhook.tenant_id == tenant_id, Webhook.is_active))
         webhooks = result.scalars().all()
 
@@ -63,7 +63,7 @@ class WebhookService:
 
     @staticmethod
     def _format_payload(platform: str, data: dict):
-        """Formatta il payload in base alla piattaforma."""
+        """Format the payload for the target platform."""
         message = (
             f"🚨 [NASO CRITICAL ALERT] 🚨\nSource: {data['source']}\nSeverity: {data['severity']}/100\nID: {data['id']}"
         )

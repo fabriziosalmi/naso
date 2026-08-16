@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a capability or a change to how NASO works
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the operational problem before the solution. It is often not
+        the feature you expect.
+
+        NASO is a defensive tool — see
+        [LEGAL.md](https://github.com/fabriziosalmi/naso/blob/main/LEGAL.md).
+        Requests whose main purpose is unauthorised access, mass surveillance,
+        or targeting individuals will be declined.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can you not do today, and what does that cost you?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "do nothing" — why is that not good enough?
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this

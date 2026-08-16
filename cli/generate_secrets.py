@@ -12,11 +12,11 @@ def create_secret(path, content):
 
 
 def main():
-    # Sicurezza Draconiana: garantiamo che i permessi siano limitati
+    # Make sure the generated files are not world-readable
     os.umask(0o077)
     os.makedirs(".secrets-mock", exist_ok=True)
 
-    # 1. Generazione End-to-End Ed25519 (EdDSA)
+    # 1. Generate the Ed25519 (EdDSA) key pair
     private_key = ed25519.Ed25519PrivateKey.generate()
     public_key = private_key.public_key()
 
@@ -32,7 +32,7 @@ def main():
     create_secret(".secrets-mock/jwt_private_key.pem", priv_pem.decode("utf-8"))
     create_secret(".secrets-mock/jwt_public_key.pem", pub_pem.decode("utf-8"))
 
-    # 2. Generazione Hardened Passwords
+    # 2. Generate hardened passwords
     create_secret(".secrets-mock/db_password.txt", secrets.token_urlsafe(24))
     create_secret(".secrets-mock/rabbit_password.txt", secrets.token_urlsafe(24))
     create_secret(".secrets-mock/minio_password.txt", secrets.token_urlsafe(24))

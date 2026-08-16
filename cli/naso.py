@@ -24,7 +24,7 @@ def smart_sleep(seconds):
 
 
 def crumble_text(text):
-    """Effetto Crumble: il testo si dissolve in particelle."""
+    """Crumble effect: the text dissolves into particles."""
     chars = list(text)
     for _ in range(len(chars)):
         idx = random.randint(0, len(chars) - 1)
@@ -59,14 +59,14 @@ def cli():
     """
     NASO ELITE CLI - Advanced Forensic Interface.
 
-    Usa -h o --help per la documentazione.
+    Use -h or --help for the documentation.
     """
     pass
 
 
 @cli.command()
 def splash():
-    """Visualizza lo splash screen FAAANG 100x."""
+    """Show the splash screen."""
     console.clear()
     tprint("NASO", font="isometric1")
     console.print("[bold blue]>[/bold blue] [bold white]NASO FORENSIC OS v4.0.1-STABLE[/bold white]", justify="center")
@@ -90,7 +90,7 @@ def splash():
 
 @cli.command()
 def monitor():
-    """Monitoraggio Real-Time con estetica hacker."""
+    """Real-time monitoring view."""
     console.clear()
     layout = Layout()
     layout.split_column(Layout(name="header", size=3), Layout(name="body"), Layout(name="footer", size=3))
@@ -115,9 +115,9 @@ def monitor():
 @cli.command()
 @click.argument("target")
 def scan(target):
-    """Esegue una scansione forense con effetto crumble sul leak."""
+    """Run a forensic scan, rendering the leak with the crumble effect."""
     if not target:
-        console.print("[bold red]ERROR:[/bold red] Target mancante.")
+        console.print("[bold red]ERROR:[/bold red] Missing target.")
         sys.exit(1)
 
     try:

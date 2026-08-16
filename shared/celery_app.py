@@ -3,7 +3,7 @@ from celery import Celery
 from shared.config import settings
 from shared.utils.worker_tracing import setup_worker_tracing
 
-# Inizializza Tracing prima della creazione dell'app Celery
+# Initialise tracing before the Celery app is created
 setup_worker_tracing()
 
 if not settings.RABBITMQ_USER or not settings.RABBITMQ_PASS:
@@ -32,9 +32,9 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     # Backpressure & Bulkhead (#16, #18)
-    worker_prefetch_multiplier=1,  # Evita accumulo di task nel worker
+    worker_prefetch_multiplier=1,  # Prevents tasks piling up inside a worker
     task_acks_late=True,  # Ack solo a task completato
-    worker_concurrency=4,  # Numero di processi paralleli (ottimizzato per core Mac)
+    worker_concurrency=4,  # Number of parallel worker processes
     task_time_limit=300,  # Hard limit 5 min
     task_routes={
         "tasks.massive.*": {"queue": "massive"},

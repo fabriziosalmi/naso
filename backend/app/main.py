@@ -28,7 +28,7 @@ from .api.endpoints import ai, auth, identities, keywords, leaks, sec, system, t
 from .infrastructure.rabbitmq import rabbitmq_pool
 from .limiter import limiter
 
-# Configurazione Logging Professionale
+# Logging configuration
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", handlers=[logging.StreamHandler()]
 )

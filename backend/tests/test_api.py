@@ -77,7 +77,7 @@ async def test_read_system_status(client):
 
 @pytest.mark.asyncio
 async def test_system_status_no_error_field(client):
-    """G-09: /system/status non deve esporre dettagli interni di errore."""
+    """G-09: /system/status must not leak internal error details."""
     response = await client.get("/system/status")
     assert "error" not in response.json()
 
@@ -100,7 +100,7 @@ async def test_login_returns_token_and_cookie(client, admin_user):
     assert res.status_code == 200
     assert "access_token" in res.json()
     assert res.json()["token_type"] == "bearer"
-    # Cookie httpOnly deve essere impostato (C-05)
+    # The httpOnly cookie must be set (C-05)
     assert "naso_access_token" in res.cookies
 
 
@@ -152,7 +152,7 @@ async def test_list_leaks_unauthenticated(client):
 
 @pytest.mark.asyncio
 async def test_leaks_tenant_isolation(client, db, auth_headers, analyst_headers, tenant):
-    """Multi-tenancy: un analista non deve vedere i leak di un altro tenant."""
+    """Multi-tenancy: an analyst must not see another tenant's leaks."""
     other_tenant = Tenant(name="OtherCorp")
     db.add(other_tenant)
     await db.commit()
@@ -201,7 +201,7 @@ async def test_list_identities(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_update_profile_name_no_password_needed(client, auth_headers):
-    """Cambiare solo il full_name non richiede password."""
+    """Changing only full_name does not require the password."""
     res = await client.put(
         "/users/me",
         json={"full_name": "New Name"},
@@ -213,7 +213,7 @@ async def test_update_profile_name_no_password_needed(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_update_email_requires_current_password(client, auth_headers):
-    """C-12: cambiare email senza current_password deve essere rifiutato."""
+    """C-12: changing the email without current_password must be rejected."""
     res = await client.put(
         "/users/me",
         json={"email": "new@acme.local"},
@@ -258,7 +258,7 @@ async def test_create_keyword(client, auth_headers, tenant, admin_user):
 
 @pytest.mark.asyncio
 async def test_analyst_cannot_access_admin_routes(client, analyst_headers):
-    """RBAC: un analyst non deve accedere alle route /tenants/ (solo admin)."""
+    """RBAC: an analyst must not reach the /tenants/ routes (admin only)."""
     res = await client.get("/tenants/", headers=analyst_headers)
     assert res.status_code == 403
 
@@ -268,7 +268,7 @@ async def test_analyst_cannot_access_admin_routes(client, analyst_headers):
 
 @pytest.mark.asyncio
 async def test_shodan_rejects_invalid_ip(client, auth_headers):
-    """G-03: il parametro ip deve essere validato."""
+    """G-03: the ip parameter must be validated."""
     res = await client.get("/leaks/recon/shodan?ip=not_an_ip", headers=auth_headers)
     assert res.status_code == 400
     assert "Invalid IP address" in res.json()["detail"]

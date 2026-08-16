@@ -23,9 +23,9 @@ async def send_test_leak(client, task_id):
     sample = random.choice(LEAK_SAMPLES)
 
     try:
-        # Load Testing: Invio telemetria di carico alla pipeline
+        # Load testing: push load telemetry into the pipeline
         # Il test stressa direttamente i socket di ingestion
-        await asyncio.sleep(random.uniform(0.1, 0.5))  # Ritardo di rete controllato per il test
+        await asyncio.sleep(random.uniform(0.1, 0.5))  # Controlled network delay for the benchmark
 
         latency = (time.perf_counter() - start) * 1000
         return {"id": task_id, "latency": latency, "status": "OK", "sample": sample[:30]}

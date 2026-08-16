@@ -14,7 +14,7 @@ class CTIAdapters:
     @classmethod
     async def fetch_btc_balance(cls, btc_address: str) -> dict:
         """
-        [Blockchain OSINT] Ottiene il bilancio da blockchain.info senza chiavi.
+        [Blockchain OSINT] Fetch the balance from blockchain.info, no API key required.
         Utile per valutare il volume economico di un Ransomware gang target.
         """
         logger.info(f"[CTI ADAPTER] Fetching Blockchain data for {btc_address}")
@@ -46,7 +46,7 @@ class CTIAdapters:
     async def fetch_threatfox_ioc(cls, search_term: str) -> dict:
         """
         [AlienVault / ThreatFox fallback] Open POST keyless.
-        Ottimo per cercare correlazioni rapide di IP o Domain estratti dal Babel Node.
+        Useful for quickly correlating IPs or domains extracted by the Babel node.
         """
         logger.info(f"[CTI ADAPTER] Querying ThreatFox for {search_term}")
         url = "https://threatfox-api.abuse.ch/api/v1/"

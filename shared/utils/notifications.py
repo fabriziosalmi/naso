@@ -16,7 +16,7 @@ class NotificationService:
     @staticmethod
     def send_breach_alert(recipient_email, identity_identifier, leak_source, severity, is_priority=False):
         """
-        Invia un'email di alert per un'identità compromessa.
+        Send an alert email for a compromised identity.
         """
         smtp_host = os.getenv("SMTP_HOST", "smtp.naso.local")
         smtp_port = int(os.getenv("SMTP_PORT", 587))

@@ -453,7 +453,7 @@ async def get_identity_insights(
     identity_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """
-    Identity Insights (Q): Recupera l'analisi dettagliata di un'identità.
+    Identity Insights (Q): return the detailed analysis of an identity.
     """
     result = await db.execute(select(Identity).options(selectinload(Identity.leaks)).where(Identity.id == identity_id))
     identity = result.scalar_one_or_none()
@@ -496,7 +496,7 @@ async def toggle_identity_protection(
     identity_id: str, update: IdentityUpdate, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """
-    Identity Protection (#11): Marca un'identità come protetta (VIP).
+    Identity Protection (#11): mark an identity as protected (VIP).
     """
     result = await db.execute(select(Identity).where(Identity.id == identity_id))
     identity = result.scalar_one_or_none()

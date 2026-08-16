@@ -10,7 +10,7 @@ from .pipeline import process_potential_leak
 
 logger = logging.getLogger("naso-telegram")
 
-# Configurazione Telegram (#23)
+# Telegram configuration (#23)
 API_ID = os.getenv("TELEGRAM_API_ID")
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME", "naso_forensic")
@@ -21,15 +21,15 @@ from telethon import events
 @celery_app.task(bind=True, name="tasks.telegram.start_realtime_listener")
 def start_realtime_listener(self, tenant_id, channels: list):
     """
-    Avvia un listener real-time per una lista di canali Telegram (#23).
+    Start a real-time listener over a list of Telegram channels (#23).
     Questo task è a lunga durata e monitora i canali in tempo reale.
     """
     if not API_ID or not API_HASH:
         logger.error("[TELEGRAM] API_ID or API_HASH not set. Cannot start real-time listener.")
         return
 
-    # asyncio.get_event_loop() in Python 3.10+ con Celery prefork può ritornare
-    # un loop già chiuso o condiviso dal processo padre (G-06).
+    # On Python 3.10+ with Celery prefork, asyncio.get_event_loop() can return a
+    # loop that is already closed or shared with the parent process (G-06).
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(run_telethon_listener(tenant_id, channels))
@@ -39,12 +39,12 @@ def start_realtime_listener(self, tenant_id, channels: list):
 
 async def run_telethon_listener(tenant_id, channels):
     """
-    Esegue il client Telethon in modalità ascolto eventi.
+    Run the Telethon client in event-listening mode.
     """
     async with TelegramClient(SESSION_NAME, API_ID, API_HASH) as client:
         logger.info(f"[TELEGRAM REAL-TIME] Monitoring started for tenant {tenant_id} on channels: {channels}")
 
-        # Gestore eventi per nuovi messaggi
+        # Event handler for new messages
         @client.on(events.NewMessage(chats=channels))
         async def handler(event):
             if event.message.text:
@@ -58,19 +58,19 @@ async def run_telethon_listener(tenant_id, channels):
                         "from_id": str(event.message.from_id) if event.message.from_id else None,
                     },
                 }
-                # Invio alla pipeline
+                # Dispatch into the pipeline
                 process_potential_leak.delay(hit_data, event.message.text)
 
-        # Mantiene il client in esecuzione
+        # Keep the client running
         await client.run_until_disconnected()
 
 
 @celery_app.task(bind=True, name="tasks.telegram.monitor_channel")
 def monitor_telegram_channel(self, channel_username, tenant_id):
     """
-    Innesca il monitoraggio di un canale Telegram specifico.
-    In un sistema di produzione, questo potrebbe far partire un processo a lunga durata
-    o fare uno scraping periodico degli ultimi messaggi.
+    Trigger monitoring of a specific Telegram channel.
+    In a production system this would either start a long-running process or
+    periodically scrape the most recent messages.
     """
     if not API_ID or not API_HASH:
         logger.warning("[TELEGRAM] API_ID or API_HASH not set. Telegram Intelligence is in DRY-RUN mode.")
@@ -86,7 +86,7 @@ def monitor_telegram_channel(self, channel_username, tenant_id):
 
 async def scrape_telegram_channel(channel_username, tenant_id):
     """
-    Scrape degli ultimi messaggi da un canale Telegram.
+    Scrape the most recent messages from a Telegram channel.
     """
     async with TelegramClient(SESSION_NAME, API_ID, API_HASH) as client:
         logger.info(f"[TELEGRAM] Scraping channel: {channel_username} for tenant {tenant_id}")
@@ -94,7 +94,7 @@ async def scrape_telegram_channel(channel_username, tenant_id):
         try:
             async for message in client.iter_messages(channel_username, limit=50):
                 if message.text:
-                    # Prepariamo i dati per la pipeline
+                    # Prepare the payload for the pipeline
                     hit_data = {
                         "tenant_id": tenant_id,
                         "source": f"Telegram: {channel_username}",
@@ -105,7 +105,7 @@ async def scrape_telegram_channel(channel_username, tenant_id):
                         },
                     }
 
-                    # Invio asincrono alla pipeline di analisi Naso
+                    # Asynchronous dispatch into the NASO analysis pipeline
                     process_potential_leak.delay(hit_data, message.text)
 
             logger.info(f"[TELEGRAM] Scraping complete for {channel_username}")
@@ -116,7 +116,7 @@ async def scrape_telegram_channel(channel_username, tenant_id):
 @celery_app.task(name="tasks.telegram.process_message")
 def process_telegram_message(message_text, channel_name, tenant_id):
     """
-    Processa un singolo messaggio Telegram (usato ad esempio per i webhook/bot).
+    Process a single Telegram message (used by the webhook/bot path, for example).
     """
     hit_data = {
         "tenant_id": tenant_id,

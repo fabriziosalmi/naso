@@ -62,8 +62,10 @@ export default {
       { icon: 'github', link: 'https://github.com/fabriziosalmi/naso' }
     ],
     footer: {
-      message: 
-        'Released under the MIT License. · <a href="https://fabriziosalmi.github.io/privacy">Privacy &amp; legal</a>',
+      message:
+        'Released under the <a href="https://github.com/fabriziosalmi/naso/blob/main/LICENSE">AGPL-3.0 License</a>. · ' +
+        '<a href="https://github.com/fabriziosalmi/naso/blob/main/LEGAL.md">Acceptable use</a> · ' +
+        '<a href="https://fabriziosalmi.github.io/privacy">Privacy &amp; legal</a>',
       copyright: 'Copyright © 2026 Fabrizio Salmi'
     }
   }

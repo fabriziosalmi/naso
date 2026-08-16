@@ -11,10 +11,10 @@ logger = logging.getLogger("naso-mitre")
 class MitreMappingService:
     """
     Automated Mitre ATT&CK Mapping (CC).
-    Mappa i leak alle tecniche avversarie basandosi sul contenuto e sulla fonte.
+    Map leaks to adversary techniques based on their content and source.
     """
 
-    # Mapping Table SOTA (Semplificata per il prototipo)
+    # Mapping table (simplified for the prototype)
     KEYWORD_MAPPINGS = {
         "password": ["T1110", "T1555"],  # Brute Force, Credentials from web browsers
         "email": ["T1589"],  # Gather Victim Identity Information
@@ -27,7 +27,7 @@ class MitreMappingService:
     @classmethod
     async def map_leak_to_ttp(cls, db: AsyncSession, leak_id: str, content: str):
         """
-        Analizza il leak e associa le tecniche Mitre ATT&CK.
+        Analyse the leak and attach the matching MITRE ATT&CK techniques.
         """
         technique_ids = set()
 
@@ -40,13 +40,13 @@ class MitreMappingService:
         if not technique_ids:
             return 0
 
-        # 2. Associazione nel DB
-        # Verifica quali tecniche esistono già
+        # 2. Persist the association
+        # Check which techniques already exist
         result = await db.execute(select(MitreTechnique).where(MitreTechnique.id.in_(list(technique_ids))))
         existing_techniques = result.scalars().all()
 
         for tech in existing_techniques:
-            # Associazione idempotente
+            # Idempotent association
             check = await db.execute(
                 select(mitre_leaks).where(mitre_leaks.c.mitre_id == tech.id, mitre_leaks.c.leak_id == leak_id)
             )
