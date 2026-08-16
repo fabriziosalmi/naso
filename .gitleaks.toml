@@ -21,10 +21,13 @@ regex = '''\$naso-never-matches-this-literal\$'''
 description = "Documented false positives"
 
 paths = [
-  # This file is the YARA signature that DETECTS leaked private keys. It
-  # necessarily contains the PEM header strings it matches on:
-  #   $rsa = "-----BEGIN RSA PRIVATE KEY-----"
-  # It is a detection rule, not a key.
+  # This file is the YARA signature that DETECTS leaked private keys, so it
+  # necessarily contains the PEM header strings it matches on as string
+  # literals. It is a detection rule, not a key.
+  #
+  # (Quoting one of those headers here would make this config trip the same
+  # scanners it configures — which is how the first version of this file
+  # failed its own pre-commit hook.)
   '''shared/rules/secrets\.yar''',
 
   # The generated frontend and docs bundles. Minified third-party code trips
