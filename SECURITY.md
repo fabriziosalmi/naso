@@ -89,7 +89,13 @@ is not a production configuration. Before running NASO against real data,
 operators are expected to:
 
 - generate their own secrets (`python cli/generate_secrets.py`) and never reuse
-  the values from `.env.example`;
+  the values from `.env.example`. `.secrets-mock/` is written as a 0755
+  directory of 0444 files, mirroring how Docker mounts real secrets, so that a
+  `cap_drop: ALL` container — which has no CAP_DAC_OVERRIDE and so cannot
+  ignore file permissions — can read them regardless of which host user
+  created them. That is appropriate for development credentials on a
+  developer's own machine and is **not** a production secret store: in
+  production, mount real Docker secrets or a secret manager at `/run/secrets`;
 - set `NASO_COOKIE_SECURE=true` and terminate TLS in front of the API;
 - restrict `ALLOWED_CORS_ORIGINS` to the real frontend origin;
 - keep the exposed ports (Jaeger `16686`, MinIO console, RabbitMQ management)
