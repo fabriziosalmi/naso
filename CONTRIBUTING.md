@@ -86,7 +86,9 @@ docker exec naso-api pytest tests/ -v
 # Frontend unit tests
 cd frontend && npm run test -- --run
 
-# Frontend end-to-end (requires the Vite dev server on :5173)
+# Frontend end-to-end. Playwright builds the app and serves the bundle itself
+# on :5173 — you do not need `npm run dev` running, and it will reuse a server
+# already listening there when you are not in CI.
 cd frontend && npx playwright test
 
 # Everything at once (this is what `make test` runs)

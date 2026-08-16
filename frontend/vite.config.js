@@ -6,6 +6,22 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Shared by `server` (vite dev) and `preview` (the built bundle). The E2E
+// suite runs against `preview`, so without mirroring these the API calls the
+// app makes on mount would 404 there while working in dev — a difference that
+// only shows up as a confusing test failure.
+const apiProxy = {
+  '/auth': 'http://localhost:8000',
+  '/tenants': 'http://localhost:8000',
+  '/keywords': 'http://localhost:8000',
+  '/leaks': 'http://localhost:8000',
+  '/identities': 'http://localhost:8000',
+  '/yara': 'http://localhost:8000',
+  '/system': 'http://localhost:8000',
+  '/users': 'http://localhost:8000',
+  '/ai': 'http://localhost:8000',
+}
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -50,16 +66,9 @@ export default defineConfig({
     clearMocks: true,
   },
   server: {
-    proxy: {
-      '/auth': 'http://localhost:8000',
-      '/tenants': 'http://localhost:8000',
-      '/keywords': 'http://localhost:8000',
-      '/leaks': 'http://localhost:8000',
-      '/identities': 'http://localhost:8000',
-      '/yara': 'http://localhost:8000',
-      '/system': 'http://localhost:8000',
-      '/users': 'http://localhost:8000',
-      '/ai': 'http://localhost:8000',
-    }
-  }
+    proxy: apiProxy,
+  },
+  preview: {
+    proxy: apiProxy,
+  },
 })
