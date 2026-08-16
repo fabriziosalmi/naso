@@ -28,6 +28,10 @@ exclude = [
     "dist",
     "node_modules",
     "venv",
+    # ruff 0.16 formats Python inside Markdown fences. Documentation snippets
+    # are illustrative rather than shipped code, and collapsing a deliberately
+    # multi-line example onto one 96-column line makes the docs worse.
+    "*.md",
 ]
 
 # Set line length to 120

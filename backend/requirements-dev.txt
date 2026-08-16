@@ -19,6 +19,8 @@ pytest-timeout
 # yara at runtime -- only to run this suite.
 yara-python
 
-ruff
+# Pinned to the same version the CI quality gate installs, so a ruff
+# release cannot turn the gate red without anyone changing the code.
+ruff==0.16.3
 bandit
 pip-audit

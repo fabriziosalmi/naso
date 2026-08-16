@@ -21,8 +21,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Pinned deliberately. An unpinned `pip install ruff` turned this gate
+      # red on a day nobody touched the code: 0.16 began formatting Python
+      # inside Markdown fences and the job jumped from 107 files to 122.
+      # Keep this in step with backend/requirements-dev.txt.
       - name: Install Ruff
-        run: pip install ruff
+        run: pip install ruff==0.16.3
 
       - name: Draconian Format Check
         run: ruff format --check .
