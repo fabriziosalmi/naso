@@ -45,8 +45,20 @@ RUN pip install --no-cache-dir -r requirements.txt \
 #
 # After the requirements install, deliberately: doing it before lets the
 # requirements resolution walk a version back.
+#
+# The `<82` ceiling is load-bearing and must not be raised casually.
+# setuptools 82 removed `pkg_resources`, and playwright-stealth 1.x imports it
+# at module scope -- so shared/utils/stealth_browser.py raised
+# ModuleNotFoundError, shared/tasks/darkweb.py failed to import, and both the
+# worker and the API crash-looped. 78.1.1 is where CVE-2025-47273 is fixed and
+# 81 is the last release that still ships pkg_resources, so this range patches
+# the advisory and keeps the application importable. Verified per version, not
+# assumed.
+#
+# Raising the ceiling requires migrating stealth_browser.py to
+# playwright-stealth 2.x first; that migration is already on the backlog.
 RUN pip install --no-cache-dir --upgrade \
-        "setuptools>=78.1.1" "wheel>=0.46.2" \
+        "setuptools>=78.1.1,<82" "wheel>=0.46.2" \
  && (pip uninstall -y jaraco.context || true)
 
 # ensurepip's bundled wheels are an offline copy of pip/setuptools/wheel, kept

@@ -78,6 +78,37 @@ how Docker mounts real secrets. If you write secrets by hand, match those modes.
 
 ---
 
+## Elasticsearch crash-loops on the password file's permissions
+
+**Symptom.** `naso-search` restarts continuously, repeating:
+
+```
+ERROR: File /run/secrets/elastic_password from ELASTIC_PASSWORD_FILE must
+have file permissions 400 or 600, but actually has: 444
+```
+
+Everything else works, because Elasticsearch is optional — which is exactly why
+this can go unnoticed. `/system/health` is the thing that tells you: it reports
+`elasticsearch` as `degraded` rather than `disabled`.
+
+**Cause.** Elasticsearch validates the mode of its own password file and
+accepts only 400 or 600. That collides head-on with the 0444 the other secrets
+need: the application containers run `cap_drop: ALL`, have no
+`CAP_DAC_OVERRIDE`, and so cannot read a file they do not own.
+
+**Fix.** `generate_secrets.py` writes `elastic_password.txt` at 0600 and
+everything else at 0444. Elasticsearch can afford the stricter mode because its
+container keeps its capabilities and starts as root; nothing else reads that
+file, since the API and workers take `ES_PASSWORD` from `.env`.
+
+```bash
+rm -rf .secrets-mock && make bootstrap && docker compose up -d elasticsearch
+```
+
+If you write secrets by hand, this one is the exception to the 0444 rule.
+
+---
+
 ## Postgres, Redis or RabbitMQ crash-loops immediately
 
 **Symptom.** The datastore never reaches a healthy state; logs mention being

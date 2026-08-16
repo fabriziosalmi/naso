@@ -113,7 +113,10 @@ operators are expected to:
   directory of 0444 files, mirroring how Docker mounts real secrets, so that a
   `cap_drop: ALL` container — which has no CAP_DAC_OVERRIDE and so cannot
   ignore file permissions — can read them regardless of which host user
-  created them. That is appropriate for development credentials on a
+  created them. `elastic_password.txt` is the one exception, written 0600
+  because Elasticsearch validates the mode of its own password file and
+  crash-loops on anything but 400 or 600; its container keeps its capabilities,
+  so it can still read it. That is appropriate for development credentials on a
   developer's own machine and is **not** a production secret store: in
   production, mount real Docker secrets or a secret manager at `/run/secrets`;
 - set `NASO_COOKIE_SECURE=true` and terminate TLS in front of the API;

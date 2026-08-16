@@ -46,7 +46,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # application dependency. See the equivalent note in Dockerfile.backend for why
 # these are explicit floors and why pip itself is left alone.
 RUN pip install --no-cache-dir --upgrade \
-        "setuptools>=78.1.1" "wheel>=0.46.2" \
+        "setuptools>=78.1.1,<82" "wheel>=0.46.2" \
  && (pip uninstall -y jaraco.context || true)
 
 RUN rm -rf /usr/local/lib/python3.11/ensurepip

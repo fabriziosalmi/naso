@@ -59,12 +59,21 @@ Run this once, before `make up`. It:
 An existing `.env` is left alone. Delete it first if you want it regenerated.
 
 ::: warning `.secrets-mock/` is a development convenience
-It is written as a **0755 directory of 0444 files** — world-readable. That is
+It is written as a **0755 directory of 0444 files** (with one exception below)
+— world-readable. That is
 not carelessness: a `cap_drop: ALL` container has no `CAP_DAC_OVERRIDE`, so it
 cannot ignore file permissions the way root normally can, and a 0600 file owned
 by your host user is simply unreadable to it. World-readable development
 credentials on your own machine are an acceptable trade; in production, mount
 real Docker secrets or a secret manager at `/run/secrets` instead.
+
+**The exception is `elastic_password.txt`, written 0600.** Elasticsearch
+validates the mode of its own password file and refuses to start on anything
+but 400 or 600 — it crash-loops with *"must have file permissions 400 or 600,
+but actually has: 444"*. It can afford the stricter mode because, unlike the
+API and the workers, its container keeps its capabilities and starts as root.
+Nothing else reads that file: the API and workers take `ES_PASSWORD` from
+`.env`, since pydantic-settings matches secret files by field name.
 :::
 
 ## Settings reference
