@@ -33,7 +33,10 @@ exclude = [
 # Set line length to 120
 line-length = 120
 
-# Assume Python 3.9
+# The runtime is python:3.11-slim (both Dockerfiles). Raising this to py311
+# is worthwhile but is a code-modernization change of its own: it surfaces
+# 60 UP findings, some of which alter semantics (datetime.utcnow is naive,
+# datetime.now(UTC) is not). Tracked separately.
 target-version = "py39"
 
 [tool.ruff.format]
@@ -43,6 +46,13 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+# pytest-asyncio 1.x removed the custom `event_loop` fixture override that
+# backend/tests/conftest.py used to declare. Pinning both loop scopes to
+# "session" reproduces what that fixture provided: one event loop for the
+# whole run, so the session-scoped `db_engine` fixture and the function-scoped
+# tests that depend on it live on the same loop.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 # Register the custom markers we use so pytest stops emitting
 # "Unknown pytest.mark.*" warnings. Each line is "name: description".
 markers = [

@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.signals import worker_init
 
 from shared.config import settings
 from shared.utils.worker_tracing import setup_worker_tracing
@@ -6,8 +7,21 @@ from shared.utils.worker_tracing import setup_worker_tracing
 # Initialise tracing before the Celery app is created
 setup_worker_tracing()
 
-if not settings.RABBITMQ_USER or not settings.RABBITMQ_PASS:
-    raise ValueError("CRITICAL: RABBITMQ credentials missing in config/env!")
+
+@worker_init.connect
+def _require_broker_credentials(**_):
+    """Refuse to start a worker without broker credentials.
+
+    This check used to run at module import, which meant that merely
+    importing the Celery app — as the API does, and as every unit test that
+    touches the FastAPI app does transitively — raised unless RabbitMQ was
+    configured. Binding it to ``worker_init`` keeps the fail-fast exactly
+    where it matters (a worker booting against a misconfigured broker) while
+    leaving imports side-effect free.
+    """
+    if not settings.RABBITMQ_USER or not settings.RABBITMQ_PASS:
+        raise ValueError("CRITICAL: RABBITMQ credentials missing in config/env!")
+
 
 celery_app = Celery(
     "naso_workers",

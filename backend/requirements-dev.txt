@@ -8,9 +8,16 @@
 -r requirements.txt
 
 pytest
-pytest-asyncio
+# 1.x removed the event_loop fixture override this suite relied on; the
+# replacement is asyncio_default_*_loop_scope in pyproject.toml.
+pytest-asyncio>=0.24,<1.0
 pytest-cov
 pytest-timeout
+
+# test_workers.py imports shared.tasks.pipeline, which pulls in
+# shared/utils/analyzer.py and therefore yara. The API image does not need
+# yara at runtime -- only to run this suite.
+yara-python
 
 ruff
 bandit

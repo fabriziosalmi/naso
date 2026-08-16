@@ -26,7 +26,7 @@ from shared.domain.services.merge_proposer import (
 from shared.domain.services.risk_scoring_v2 import mark_dirty
 from shared.models import Identity, LeakHit, MergeEvent
 from shared.schemas import Identity as IdentitySchema
-from shared.schemas import IdentityInsights, IdentityUpdate
+from shared.schemas import IdentityCreate, IdentityInsights, IdentityUpdate
 from shared.utils.audit import AuditLogger
 
 from ..deps import get_current_user
@@ -587,9 +587,14 @@ async def search_identities(
 
 @router.post("/")
 async def create_identity(
-    identifier: str, type: str = "person", db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
+    body: IdentityCreate, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)
 ):
     """Create — or re-observe — a monitored identity.
+
+    Takes a JSON body. It previously declared ``identifier`` and ``type`` as
+    bare parameters, which FastAPI reads from the query string, so the
+    frontend (``useNasoStore.js`` posts ``{identifier, type}``) got a 422 on
+    every call.
 
     Routed through :func:`upsert_identity` so the canonical form
     (normalized_identifier) is always populated, repeat creates by different
@@ -598,7 +603,7 @@ async def create_identity(
     CONFLICT DO NOTHING path deterministic).
     """
     try:
-        identity = await upsert_identity(db, current_user.tenant_id, identifier, type)
+        identity = await upsert_identity(db, current_user.tenant_id, body.identifier, body.type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -609,7 +614,7 @@ async def create_identity(
         action="CREATE_IDENTITY",
         resource_type="identity",
         resource_id=identity.id,
-        details={"identifier": identifier, "type": type},
+        details={"identifier": body.identifier, "type": body.type},
     )
     await db.commit()
     return identity

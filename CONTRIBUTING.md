@@ -21,8 +21,11 @@ individuals will be declined regardless of code quality.
 **Never contribute real data.** Fixtures, tests, screenshots, seed data, and
 issue reports must not contain real personal data, real credentials, or excerpts
 from real breach corpora — not even redacted ones. Use synthetic values. The
-existing fixtures use `.local` domains (`acme.local`, `corp.local`) and
-generated identities; follow that convention. A pull request containing real
+existing fixtures use `.example.com` domains (`acme.example.com`,
+`corp.example.com`) and generated identities; follow that convention.
+Note that `email-validator` rejects the special-use TLDs `local`, `test`,
+`localhost`, `invalid`, `arpa`, and `onion`, so an address under one of
+those will fail schema validation. A pull request containing real
 personal data will be closed and the branch deleted rather than merged.
 
 ## Development setup

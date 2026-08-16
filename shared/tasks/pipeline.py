@@ -196,7 +196,7 @@ def process_potential_leak(self, hit_data, raw_content):
 
 async def store_and_index(hit_data, raw_content):
     """
-    Salvataggio e indicizzazione protetti da Circuit Breaker (#2).
+    Storage and indexing, guarded by a circuit breaker (#2).
     """
     # P-15: encode once, reuse bytes in both MinIO upload and avoid double-encoding
     content_bytes = raw_content.encode("utf-8")
