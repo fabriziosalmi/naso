@@ -31,14 +31,16 @@
 
 ## Key Features
 
-**🛡️ Draconian Zero-Trust Architecture**
-Runs via strictly isolated Docker containers (`cap_drop: ALL`, `no-new-privileges:true`, `read_only` filesystem). Secrets are injected via Docker Secrets into ephemeral RAM mounts. Cryptographic sessions use **EdDSA (Ed25519)** with Redis JTI Blacklisting for instant token revocation.
+**🛡️ Hardened Container Baseline**
+The API and worker containers run with `cap_drop: ALL`, `no-new-privileges:true`, and a `read_only` root filesystem. Service credentials are delivered through the Docker Secrets mechanism at `/run/secrets` rather than as environment variables. Cryptographic sessions use **EdDSA (Ed25519)** with Redis JTI blacklisting for instant token revocation.
+
+> The shipped `docker-compose.yml` is a development and evaluation baseline, not a production configuration — it mounts generated secrets from a local directory and publishes management ports. See [SECURITY.md](SECURITY.md#operator-responsibilities) before running it against real data.
 
 **⚡ High-Performance Ingestion API**
 The ingest webhook (`POST /leaks/ingest/webhook`) uses `orjson` and `aio_pika` to stream raw unstructured data directly into RabbitMQ. Processing is decoupled from the API via Celery workers.
 
-**🧠 Local AI with Semantic Caching**
-The backend AI caches semantically similar threat vectors in Redis — your GPU performs analytics only when novel TTPs are observed. The React frontend communicates via SSE with Exponential Backoff retry logic.
+**🧠 Local AI with Response Caching**
+Answers are cached in Redis under a SHA-256 key over the question and conversation history, so a repeated question returns without touching the model. The React frontend consumes the stream over SSE with exponential-backoff-and-jitter reconnection.
 
 **🔍 Identity Correlation Engine**
 Master identity merging clusters overlapping indicators across breach sources. Risk scoring is computed from breadth, depth, and recency of exposure. Protected (VIP) identities receive elevated monitoring.
@@ -86,43 +88,77 @@ graph TD
 | Dark Web | Tor cluster (5 nodes) + HAProxy |
 | AI | Local LLM via SSE (Ollama / LM Studio compatible) |
 
-## Zero-to-Hero in 60 Seconds
+## Getting Started
+
+Requirements: Docker with Compose v2, Python 3.11, Node 20.
 
 ```bash
 git clone https://github.com/fabriziosalmi/naso.git
 cd naso
+
+# 1. Generate the local secrets. This writes .secrets-mock/, which
+#    docker-compose mounts at /run/secrets. Compose will not start without it.
+python cli/generate_secrets.py
+
+# 2. Create your .env and replace every CHANGE_ME in it.
 cp .env.example .env
+
+# 3. Bring up Postgres, Redis, Elasticsearch, MinIO, RabbitMQ, Jaeger, the
+#    Tor cluster, the API, and the workers.
 make up
-make demo
 ```
 
-The platform will be available at `http://localhost:5173`.
-
-On first run, set the `NASO_ADMIN_PASSWORD` environment variable (or in `.env`) before running `make demo`, then initialize the admin user:
+The API is then on `http://localhost:8000`. **The frontend is not part of the
+Compose stack** — it runs as a Vite dev server on the host:
 
 ```bash
-export NASO_ADMIN_EMAIL="admin@naso.local"
+cd frontend
+npm install
+npm run dev          # http://localhost:5173
+```
+
+Provision the first admin and seed synthetic data:
+
+```bash
+export NASO_ADMIN_EMAIL="admin@naso.example.com"
 export NASO_ADMIN_PASSWORD="your_secure_password_here"
 docker exec naso-api python init_db.py
 make demo
 ```
 
+> Do not give the admin an address under `.local`, `.test`, `.localhost`,
+> `.invalid`, `.arpa`, or `.onion`. Those are special-use TLDs and the API's
+> `EmailStr` validation rejects them, so `/users/me` would fail for that
+> account.
+
 ## Environment Variables
+
+[`.env.example`](.env.example) is the complete, annotated reference. The
+variables you are most likely to touch:
 
 | Variable | Description |
 |----------|-------------|
-| `NASO_ADMIN_EMAIL` | Initial admin email (default: `admin@naso.local`) |
-| `NASO_ADMIN_PASSWORD` | Initial admin password (required on first run) |
-| `DATABASE_URL` | PostgreSQL connection string |
+| `NASO_ADMIN_EMAIL` | Initial admin email (default: `admin@naso.example.com`) |
+| `NASO_ADMIN_PASSWORD` | Initial admin password — **required** on first run |
+| `DATABASE_URL` | PostgreSQL connection string used by the application |
+| `REDIS_HOST` | Redis connection URL, used for the JWT blacklist |
+| `RABBITMQ_HOST` / `RABBITMQ_USER` / `RABBITMQ_PASS` | Celery broker — a worker will not start without the credentials |
 | `AI_ENDPOINT` | Local LLM endpoint (e.g. `http://host.docker.internal:1234/v1`) |
 | `AI_MODEL` | LLM model name (default: `gemma-4-e2b-it`) |
+| `NASO_OTEL_ENABLED` | Opt in to OTLP tracing. Off by default |
 | `SOAR_WEBHOOK_URL` | Optional STIX/JSON webhook fired on `severity_score >= 80` |
-| `REDIS_URL` | Redis connection string |
-| `RABBITMQ_URL` | RabbitMQ connection string |
+| `NASO_COOKIE_SECURE` | Set to `true` in production, behind HTTPS |
 
-## CI Validation
+Note that several services take one variable to provision the container and a
+different one for the application to connect with (`ELASTIC_PASSWORD` vs
+`ES_PASSWORD`, `RABBIT_USER` vs `RABBITMQ_USER`, `MINIO_ROOT_USER` vs
+`MINIO_ACCESS_KEY`). `.env.example` marks every such pair.
 
-The `main` branch is protected by a strict validation pipeline:
+## Validation
+
+`cli/validate.sh` runs the whole suite — backend pytest inside the API
+container, frontend Vitest, and the Playwright end-to-end flow — and is what CI
+runs on every pull request against `main`:
 
 ```bash
 ./cli/validate.sh

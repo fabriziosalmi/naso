@@ -18,13 +18,13 @@ hero:
 
 features:
   - title: Model Context Protocol
-    details: Native MCP capabilities to bind Claude Desktop directly to the PostgreSQL intelligence lake. Completely offline, mathematically precise.
+    details: "Native MCP support binds an MCP-capable client directly to the PostgreSQL intelligence lake. Inference can run entirely on your own hardware, so payloads never leave your infrastructure."
   - title: Massive Data Scalability
-    details: Async Celery worker-partitioning with OOM-safe streaming algorithms. Crush 100GB datasets seamlessly with hardware acceleration.
+    details: "Async Celery worker partitioning with OOM-safe streaming. Large dumps are read line by line from a local file or URL, and only the chunks that match are forwarded to the pipeline."
   - title: Identity Correlation
-    details: Auto-merging neural graphs cluster threat actor aliases, email patterns, and Tor domains automatically.
+    details: "SimHash fingerprints and Hamming-distance clustering merge threat actor aliases, email patterns, and Tor domains, with every merge recorded in a reversible audit event."
   - title: Zero-Trust Telemetry
-    details: Granular tenant-isolation coupled with immutable forensic ledgers and true local database latency checks.
+    details: "Per-tenant isolation, a hash-chained audit log whose integrity can be verified on demand, and local database latency checks."
   - title: Babel NLP Extractor
     details: Intelligent pattern matching extracts IOCs, Cryptowallets, and keys across multilingual deep web payloads.
   - title: SOAR Integration

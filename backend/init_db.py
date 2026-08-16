@@ -26,7 +26,10 @@ async def init():
 
         # Create the admin user if it does not exist
         # SECURITY: set NASO_ADMIN_EMAIL and NASO_ADMIN_PASSWORD env vars in production
-        admin_email = os.environ.get("NASO_ADMIN_EMAIL", "admin@naso.local")
+        # The default deliberately avoids `.local`: email-validator treats it as
+        # a special-use TLD, so an admin provisioned under it would fail the
+        # EmailStr response validation on /users/me.
+        admin_email = os.environ.get("NASO_ADMIN_EMAIL", "admin@naso.example.com")
         admin_password = os.environ.get("NASO_ADMIN_PASSWORD")
         result = await db.execute(select(User).where(User.email == admin_email))
         admin_user = result.scalar_one_or_none()
