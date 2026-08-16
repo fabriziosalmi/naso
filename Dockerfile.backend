@@ -23,4 +23,10 @@ RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pyth
 COPY backend/ ./
 COPY shared/ ./shared/
 
+# /system/status is unauthenticated and touches the database, so it is a real
+# readiness signal rather than a liveness ping. Uses urllib because the slim
+# image ships no curl, and 127.0.0.1 because TrustedHostMiddleware allows it.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=40s --retries=6 \
+    CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/system/status', timeout=4).status == 200 else 1)"
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

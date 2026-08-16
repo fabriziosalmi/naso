@@ -1,0 +1,29 @@
+# Opt-in overlay for LXC-privileged Docker hosts.
+#
+# Apply it explicitly:
+#     docker compose -f docker-compose.yml -f docker-compose.lxc.yml up -d
+#
+# This file was previously named docker-compose.override.yml. Compose applies
+# an "override" file automatically, so every `make up` on every machine was
+# silently dropping `cap_drop: ALL` from these three services — including for
+# people who only read the hardening claims in the README. It is now opt-in,
+# and docker-compose.override.yml is gitignored so it can serve its intended
+# purpose as a personal, uncommitted local customization.
+#
+# These capability grants let Postgres, Redis, and RabbitMQ chown their data
+# directories on hosts where the default user mapping does not allow it. Do
+# not apply this overlay unless your host actually needs it.
+
+services:
+  db:
+    cap_drop: []
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER, SETFCAP]
+  redis:
+    cap_drop: []
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER, SETFCAP]
+  rabbitmq:
+    cap_drop: []
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER, SETFCAP]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD}

@@ -96,12 +96,11 @@ Requirements: Docker with Compose v2, Python 3.11, Node 20.
 git clone https://github.com/fabriziosalmi/naso.git
 cd naso
 
-# 1. Generate the local secrets. This writes .secrets-mock/, which
-#    docker-compose mounts at /run/secrets. Compose will not start without it.
-python cli/generate_secrets.py
+# 1. Generate .secrets-mock/ (docker-compose mounts it at /run/secrets and
+#    will not start without it) and create .env from the template.
+make bootstrap
 
-# 2. Create your .env and replace every CHANGE_ME in it.
-cp .env.example .env
+# 2. Edit .env and replace every CHANGE_ME.
 
 # 3. Bring up Postgres, Redis, Elasticsearch, MinIO, RabbitMQ, Jaeger, the
 #    Tor cluster, the API, and the workers.

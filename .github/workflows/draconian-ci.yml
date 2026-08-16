@@ -61,8 +61,9 @@ jobs:
           # generate_secrets.py imports cryptography; do not rely on whatever
           # the runner image happens to ship.
           pip install -r cli/requirements.txt
-          python3 cli/generate_secrets.py
-          cp .env.example .env
+          # Same target the README tells a new user to run, so a break in it
+          # fails CI instead of only failing them.
+          make bootstrap
 
       - name: Ignition Engine (Docker Compose)
         run: |

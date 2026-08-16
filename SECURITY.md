@@ -94,4 +94,20 @@ operators are expected to:
 - restrict `ALLOWED_CORS_ORIGINS` to the real frontend origin;
 - keep the exposed ports (Jaeger `16686`, MinIO console, RabbitMQ management)
   off any untrusted network;
+- rebuild the Tor images with your own control-port password —
+  `infrastructure/tor/Dockerfile.tor` defaults to `naso-dev`, which must be
+  overridden in tandem with the worker's
+  `NASO_DARKWEB_TOR_CONTROL_PASSWORD`:
+
+  ```
+  docker compose build --build-arg TOR_CONTROL_PASSWORD=<strong-pw>
+  ```
+
+- be aware that the application containers currently run as **root** inside
+  the container. `cap_drop: ALL`, `no-new-privileges:true`, and a `read_only`
+  root filesystem limit what that buys an attacker, but a dedicated non-root
+  UID is not yet in place. Treat container escape as a live risk and do not
+  run the stack on a host that carries anything else you care about;
+- do not apply `docker-compose.lxc.yml` unless your host genuinely needs it —
+  it restores capabilities to Postgres, Redis, and RabbitMQ;
 - treat the database as containing personal data — see [LEGAL.md](LEGAL.md).

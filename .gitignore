@@ -42,3 +42,11 @@ ISSUES.md
 
 # Workspace settings - 2026-05-07
 tmp/
+
+# Playwright output
+frontend/playwright-report/
+frontend/test-results/
+
+# Personal, uncommitted Compose customization. The LXC capability overlay
+# that used to live here is now docker-compose.lxc.yml, applied explicitly.
+docker-compose.override.yml

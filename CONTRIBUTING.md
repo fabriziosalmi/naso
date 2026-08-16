@@ -36,12 +36,11 @@ Requirements: Docker with Compose v2, Python 3.11, Node 20.
 git clone https://github.com/fabriziosalmi/naso.git
 cd naso
 
-# 1. Generate local secrets. This writes .secrets-mock/, which docker-compose
-#    mounts at /run/secrets. Compose will not start without it.
-python cli/generate_secrets.py
+# 1. Generate .secrets-mock/ (docker-compose mounts it at /run/secrets and
+#    will not start without it) and create .env from the template.
+make bootstrap
 
-# 2. Create your .env from the template and fill in the CHANGE_ME values.
-cp .env.example .env
+# 2. Edit .env and fill in the CHANGE_ME values.
 
 # 3. Bring up the backing services, API, and workers.
 make up
@@ -80,7 +79,7 @@ cd frontend && npm run test -- --run
 # Frontend end-to-end (requires the Vite dev server on :5173)
 cd frontend && npx playwright test
 
-# Everything at once
+# Everything at once (this is what `make test` runs)
 ./cli/validate.sh
 ```
 
