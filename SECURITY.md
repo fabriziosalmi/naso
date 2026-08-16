@@ -114,6 +114,10 @@ operators are expected to:
   root filesystem limit what that buys an attacker, but a dedicated non-root
   UID is not yet in place. Treat container escape as a live risk and do not
   run the stack on a host that carries anything else you care about;
-- do not apply `docker-compose.lxc.yml` unless your host genuinely needs it —
-  it restores capabilities to Postgres, Redis, and RabbitMQ;
+- note that Postgres, Redis, and RabbitMQ are granted CHOWN, SETUID, SETGID,
+  DAC_OVERRIDE, FOWNER and SETFCAP in docker-compose.yml. Their official
+  entrypoints need those to chown their data directory and drop from root to
+  the service user; without them the containers crash-loop. The API and
+  worker containers, which run application code, keep `cap_drop: ALL` with
+  nothing added back;
 - treat the database as containing personal data — see [LEGAL.md](LEGAL.md).

@@ -100,10 +100,10 @@ jobs:
         run: |
           echo "── container state ─────────────────────────────"
           docker compose ps
-          echo "── naso-api logs ───────────────────────────────"
-          docker compose logs --no-color --tail=120 backend
-          echo "── worker logs ─────────────────────────────────"
-          docker compose logs --no-color --tail=60 worker-pipeline
+          for svc in db redis elasticsearch rabbitmq minio backend worker-pipeline; do
+            echo "── $svc ────────────────────────────────────────"
+            docker compose logs --no-color --tail=40 "$svc" 2>&1 | tail -40
+          done
 
       - name: Pipeline Structural Verification (cli/validate.sh)
         run: |

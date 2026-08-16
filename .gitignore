@@ -47,6 +47,6 @@ tmp/
 frontend/playwright-report/
 frontend/test-results/
 
-# Personal, uncommitted Compose customization. The LXC capability overlay
-# that used to live here is now docker-compose.lxc.yml, applied explicitly.
+# Personal, uncommitted Compose customization. Compose applies a file with
+# this name automatically, so it must never be committed.
 docker-compose.override.yml

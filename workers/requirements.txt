@@ -8,7 +8,9 @@ redis
 # Scraping and browser automation
 requests
 playwright
-playwright-stealth
+# 2.x replaced the stealth_async() helper that shared/utils/stealth_browser.py
+# imports with a Stealth class. Pinned until that call site is migrated.
+playwright-stealth==1.0.6
 beautifulsoup4
 
 # Analysis

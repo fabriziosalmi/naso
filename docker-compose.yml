@@ -13,6 +13,21 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # These official images start as root to chown their data directory and
+    # then drop to their service user, which needs SETUID/SETGID; the chown
+    # itself needs CHOWN/FOWNER/DAC_OVERRIDE. With `cap_drop: ALL` and nothing
+    # added back they crash-loop before the server ever starts (redis exits
+    # 127 — its entrypoint cannot exec). These grants used to live in a
+    # docker-compose.override.yml, which Compose applied automatically and
+    # invisibly; they are stated here instead. The API and worker containers,
+    # which run application code, keep `cap_drop: ALL` with nothing added.
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETFCAP
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     networks:
@@ -33,6 +48,21 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # These official images start as root to chown their data directory and
+    # then drop to their service user, which needs SETUID/SETGID; the chown
+    # itself needs CHOWN/FOWNER/DAC_OVERRIDE. With `cap_drop: ALL` and nothing
+    # added back they crash-loop before the server ever starts (redis exits
+    # 127 — its entrypoint cannot exec). These grants used to live in a
+    # docker-compose.override.yml, which Compose applied automatically and
+    # invisibly; they are stated here instead. The API and worker containers,
+    # which run application code, keep `cap_drop: ALL` with nothing added.
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETFCAP
     networks:
       - naso-net
 
@@ -89,6 +119,21 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # These official images start as root to chown their data directory and
+    # then drop to their service user, which needs SETUID/SETGID; the chown
+    # itself needs CHOWN/FOWNER/DAC_OVERRIDE. With `cap_drop: ALL` and nothing
+    # added back they crash-loop before the server ever starts (redis exits
+    # 127 — its entrypoint cannot exec). These grants used to live in a
+    # docker-compose.override.yml, which Compose applied automatically and
+    # invisibly; they are stated here instead. The API and worker containers,
+    # which run application code, keep `cap_drop: ALL` with nothing added.
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETFCAP
     networks:
       - naso-net
     healthcheck:

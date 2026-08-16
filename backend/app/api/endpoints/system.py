@@ -1,3 +1,4 @@
+import logging
 import time
 
 from fastapi import APIRouter, Depends
@@ -10,6 +11,8 @@ from shared.models import AuditLog
 from shared.utils.audit_chain import verify_chain
 
 from ..deps import get_current_user
+
+logger = logging.getLogger("naso-core")
 
 router = APIRouter()
 
@@ -79,4 +82,7 @@ async def get_status(db: AsyncSession = Depends(get_db)):
     except Exception:
         # Never expose internal detail (connection string, stack trace, DB hostname)
         # to the client — return a generic status to avoid information disclosure.
+        # It still has to be logged: a silently swallowed exception meant a
+        # degraded API could not explain itself to its own operator.
+        logger.exception("System status probe failed")
         return {"status": "degraded", "latency_ms": {"total": -1}}
