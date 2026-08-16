@@ -1,3 +1,17 @@
+# Dependabot configuration.
+#
+# Tuning note: the first version of this file opened sixteen pull requests the
+# moment it landed, because every ecosystem was allowed to raise majors and
+# there are seven ecosystems here. Majors on this project are not routine — a
+# Python base image bump changes the runtime for both images, an Elasticsearch
+# client major crosses a server it has to talk to, a Vite major rebuilds the
+# whole frontend toolchain. Each deserves a deliberate change with its own
+# verification, not an auto-opened PR competing with fifteen others.
+#
+# So: minor and patch updates are grouped and automatic, majors are ignored
+# here and done by hand. Security updates are unaffected by these ignore rules
+# and will still be raised — that is the behaviour worth keeping automatic.
+
 version: 2
 
 updates:
@@ -7,14 +21,15 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: ["dependencies", "python"]
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      opentelemetry:
-        patterns: ["opentelemetry-*"]
       python-minor-and-patch:
         update-types: ["minor", "patch"]
 
@@ -23,10 +38,13 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     labels: ["dependencies", "python"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       python-minor-and-patch:
         update-types: ["minor", "patch"]
@@ -36,10 +54,13 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     labels: ["dependencies", "python"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       python-minor-and-patch:
         update-types: ["minor", "patch"]
@@ -50,13 +71,15 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: ["dependencies", "javascript"]
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      # Majors stay separate so they get reviewed on their own.
       npm-minor-and-patch:
         update-types: ["minor", "patch"]
 
@@ -64,31 +87,51 @@ updates:
     directory: /docs
     schedule:
       interval: monthly
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 1
     labels: ["dependencies", "javascript", "documentation"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # vitepress 2 is still alpha; the three build-time advisories it would
+      # clear are a worse trade than an alpha static site generator. Revisit
+      # when it goes stable — see the note in the phase-3 commit.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       docs-minor-and-patch:
         update-types: ["minor", "patch"]
 
   # ── CI and container base images ────────────────────────────────────────────
+  # Monthly and grouped: action majors arrive in bursts and are cheap to take
+  # together once the pipeline is green.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
+    open-pull-requests-limit: 1
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directories:
       - /
       - /infrastructure/tor
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
+    open-pull-requests-limit: 1
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(docker)"
+    ignore:
+      # The Python base image is pinned to 3.11 on purpose: it is what
+      # pyproject.toml targets and what the whole dependency set is resolved
+      # against. Moving it is a runtime migration, not a dependency bump.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      docker:
+        patterns: ["*"]
