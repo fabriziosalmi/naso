@@ -1,4 +1,4 @@
-FROM alpine:3.22
+FROM alpine:3.24
 
 # Use http mirror to avoid TLS issues during build in some environments.
 RUN sed -i 's/https/http/g' /etc/apk/repositories && \
