@@ -4,26 +4,50 @@ NASO exposes an asynchronous RESTful API built on FastAPI. All responses follow 
 
 ## Authentication
 
-All endpoints (except system health checks) require an **OAuth2 Bearer Token** obtained via the login endpoint.
+All endpoints except the two health checks require authentication. Log in to
+obtain a token:
 
 ```bash
 curl -X POST http://localhost:8000/auth/login \
      -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "username=admin@naso.local&password=your_password"
+     -d "username=admin@naso.example.com&password=your_password"
 ```
 
 **Response:**
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "access_token": "eyJhbGciOiJFZERTQSIs...",
   "token_type": "bearer"
 }
 ```
 
-Include the token in all subsequent requests:
+::: tip Avoid a `.local` address
+`email-validator` rejects the special-use TLDs `local`, `test`, `localhost`,
+`invalid`, `arpa` and `onion`. An admin provisioned under one of them
+authenticates fine and then fails response validation on `/users/me`.
+`backend/init_db.py` defaults to `admin@naso.example.com` for this reason.
+:::
+
+There are two ways to present the token, and they behave differently:
+
+**`Authorization: Bearer <access_token>`** — for API clients. Nothing else is
+required.
+
 ```
 Authorization: Bearer <access_token>
 ```
+
+**Cookies** — for browsers. The same login response also sets `naso_access_token`
+(`httpOnly`, so JavaScript cannot read it) and a `naso_csrf` companion that it
+deliberately can. A cookie-authenticated request that changes state must echo
+that companion back:
+
+```
+X-Naso-CSRF: <value of the naso_csrf cookie>
+```
+
+Without it the request is rejected with `403`. Safe methods are exempt, and so
+is `/auth/login` itself. See [Security Model](/guide/security#csrf).
 
 ## Endpoints
 

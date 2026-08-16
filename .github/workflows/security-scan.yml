@@ -75,17 +75,34 @@ jobs:
         with:
           node-version: "20"
 
-      # --audit-level=high, not the default. The docs site sits on vitepress 1
-      # and carries build-time moderates that only vitepress 2 would clear;
-      # vitepress 2 is still alpha, so taking it is the worse trade. Gating on
-      # high keeps this job meaningful instead of permanently red — see the
-      # note in .github/dependabot.yml.
+      # --audit-level=high, not the default: a moderate advisory in a build
+      # tool is worth knowing about but is not worth blocking a merge on.
       - name: Audit frontend
         working-directory: frontend
         run: npm audit --audit-level=high
 
-      - name: Audit docs
+      # --omit=dev for the docs site specifically, and it is not a way of
+      # dodging a red job. docs/package.json declares *no* production
+      # dependencies at all — vitepress and vue are both devDependencies, and
+      # what ships is a directory of static HTML built from them. Nothing in
+      # docs/node_modules ever executes anywhere a reader can reach.
+      #
+      # Without this the gate is permanently red on GHSA-67mh-4wv8-2f99: an
+      # esbuild advisory about the *development server* accepting requests from
+      # any origin, reaching us transitively through vite through vitepress 1,
+      # with "No fix available". Clearing it needs vitepress 2, which is still
+      # alpha — an alpha static site generator is the worse trade. A gate that
+      # cannot go green teaches everyone to ignore it.
+      - name: Audit docs (what actually ships)
         if: always()
+        working-directory: docs
+        run: npm audit --omit=dev --audit-level=high
+
+      # The dev-dependency advisories still get printed, they just do not fail
+      # the build. Visible and non-blocking beats suppressed.
+      - name: Audit docs build toolchain (informational)
+        if: always()
+        continue-on-error: true
         working-directory: docs
         run: npm audit --audit-level=high
 
@@ -110,6 +127,12 @@ jobs:
       # there is no action version to keep in step with the scanner version,
       # and the Docker socket mount is what lets it read the image just built.
       #
+      # The tag is pinned, not :latest. A scanner that updates itself makes the
+      # weekly run fail for reasons that have nothing to do with the code — the
+      # exact failure mode that an unpinned ruff already caused once on the
+      # merge gate. Dependabot's docker ecosystem does not read workflow files,
+      # so bumping this is a manual and deliberate act.
+      #
       # Two passes: a SARIF report that is always produced and kept as an
       # artifact, and a gate that fails only on HIGH/CRITICAL findings which
       # actually have a fix available. A base-image CVE with no fixed version
@@ -126,7 +149,7 @@ jobs:
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD/trivy-out:/out" \
-            aquasec/trivy:latest image \
+            aquasec/trivy:0.74.0 image \
               --format sarif --output /out/${{ matrix.image }}.sarif \
               --severity CRITICAL,HIGH \
               ${{ matrix.image }}:scan
@@ -143,7 +166,7 @@ jobs:
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image \
+            aquasec/trivy:0.74.0 image \
               --format table \
               --severity CRITICAL,HIGH \
               --ignore-unfixed \
@@ -158,7 +181,9 @@ jobs:
 
       # The upstream gitleaks-action needs a licence key for organisation-owned
       # repositories. Running the scanner's own image sidesteps that entirely
-      # and pins the behaviour to the tool rather than to a wrapper.
+      # and pins the behaviour to the tool rather than to a wrapper. The tag is
+      # pinned for the same reason as Trivy's: a scanner whose rule set moves
+      # under you turns a quiet week into a red build.
       #
       # --no-git: the working tree, not the history. History was audited by
       # hand before publication and the only matches are documented development
@@ -169,7 +194,12 @@ jobs:
       # been committed. Scanning history here would make this job permanently
       # red on those four known strings and train everyone to ignore it; what
       # is worth gating is that nothing new arrives.
+      #
+      # --config points at the same .gitleaks.toml the pre-commit hook picks
+      # up, so a finding suppressed locally is suppressed here and vice versa.
+      # Every allowlist entry in it carries its reason.
       - name: Gitleaks
         run: |
-          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
-            detect --no-git --source /repo --redact --verbose --no-banner
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
+            detect --no-git --source /repo --config /repo/.gitleaks.toml \
+            --redact --verbose --no-banner

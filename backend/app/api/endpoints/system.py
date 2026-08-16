@@ -106,7 +106,22 @@ _HEALTH_PROBE_TIMEOUT = 3.0
 
 
 async def _timed(name: str, probe):
-    """Run one probe under a timeout and reduce it to (status, latency_ms)."""
+    """Run one probe under a timeout and reduce it to (status, latency_ms).
+
+    The probe contract is three-valued:
+
+      ``True``   reachable
+      ``False``  reached and answered unhealthy — a client that reports failure
+                 by return value rather than by raising
+      ``None``   not configured in this deployment
+
+    ``False`` has to be distinguished from ``True`` explicitly rather than
+    tested for truthiness against ``None``. ``AsyncElasticsearch.ping()``
+    swallows transport errors and returns ``False``, so an unreachable or
+    401-ing Elasticsearch never raises — treating any non-``None`` result as
+    healthy reported it as ``ok``, which is the one answer this endpoint must
+    never give wrongly.
+    """
     start = time.perf_counter()
     try:
         result = await asyncio.wait_for(probe(), timeout=_HEALTH_PROBE_TIMEOUT)
@@ -119,6 +134,9 @@ async def _timed(name: str, probe):
         # Elasticsearch and MinIO are optional, and reporting them as degraded
         # would make a correct minimal install look broken forever.
         return name, {"status": "disabled", "latency_ms": None}
+    if result is not True:
+        logger.warning("Health probe reported unhealthy: %s", name)
+        return name, {"status": "degraded", "latency_ms": elapsed}
     return name, {"status": "ok", "latency_ms": elapsed}
 
 
@@ -132,8 +150,9 @@ async def _probe_redis():
 
     client = redis.from_url(settings.REDIS_HOST, decode_responses=True)
     try:
-        await client.ping()
-        return True
+        # Return the answer rather than assuming it. redis-py raises on a dead
+        # socket, but an auth failure can come back as a falsy reply.
+        return bool(await client.ping())
     finally:
         await client.aclose()
 
@@ -145,11 +164,14 @@ async def _probe_elasticsearch():
 
     es = AsyncElasticsearch(
         f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
-        verify_certs=False,
+        # Verifies by default; the development stack opts out in .env.example
+        # because it runs Elasticsearch with a self-signed certificate.
+        verify_certs=settings.ES_VERIFY_CERTS,
     )
     try:
-        await es.ping()
-        return True
+        # ping() catches transport errors and returns False rather than
+        # raising, so the result must be returned, not discarded.
+        return bool(await es.ping())
     finally:
         await es.close()
 

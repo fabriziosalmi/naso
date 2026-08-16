@@ -62,7 +62,8 @@ def delete_tenant_saga(self, tenant_id: str):
 
 async def delete_from_es(tenant_id: str):
     es = AsyncElasticsearch(
-        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}", verify_certs=False
+        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
+        verify_certs=settings.ES_VERIFY_CERTS,
     )
     try:
         # Delete by query for the specific tenant

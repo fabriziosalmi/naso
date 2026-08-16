@@ -68,6 +68,22 @@ async def test_failure_detail_is_not_leaked_to_the_client(client, stub_probes):
 
 
 @pytest.mark.asyncio
+async def test_probe_returning_false_is_degraded_not_ok(client, stub_probes):
+    # AsyncElasticsearch.ping() swallows transport errors and answers False
+    # instead of raising, so "did not raise" is not the same as "healthy".
+    # Treating any non-None result as ok reported a dead Elasticsearch as ok.
+    async def unhealthy():
+        return False
+
+    stub_probes.setattr(system, "_probe_elasticsearch", unhealthy)
+
+    r = await client.get("/system/health")
+    assert r.status_code == 503
+    assert r.json()["components"]["elasticsearch"]["status"] == "degraded"
+    assert r.json()["degraded"] == ["elasticsearch"]
+
+
+@pytest.mark.asyncio
 async def test_unconfigured_optional_component_is_disabled_not_degraded(client, stub_probes):
     async def not_configured():
         return None

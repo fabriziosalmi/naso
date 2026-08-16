@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     ES_PORT: int = 9200
     ES_USER: Optional[str] = None
     ES_PASSWORD: Optional[str] = None
+    # Defaults to verifying, so a deployment that says nothing gets the safe
+    # behaviour. The development stack runs Elasticsearch with a self-signed
+    # certificate and opts out explicitly in .env.example — an opt-out you can
+    # see beats a default you cannot.
+    ES_VERIFY_CERTS: bool = True
 
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
