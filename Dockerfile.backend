@@ -26,7 +26,11 @@ COPY shared/ ./shared/
 # /system/status is unauthenticated and touches the database, so it is a real
 # readiness signal rather than a liveness ping. Uses urllib because the slim
 # image ships no curl, and 127.0.0.1 because TrustedHostMiddleware allows it.
+#
+# The body has to be parsed: the endpoint deliberately answers 200 with
+# {"status": "degraded"} when the database probe fails, so checking the status
+# line alone would report a container with a dead database as healthy.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=40s --retries=6 \
-    CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/system/status', timeout=4).status == 200 else 1)"
+    CMD python -c "import json,sys,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/system/status', timeout=4); sys.exit(0 if r.status == 200 and json.load(r).get('status') == 'operational' else 1)"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

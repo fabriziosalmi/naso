@@ -74,16 +74,21 @@ jobs:
           docker compose up -d db redis elasticsearch minio rabbitmq
           docker compose up -d --build backend worker-pipeline
 
-      - name: Wait for the API to answer
+      - name: Wait for the API to report operational
         run: |
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:8000/system/status >/dev/null 2>&1; then
-              echo "API is up after ${i}s"
+          # /system/status answers 200 with {"status": "degraded"} when the
+          # database probe fails, so the status line alone is not a readiness
+          # signal -- the body has to say "operational".
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8000/system/status 2>/dev/null \
+               | python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin).get('status') == 'operational' else 1)" 2>/dev/null; then
+              echo "API reported operational after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::The API never became reachable on :8000"
+          echo "::error::The API never reported operational on :8000"
+          curl -s http://localhost:8000/system/status || true
           exit 1
 
       - name: Diagnostics
