@@ -2,8 +2,38 @@ import { create } from 'zustand';
 import axios from 'axios';
 import { toast } from './useToastStore';
 
-// Tutti i request axios inviano automaticamente il cookie httpOnly naso_access_token
+// Every axios request carries the httpOnly naso_access_token cookie.
 axios.defaults.withCredentials = true;
+
+// CSRF double-submit cookie. The backend issues a non-httpOnly `naso_csrf`
+// cookie at login; we read it with document.cookie and echo it back as
+// X-Naso-CSRF on every state-changing request. Safe methods are skipped —
+// the middleware short-circuits GET/HEAD/OPTIONS anyway, so there is no
+// point sending a header it will ignore.
+const CSRF_COOKIE_NAME = 'naso_csrf';
+const CSRF_HEADER_NAME = 'X-Naso-CSRF';
+const SAFE_METHODS = new Set(['get', 'head', 'options']);
+
+export function readCsrfToken() {
+  if (typeof document === 'undefined' || !document.cookie) return null;
+  const prefix = `${CSRF_COOKIE_NAME}=`;
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) return decodeURIComponent(trimmed.slice(prefix.length));
+  }
+  return null;
+}
+
+axios.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toLowerCase();
+  if (SAFE_METHODS.has(method)) return config;
+  const token = readCsrfToken();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers[CSRF_HEADER_NAME] = token;
+  }
+  return config;
+});
 
 const useNasoStore = create((set, get) => ({
   user: null,

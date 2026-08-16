@@ -14,6 +14,7 @@ from shared.database import get_db
 from shared.models import User
 from shared.schemas import Token
 
+from ...csrf import clear_csrf_cookie, issue_csrf_token, set_csrf_cookie
 from ...limiter import limiter
 from ..deps import oauth2_scheme
 
@@ -58,6 +59,11 @@ async def login_for_access_token(
         path="/",
     )
 
+    # Companion CSRF token on the same lifetime. Non-httpOnly on purpose: the
+    # SPA reads it with document.cookie and echoes it back as X-Naso-CSRF on
+    # every mutating request, which CSRFMiddleware then matches.
+    set_csrf_cookie(response, issue_csrf_token(), max_age=int(access_token_expires.total_seconds()))
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -65,6 +71,9 @@ async def login_for_access_token(
 async def logout(request: Request, response: Response, token: str = Depends(oauth2_scheme)):
     # Clear the httpOnly cookie
     response.delete_cookie(key=_COOKIE_NAME, httponly=True, samesite=_COOKIE_SAMESITE, path="/")
+    # And its CSRF companion: leaving it behind would let a stale token match
+    # itself if another tab re-used the cookie name.
+    clear_csrf_cookie(response)
 
     try:
         # Verify the signature before blacklisting (C-01 fix retained)
