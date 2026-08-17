@@ -2,7 +2,7 @@
 
 PYTHON ?= python3
 
-.PHONY: help bootstrap up down build logs demo test
+.PHONY: help bootstrap up down build logs demo test migrate
 
 help:
 	@echo "NASO Commands:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make down      - Stop all containers"
 	@echo "  make build     - Rebuild Docker images"
 	@echo "  make logs      - Follow API and worker logs"
+	@echo "  make migrate   - Apply pending schema migrations to a running stack"
 	@echo "  make demo      - Seed the database with 'Operation Lazarus' synthetic data"
 	@echo "  make test      - Run the full test suite (pytest, vitest, playwright)"
 
@@ -42,6 +43,13 @@ logs:
 
 demo:
 	docker exec naso-api python seed_demo_data.py
+
+# Upgrading an already-running stack. `init_db.py` does this too, so a fresh
+# install needs nothing extra; this is the target for the upgrade path, where
+# the admin and the seed data already exist. `-c` is explicit because the
+# migration tree is resolved from the ini file's own directory.
+migrate:
+	docker exec -w /app naso-api alembic -c /app/alembic.ini upgrade head
 
 # Delegates to validate.sh so `make test` and CI run exactly the same checks.
 # The old target called `npm run test` without --run, which left Vitest in
