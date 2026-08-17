@@ -44,4 +44,16 @@ regexes = [
   # scores high on entropy. These are cut off with an ellipsis and were never
   # valid.
   '''eyJ[A-Za-z0-9_-]{5,}\.{3}''',
+
+  # A credential position occupied by a variable expansion is, by construction,
+  # not a credential -- there is no value on the line to leak. The Elasticsearch
+  # healthcheck in docker-compose.yml is
+  #     curl -sf --user elastic:$${ELASTIC_PASSWORD} ...
+  # and gitleaks' curl-auth-user rule scores the literal text "ELASTIC_PASSWORD"
+  # at 4.49 entropy and flags it.
+  #
+  # Deliberately narrow: it matches only when the password half is exactly a
+  # ${...} expansion. `--user admin:s3cr3t-Value-9982` still trips the rule,
+  # which is the whole point of not writing this as a path exclusion.
+  '''--user\s+[^\s:'"]+:\$+\{[A-Za-z_][A-Za-z0-9_]*\}''',
 ]
