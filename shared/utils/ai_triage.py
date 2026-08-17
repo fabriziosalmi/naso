@@ -71,7 +71,14 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
         if thought_match:
             thought = thought_match.group(1).strip()
             answer = full_response.replace(thought_match.group(0), "").strip()
-        return {"thought": thought, "answer": answer, "is_valid": "vero" in answer.lower() or "valid" in answer.lower()}
+        # Parse the actual verdict, not the substring "valid". The prompt asks
+        # for "VALID: YES" or "VALID: NO", and both contain "valid" — so the old
+        # `"valid" in answer.lower()` was True for every leak the model ever saw,
+        # including the ones it judged NOT a leak. A forensic validity verdict
+        # that is unconditionally positive is worse than none.
+        verdict = re.search(r"VALID:\s*(YES|NO|SI|SÌ|VERO|TRUE)", answer, re.IGNORECASE)
+        is_valid = bool(verdict) and verdict.group(1).upper() in {"YES", "SI", "SÌ", "VERO", "TRUE"}
+        return {"thought": thought, "answer": answer, "is_valid": is_valid}
     except Exception as e:
         # Graceful Degradation (#15)
         logger.warning(f"[GRACEFUL DEGRADATION] AI Service Unavailable: {e}")

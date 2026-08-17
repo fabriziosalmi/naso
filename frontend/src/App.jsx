@@ -92,11 +92,25 @@ const ScreenshotLightbox = ({ leakId, leaks, onClose }) => {
                 <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white hover:bg-white/10 h-8 w-8 rounded-full transition-all"><X size={16} /></Button>
             </div>
           </div>
+          {/* This overlay presented fabricated chain-of-custody, which is the
+              one thing a forensic tool must never do. The first line read
+              "SHA256:" and, when no hash existed (no producer writes
+              metadata_json.sha256), fell back to the leak's UUID prefix
+              uppercased — a random id dressed as a cryptographic digest. The
+              badge said "UNMODIFIED", an integrity claim, when all it knew was
+              that the row had not been acknowledged; nothing here verifies
+              integrity. Both are now honest: the artifact id is labelled as an
+              id, a real hash shows only if one exists, and the badge states the
+              acknowledgement status it actually reflects. */}
           <div className="absolute bottom-4 right-4 px-3 py-2 rounded-xl bg-black/60 border border-white/[0.06] space-y-1">
-             <p className="text-[10px] text-zinc-500 font-mono">SHA256: {leak?.metadata_json?.sha256 || leakId?.slice(0,16).toUpperCase() || 'unknown'}</p>
-             <p className="text-[10px] text-zinc-500 font-mono">{leak?.discovered_at ? new Date(leak.discovered_at).toLocaleString() : new Date().toISOString()}</p>
-             <Badge className={`w-full justify-center text-[10px] font-medium ${leak?.acknowledged_at ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' : 'bg-[#32D74B]/10 text-[#32D74B] border-[#32D74B]/20'}`}>
-               {leak?.acknowledged_at ? 'ACKNOWLEDGED' : 'UNMODIFIED'}
+             {leak?.metadata_json?.sha256 ? (
+               <p className="text-[10px] text-zinc-500 font-mono">SHA256: {leak.metadata_json.sha256}</p>
+             ) : (
+               <p className="text-[10px] text-zinc-500 font-mono">Artifact: {leakId || 'unknown'}</p>
+             )}
+             <p className="text-[10px] text-zinc-500 font-mono">{leak?.discovered_at ? new Date(leak.discovered_at).toLocaleString() : '—'}</p>
+             <Badge className={`w-full justify-center text-[10px] font-medium ${leak?.acknowledged_at ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' : 'bg-[#0A84FF]/10 text-[#0A84FF] border-[#0A84FF]/20'}`}>
+               {leak?.acknowledged_at ? 'ACKNOWLEDGED' : 'UNACKNOWLEDGED'}
              </Badge>
           </div>
         </div>

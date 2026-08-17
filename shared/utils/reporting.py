@@ -43,7 +43,13 @@ class ForensicReportGenerator:
         pdf.set_font("Courier", "B", 12)
         pdf.cell(200, 10, "AI INTELLIGENCE VERDICT", ln=True)
         pdf.set_font("Courier", "", 10)
-        verdict = ai_analysis.get("answer", "No verdict available")
+        # ai_analysis is a dict {thought, answer, is_valid} from the pipeline but a
+        # plain string from the seeder; `.get` on a string raises AttributeError and
+        # took the whole PDF export down. Accept either.
+        if isinstance(ai_analysis, dict):
+            verdict = ai_analysis.get("answer", "No verdict available")
+        else:
+            verdict = str(ai_analysis) if ai_analysis else "No verdict available"
         pdf.multi_cell(0, 10, f"Verdict: {verdict}")
         pdf.ln(5)
 

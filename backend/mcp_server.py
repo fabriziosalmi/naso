@@ -187,7 +187,8 @@ async def naso_get_identities(limit: int = 50) -> str:
                 )
             return out
         except Exception as e:
-            return f"Database error: {str(e)}"
+            logger.error("mcp tool db error: %s", e)
+            return "Database error (see server logs)."
 
 
 @server.tool(description="List this tenant's recorded leak hits, optionally above a severity threshold.")
@@ -215,7 +216,8 @@ async def naso_get_leaks(min_severity: int = 0) -> str:
                 )
             return out
         except Exception as e:
-            return f"Database error: {str(e)}"
+            logger.error("mcp tool db error: %s", e)
+            return "Database error (see server logs)."
 
 
 @server.tool(description="Mark one identity as protected (VIP), or clear that flag.")
@@ -252,7 +254,8 @@ async def naso_protect_identity(identity_id: str, is_protected: bool) -> str:
             await db.commit()
             return f"Identity {identity.identifier} protection status set to: {is_protected}."
         except Exception as e:
-            return f"Database error: {str(e)}"
+            logger.error("mcp tool db error: %s", e)
+            return "Database error (see server logs)."
 
 
 async def main():

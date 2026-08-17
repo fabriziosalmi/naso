@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 import uuid
 from typing import Optional
 
@@ -22,6 +23,8 @@ from shared.utils.reporting import ForensicReportGenerator
 from ...infrastructure.rabbitmq import rabbitmq_pool
 from ...limiter import limiter
 from ..deps import get_current_user
+
+logger = logging.getLogger("naso-leaks")
 
 router = APIRouter()
 
@@ -398,10 +401,21 @@ async def get_leak_intelligence(
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
         raise AuthorizationError("Access denied to this tenant's leak")
 
+    # The pipeline stores the model's reasoning inside `ai_analysis`
+    # ({thought, answer, is_valid}); only the demo seeder writes a top-level
+    # `ai_thought`. Reading the top-level key returned None for every real leak.
+    meta = leak.metadata_json or {}
+    ai_analysis = meta.get("ai_analysis")
+    if isinstance(ai_analysis, dict):
+        ai_thought = ai_analysis.get("thought") or meta.get("ai_thought")
+        ai_verdict = ai_analysis.get("answer", ai_analysis)
+    else:
+        ai_thought = meta.get("ai_thought")
+        ai_verdict = ai_analysis
     return {
         "id": leak.id,
-        "ai_thought": leak.metadata_json.get("ai_thought"),
-        "ai_verdict": leak.metadata_json.get("ai_analysis"),
+        "ai_thought": ai_thought,
+        "ai_verdict": ai_verdict,
         "severity": leak.severity_score,
     }
 
@@ -548,8 +562,11 @@ async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), 
         await db.commit()
 
         return Response(content=data, media_type="image/png")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve the screenshot: {str(e)}")
+    except Exception:
+        # The MinIO/S3 exception text names buckets, endpoints and object keys —
+        # detail for the log, not for the client.
+        logger.exception("screenshot retrieval failed for leak %s", leak_id)
+        raise HTTPException(status_code=500, detail="Failed to retrieve the screenshot.")
     finally:
         if response:
             response.close()
