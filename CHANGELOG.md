@@ -178,7 +178,7 @@ Summarised, not reconstructed. Roughly in the order it happened:
 - OSINT integrations: Shodan and zero-auth Telegram channel interception.
 - AI Co-Analyst — SSE-streamed chat with tool calling, MCP server, investigation
   plans and tasks.
-- Compliance layer — hash-chained immutable audit log with an integrity
+- Compliance layer — hash-chained, tamper-evident audit log with an integrity
   verification endpoint, CSV export, and PDF dossier generation.
 - Multi-tenancy with tenant isolation enforced at the query level.
 - SOAR and CTI handoff hooks, YARA rule evaluation, MITRE ATT&CK technique
