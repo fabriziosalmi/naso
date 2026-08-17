@@ -98,6 +98,39 @@ class VerifyResult:
 # ─── Canonical hashing ───────────────────────────────────────────────────────
 
 
+def _canonical_timestamp(timestamp: datetime | None) -> str | None:
+    """A timestamp string that is the same whether the row was just built or
+    read back from the database.
+
+    This is the whole integrity of the chain on Postgres. ``write_audit`` hashes
+    a *naive* UTC datetime, but the ``audit_logs.timestamp`` column is
+    ``DateTime(timezone=True)``, so Postgres returns the same instant as an
+    *aware* datetime on the next read. ``isoformat()`` then produces two
+    different strings —
+
+        write:  '2026-08-17T21:24:29.994748'          (naive)
+        verify: '2026-08-17T21:24:29.994748+00:00'     (aware, from Postgres)
+
+    — and every genuinely hashed row failed verification with
+    ``self_hash mismatch (row content tampered)``. The audit chain, which is the
+    product's compliance centrepiece, was broken on the production database. It
+    was green in CI because the test suite runs on SQLite, which stores the
+    naive value and returns it naive, so the two strings matched there and
+    nowhere else.
+
+    Normalising to naive UTC before serialising makes the two paths agree: an
+    aware value is converted to UTC and stripped of its tzinfo, a naive value is
+    assumed to already be UTC (which ``write_audit`` guarantees). Existing rows
+    verify correctly after this change, because the stored hash was computed
+    over exactly this naive form.
+    """
+    if timestamp is None:
+        return None
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+    return timestamp.isoformat()
+
+
 def _canonical_payload(
     *,
     prev_hash: str | None,
@@ -122,7 +155,7 @@ def _canonical_payload(
             "resource_type": resource_type,
             "resource_id": resource_id,
             "details": details,
-            "timestamp": timestamp.isoformat() if timestamp else None,
+            "timestamp": _canonical_timestamp(timestamp),
         },
         sort_keys=True,
         separators=(",", ":"),

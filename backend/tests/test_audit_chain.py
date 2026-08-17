@@ -328,3 +328,38 @@ async def test_an_unhashed_row_inside_the_chain_is_still_a_break(db):
     assert result.ok is False
     assert "unhashed row inside the chain" in result.reason
     assert result.legacy_unhashed == 0
+
+
+def test_hash_is_stable_across_naive_and_aware_utc():
+    """The bug that broke the chain on Postgres and hid on SQLite.
+
+    write_audit hashes a naive UTC datetime; the timestamp column is
+    timezone-aware, so Postgres returns the same instant as an aware datetime on
+    read. If the canonical payload distinguishes the two, every hashed row fails
+    verification in production while passing on SQLite (which round-trips naive
+    as naive). The hash must not depend on which one it is handed.
+    """
+    from datetime import datetime, timezone
+
+    from shared.utils.audit_chain import _canonical_payload
+
+    naive = datetime(2026, 8, 17, 21, 24, 29, 994748)
+    aware = datetime(2026, 8, 17, 21, 24, 29, 994748, tzinfo=timezone.utc)
+
+    fields = dict(
+        prev_hash=None,
+        tenant_id="t1",
+        user_id=None,
+        action="AI_CHAT",
+        resource_type=None,
+        resource_id=None,
+        details={},
+    )
+    assert _canonical_payload(timestamp=naive, **fields) == _canonical_payload(timestamp=aware, **fields)
+
+    # And a non-UTC aware value must reduce to the same instant, not a different
+    # wall-clock string.
+    from datetime import timedelta
+
+    other_zone = datetime(2026, 8, 17, 23, 24, 29, 994748, tzinfo=timezone(timedelta(hours=2)))
+    assert _canonical_payload(timestamp=other_zone, **fields) == _canonical_payload(timestamp=naive, **fields)

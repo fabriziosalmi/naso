@@ -60,6 +60,7 @@ from shared.domain.services.merge_proposer import (
 from shared.domain.services.risk_scoring_v2 import gather_merged_cluster
 from shared.models import (
     Identity,
+    InvestigationPlan,
     InvestigationTask,
     LeakHit,
     MergeEvent,
@@ -289,6 +290,19 @@ async def execute_tool(
     failure mode is returned in the ``error`` key so the LLM can observe
     and potentially retry.
     """
+
+    # A model works with human-readable identifiers and opaque ids that travel
+    # through its own earlier tool results; it does not carry an operator
+    # session. So every by-id lookup below is scoped to the caller's tenant for
+    # non-admins, exactly as the REST endpoints are (admins cross tenants by
+    # design). Without this, an analyst could read or flag another tenant's
+    # identity or leak by naming its id in the chat — the AI-channel version of
+    # the gap #46 closed on the REST side.
+    def _tenant_scope(model):
+        if current_user.role == "admin":
+            return True
+        return model.tenant_id == current_user.tenant_id
+
     try:
         # ───── search_identities ──────────────────────────────────────────
         if tool_name == "search_identities":
@@ -405,7 +419,9 @@ async def execute_tool(
             identity_id = tool_args.get("identity_id", "")
             identity = (
                 await db.execute(
-                    select(Identity).options(selectinload(Identity.leaks)).where(Identity.id == identity_id)
+                    select(Identity)
+                    .options(selectinload(Identity.leaks))
+                    .where(Identity.id == identity_id, _tenant_scope(Identity))
                 )
             ).scalar_one_or_none()
             if not identity:
@@ -441,6 +457,23 @@ async def execute_tool(
                 return {"tool": tool_name, "error": "content required"}
             if not plan_id:
                 return {"tool": tool_name, "content": content, "status": "no_plan_selected"}
+            # Validate the plan before inserting. A model tends to pass the plan
+            # *title* (or one it invented) as plan_id; the raw insert then failed
+            # with an asyncpg ForeignKeyViolationError whose full SQL and bound
+            # parameters were handed straight back to the model and the client.
+            plan = (
+                await db.execute(
+                    select(InvestigationPlan).where(InvestigationPlan.id == plan_id, _tenant_scope(InvestigationPlan))
+                )
+            ).scalar_one_or_none()
+            if not plan:
+                return {
+                    "tool": tool_name,
+                    "error": (
+                        f"No investigation plan with id {plan_id!r}. plan_id must be a plan's id, not its title. "
+                        "List plans first, or ask the operator to create one."
+                    ),
+                }
             task = InvestigationTask(plan_id=plan_id, content=content, status="pending", created_by="ai")
             db.add(task)
             await db.commit()
@@ -451,9 +484,14 @@ async def execute_tool(
         if tool_name == "flag_critical":
             leak_id = tool_args.get("leak_id", "")
             new_status = tool_args.get("status", "reviewing")
-            leak = (await db.execute(select(LeakHit).where(LeakHit.id == leak_id))).scalar_one_or_none()
+            leak = (
+                await db.execute(select(LeakHit).where(LeakHit.id == leak_id, _tenant_scope(LeakHit)))
+            ).scalar_one_or_none()
             if not leak:
-                return {"tool": tool_name, "error": f"Leak {leak_id} not found"}
+                return {
+                    "tool": tool_name,
+                    "error": f"No leak with id {leak_id!r} in this tenant. Use a leak id from get_leaks.",
+                }
             old_status = leak.status
             leak.status = new_status
             await AuditLogger.log(
@@ -472,9 +510,23 @@ async def execute_tool(
         if tool_name == "toggle_identity_vip":
             identity_id = tool_args.get("identity_id", "")
             is_protected = bool(tool_args.get("is_protected", True))
-            identity = (await db.execute(select(Identity).where(Identity.id == identity_id))).scalar_one_or_none()
+            # Accept the id OR the human identifier. A model naturally passes
+            # what the user said ("hr_1@corp.local"), not the UUID it would have
+            # to have looked up first — so match either, still tenant-scoped.
+            identity = (
+                (
+                    await db.execute(
+                        select(Identity).where(
+                            (Identity.id == identity_id) | (Identity.identifier == identity_id),
+                            _tenant_scope(Identity),
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if not identity:
-                return {"tool": tool_name, "error": f"Identity {identity_id} not found"}
+                return {"tool": tool_name, "error": f"No identity matching {identity_id!r} in this tenant."}
             old_state = identity.is_protected
             identity.is_protected = is_protected
             await AuditLogger.log(
@@ -483,18 +535,26 @@ async def execute_tool(
                 tenant_id=current_user.tenant_id,
                 action="AI_TOGGLE_VIP",
                 resource_type="identity",
-                resource_id=identity_id,
+                resource_id=identity.id,
                 details={"old": old_state, "new": is_protected},
             )
             await db.commit()
-            return {"tool": tool_name, "identity_id": identity_id, "is_protected": is_protected, "status": "success"}
+            return {
+                "tool": tool_name,
+                "identity_id": identity.id,
+                "identifier": identity.identifier,
+                "is_protected": is_protected,
+                "status": "success",
+            }
 
         # ═════════════ Phase 8 new tools ═════════════
 
         # ───── get_merge_cluster ──────────────────────────────────────────
         if tool_name == "get_merge_cluster":
             identity_id = tool_args.get("identity_id", "")
-            root = (await db.execute(select(Identity).where(Identity.id == identity_id))).scalar_one_or_none()
+            root = (
+                await db.execute(select(Identity).where(Identity.id == identity_id, _tenant_scope(Identity)))
+            ).scalar_one_or_none()
             if not root:
                 return {"tool": tool_name, "error": f"Identity {identity_id} not found"}
 
@@ -597,12 +657,29 @@ async def execute_tool(
                 else current_user.tenant_id
             )
             result = await verify_chain(db, tenant_id=target_tenant)
+            # Forward the full three-valued picture, not just ok/broken_at.
+            # Returning ok=true with verified=0 and no explanation led the model
+            # to announce "CRITICAL tampering" over a healthy chain whose only
+            # rows predate the hashing. legacy_unhashed is the difference between
+            # "nothing to verify yet" and "verified and intact".
             return {
                 "tool": tool_name,
                 "tenant_id": target_tenant,
                 "ok": result.ok,
                 "broken_at": result.broken_at,
                 "reason": result.reason,
+                "verified": result.verified,
+                "legacy_unhashed": result.legacy_unhashed,
+                "summary": (
+                    f"Chain intact: {result.verified} hashed entries verified"
+                    + (
+                        f", {result.legacy_unhashed} earlier entries predate the hash chain and are outside it (not tampering)."
+                        if result.legacy_unhashed
+                        else "."
+                    )
+                    if result.ok
+                    else f"BROKEN at row {result.broken_at}: {result.reason}"
+                ),
             }
 
         # ───── find_near_duplicates ───────────────────────────────────────
@@ -669,9 +746,13 @@ async def execute_tool(
 
         return {"tool": tool_name, "error": f"Unknown tool: {tool_name}"}
 
-    except Exception as exc:  # noqa: BLE001 — we want every tool failure returned, not raised
-        logger.error("tool %s failed: %s", tool_name, exc)
-        return {"tool": tool_name, "error": str(exc)}
+    except Exception:  # noqa: BLE001 — we want every tool failure returned, not raised
+        # The detail goes to the log; the model and the client get a clean
+        # message. str(exc) on a database error is the full SQL statement and
+        # its bound parameters — an information leak through the one channel a
+        # prompt-injected model could be steered to echo back.
+        logger.exception("tool %s failed", tool_name)
+        return {"tool": tool_name, "error": f"{tool_name} could not complete (see server logs)."}
 
 
 __all__ = ["NASO_TOOLS", "execute_tool"]
