@@ -29,11 +29,33 @@ breach records and identity data; sending that to a third-party inference API
 would export the exact material the operator is trying to contain. A local
 model keeps it on your infrastructure.
 
-Check what the API can see:
+Check what the API can see. `/ai/health` names `AI_ENDPOINT` and lists the
+models the engine is serving, so it requires authentication like every other
+data route — an anonymous `curl` gets `401`:
 
 ```bash
-curl -s localhost:8000/ai/health | jq
+TOKEN=$(curl -s -X POST localhost:8000/auth/login \
+        -d "username=admin@naso.example.com&password=$NASO_ADMIN_PASSWORD" \
+        | jq -r .access_token)
+
+curl -s localhost:8000/ai/health -H "Authorization: Bearer $TOKEN" | jq
 ```
+
+It answers `200` either way, so read the body rather than the status line:
+
+```json
+{
+  "status": "online",
+  "endpoint": "http://host.docker.internal:11434/v1",
+  "active_model": "llama3.1:8b",
+  "available_models": ["llama3.1:8b", "qwen2.5-coder:7b"]
+}
+```
+
+`"status": "offline"` means the engine did not answer, and the response carries
+no reason — the transport error names the resolved host and port, so it goes to
+the API log instead (`docker compose logs backend`). See
+[When the answers are poor](#when-the-answers-are-poor).
 
 ## The agent loop
 

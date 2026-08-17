@@ -254,8 +254,22 @@ async def ai_chat(
 
 
 @router.get("/health")
-async def ai_health():
-    """Check if the local AI endpoint is reachable."""
+async def ai_health(current_user=Depends(get_current_user)):
+    """Whether the configured AI endpoint is reachable, for the operator.
+
+    Authenticated, unlike /system/status and /system/health. Those two exist
+    for orchestrators and load balancers that hold no credentials, and they are
+    written to say nothing an anonymous caller could use. This one is a
+    diagnostic for a logged-in operator and answers a different question, so it
+    can afford to name the endpoint and list the models -- but only to someone
+    who has already authenticated.
+
+    It used to be unauthenticated and returned AI_ENDPOINT, the full model
+    inventory and str(e) to anyone who asked: an operator's internal host and
+    port, plus a connection-failure message naming it, free to whoever found
+    the route. The frontend only ever reads `status`, and only from behind the
+    auth gate, so closing this costs nothing.
+    """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{settings.AI_ENDPOINT}/models")
@@ -268,8 +282,12 @@ async def ai_health():
                 "active_model": settings.AI_MODEL,
                 "available_models": models,
             }
-    except Exception as e:
-        return {"status": "offline", "endpoint": settings.AI_ENDPOINT, "error": str(e)}
+    except Exception:
+        # The exception text goes to the log, not to the response. It carries
+        # the resolved host and the transport-level reason, which is detail for
+        # the operator reading logs rather than payload for an HTTP client.
+        logger.exception("AI endpoint health probe failed")
+        return {"status": "offline", "endpoint": settings.AI_ENDPOINT, "active_model": settings.AI_MODEL}
 
 
 # ─────────────────────────── Investigation Plans CRUD ────────────────────────
@@ -413,14 +431,25 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    # The task is reached through its plan, and the plan is scoped to the
+    # caller's tenant -- the same shape add_task, update_plan and delete_plan
+    # use. Selecting on task_id and plan_id alone authenticated the caller and
+    # then never authorised them: any logged-in operator, of any tenant and any
+    # role, could rewrite the status or content of another tenant's
+    # investigation task by naming its id. UUIDs are not an access control.
     result = await db.execute(
-        select(InvestigationTask).where(
+        select(InvestigationTask)
+        .join(InvestigationPlan, InvestigationPlan.id == InvestigationTask.plan_id)
+        .where(
             InvestigationTask.id == task_id,
             InvestigationTask.plan_id == plan_id,
+            InvestigationPlan.tenant_id == current_user.tenant_id,
         )
     )
     task = result.scalar_one_or_none()
     if not task:
+        # 404 rather than 403, matching the sibling endpoints: telling a
+        # stranger that a task exists but is not theirs is itself a disclosure.
         raise HTTPException(status_code=404, detail="Task not found")
     if body.status is not None:
         task.status = body.status
