@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="NASO Forensic Engine API - High-performance intelligence framework for real-time threat intelligence and identity correlation.",
-    version="1.1.0",
+    version="0.1.0",
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
