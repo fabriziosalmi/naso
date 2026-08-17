@@ -115,7 +115,8 @@ export default function App() {
     isLoading, systemStatus, fetchSystemStatus,
     addIdentity, updateProfile,
     graphData, fetchGraphData,
-    isAuthenticated, logout
+    isAuthenticated, logout,
+    authChecked, fetchMe
   } = useNasoStore();
 
   const location = useLocation();
@@ -165,6 +166,14 @@ export default function App() {
       window.removeEventListener('naso:open-notifications', onOpenNotifications);
     };
   }, []);
+
+  // Ask the API once, on mount, whether this browser still has a session. The
+  // cookie is httpOnly, so this call is the only way to find out; until it
+  // answers, the auth gate below shows a restoring state rather than the login
+  // form.
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
 
   // Power-user keyboard shortcuts. G-prefix Vim-style (g d → /, g t → /topology),
   // plus N for notifications. Ignored while typing in an input.
@@ -233,7 +242,18 @@ export default function App() {
 
   const isFullHeightView = ['/ai-analyst', '/docs'].includes(location.pathname);
 
-  // Auth gate: show login if not authenticated
+  // Auth gate. `authChecked` distinguishes "no session" from "not asked yet":
+  // the session lives in an httpOnly cookie, so the only way to know is to call
+  // GET /users/me once on mount. Without this the login form rendered on every
+  // page load, valid cookie or not.
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-black text-zinc-500" role="status" aria-live="polite">
+        <span className="animate-pulse text-sm tracking-wide">Restoring session…</span>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return <Login />;
   }

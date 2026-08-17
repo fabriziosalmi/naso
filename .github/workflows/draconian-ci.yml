@@ -88,6 +88,17 @@ jobs:
           # and serve with four backends missing.
           docker compose up -d --build naso-tor-1 naso-tor-lb
 
+      - name: Provision the schema and the initial admin
+        run: |
+          # The third step of the README quickstart, and the one nothing tested.
+          # It is also the migration path now: init_db.py runs create_all and
+          # then `alembic upgrade head`, so a broken migration fails here rather
+          # than on somebody's four-month-old database.
+          #
+          # It provisions the operator the Playwright session test signs in as;
+          # without it those tests skip, and a skipped test proves nothing.
+          docker exec naso-api python init_db.py
+
       - name: Tor cluster survives four missing backends
         run: |
           # haproxy's check is a TCP connect to tor1:9050, so this asserts the

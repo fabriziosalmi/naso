@@ -15,6 +15,28 @@ from ..deps import get_current_user
 router = APIRouter()
 
 
+@router.get("/me", response_model=UserSchema)
+async def read_operator_profile(current_user: User = Depends(get_current_user)):
+    """Return the authenticated operator.
+
+    This is how a browser session survives a page reload. The API authenticates
+    by `httpOnly` cookie, which JavaScript cannot read by design, so the SPA has
+    no way to tell an expired session from a fresh browser except by asking.
+
+    It was missing. `useNasoStore.js` has always had a `fetchMe()` action that
+    calls this route, nothing ever called `fetchMe()`, and the route answered
+    `405 Method Not Allowed` because only `PUT /me` existed — so
+    `isAuthenticated` started `false` on every load and every refresh returned
+    the operator to the login screen with a perfectly valid session cookie in
+    the jar. The token used to live in `localStorage`, where the SPA could read
+    it; moving to `httpOnly` cookies removed that and left nothing in its place.
+
+    `get_current_user` already resolves the user from the cookie or a bearer
+    token, so this hands back what the dependency produced and adds nothing.
+    """
+    return current_user
+
+
 @router.put("/me", response_model=UserSchema)
 async def update_operator_profile(
     user_update: UserUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)

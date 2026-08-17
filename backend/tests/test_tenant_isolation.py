@@ -188,7 +188,7 @@ PUBLIC_SURFACE = {
     "GET /system/health",
 }
 
-# The app currently exposes 49 documented operations. The floor is deliberately
+# The app currently exposes 50 documented operations. The floor is deliberately
 # slack — it is a tripwire against enumerating nothing, not a route count to
 # keep updated on every PR.
 _ROUTE_FLOOR = 40

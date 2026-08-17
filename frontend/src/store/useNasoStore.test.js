@@ -52,6 +52,33 @@ describe('useNasoStore', () => {
     expect(state.isLoading).toBe(false);
   });
 
+  // Session restore. The token is in an httpOnly cookie, so `fetchMe` is the
+  // only way the SPA can tell "no session" from "not asked yet" — and before
+  // this existed on the server side, every reload showed the login form with a
+  // perfectly valid cookie in the jar.
+  it('fetchMe adopts the session the cookie still holds', async () => {
+    axios.get.mockResolvedValueOnce({ data: { id: 'u1', email: 'op@naso.example.com' } });
+
+    await useNasoStore.getState().fetchMe();
+
+    const state = useNasoStore.getState();
+    expect(state.isAuthenticated).toBe(true);
+    expect(state.user.email).toBe('op@naso.example.com');
+    expect(state.authChecked).toBe(true);
+  });
+
+  it('fetchMe fails closed, and records that it asked', async () => {
+    axios.get.mockRejectedValueOnce(new Error('401'));
+
+    await useNasoStore.getState().fetchMe();
+
+    const state = useNasoStore.getState();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.user).toBeNull();
+    // Without this the auth gate would sit on its loading state forever.
+    expect(state.authChecked).toBe(true);
+  });
+
   it('should handle fetchLeaks', async () => {
     const mockLeaks = [{ id: '1', source: 'github', severity_score: 80 }];
     useNasoStore.setState({ isAuthenticated: true });
