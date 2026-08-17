@@ -52,8 +52,15 @@ regexes = [
   # and gitleaks' curl-auth-user rule scores the literal text "ELASTIC_PASSWORD"
   # at 4.49 entropy and flags it.
   #
+  # Anchored, and matched against the SECRET rather than the line -- which is
+  # what gitleaks' allowlist regexes target by default. The first attempt at
+  # this entry described the line (`--user\s+...`) and silently did nothing,
+  # because the secret gitleaks extracts is only `elastic:$${ELASTIC_PASSWORD}`.
+  #
   # Deliberately narrow: it matches only when the password half is exactly a
-  # ${...} expansion. `--user admin:s3cr3t-Value-9982` still trips the rule,
-  # which is the whole point of not writing this as a path exclusion.
-  '''--user\s+[^\s:'"]+:\$+\{[A-Za-z_][A-Za-z0-9_]*\}''',
+  # ${...} expansion. `admin:s3cr3tValue9982xQ` still trips the rule, which is
+  # the point of not writing this as a path exclusion for docker-compose.yml --
+  # that would have silenced real credentials in the same file. Both directions
+  # verified against the gitleaks binary before committing.
+  '''^[^\s:'"]+:\$+\{[A-Za-z_][A-Za-z0-9_]*\}$''',
 ]
