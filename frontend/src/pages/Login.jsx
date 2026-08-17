@@ -10,16 +10,28 @@ const HIGHLIGHTS = [
   { icon: Lock,        label: 'Audit-Grade Chain of Custody', desc: 'Every action hashed, signed, exportable.' },
 ];
 
-const TELEMETRY = [
-  { label: 'TOR Circuit',   value: 'ACTIVE',   tone: 'ok' },
-  { label: 'Ahmia Index',   value: 'ONLINE',   tone: 'ok' },
-  { label: 'YARA Engine',   value: 'READY',    tone: 'ok' },
-  { label: 'Vault',         value: 'SEALED',   tone: 'warn' },
+// Which components /system/health reports on, in the order they matter to
+// somebody looking at a login screen that will not let them in.
+//
+// These four rows used to be constants — TOR Circuit ACTIVE, Ahmia Index
+// ONLINE, YARA Engine READY, Vault SEALED — with pulsing green dots, on a
+// screen shown before anyone has authenticated. They said ACTIVE with the
+// stack in pieces. `/system/health` is deliberately unauthenticated precisely
+// so that something in this position can ask it.
+const HEALTH_ROWS = [
+  { key: 'database', label: 'Database' },
+  { key: 'redis', label: 'Redis' },
+  { key: 'elasticsearch', label: 'Search' },
+  { key: 'rabbitmq', label: 'Task broker' },
 ];
 
+const TONE_FOR = { ok: 'ok', degraded: 'err', disabled: 'warn' };
+
 function TelemetryRow({ label, value, tone }) {
-  const color = tone === 'ok' ? 'text-[#32D74B]' : tone === 'warn' ? 'text-[#FFD60A]' : 'text-[#0A84FF]';
-  const dot = tone === 'ok' ? 'bg-[#32D74B]' : tone === 'warn' ? 'bg-[#FFD60A]' : 'bg-[#0A84FF]';
+  const color =
+    tone === 'ok' ? 'text-[#32D74B]' : tone === 'warn' ? 'text-[#FFD60A]' : tone === 'err' ? 'text-[#FF453A]' : 'text-zinc-500';
+  const dot =
+    tone === 'ok' ? 'bg-[#32D74B]' : tone === 'warn' ? 'bg-[#FFD60A]' : tone === 'err' ? 'bg-[#FF453A]' : 'bg-zinc-600';
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
       <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">{label}</span>
@@ -36,6 +48,21 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [cursorIdx, setCursorIdx] = useState(0);
+  // Unauthenticated on purpose — see the docstring on /system/health. If it
+  // cannot be reached at all, that is itself the most useful thing this panel
+  // can tell somebody staring at a login form.
+  const [health, setHealth] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const probe = () =>
+      fetch('/system/health')
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled) setHealth(d); })
+        .catch(() => { if (!cancelled) setHealth({ components: {} }); });
+    probe();
+    const t = setInterval(probe, 15000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
 
   // Rotate highlighted capability card every 3.5s — static marketing is boring.
   useEffect(() => {
@@ -133,7 +160,17 @@ export default function Login() {
         <div className="relative z-10 space-y-2 max-w-md">
           <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-600 font-semibold">Live telemetry</p>
           <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] backdrop-blur-xl">
-            {TELEMETRY.map(t => <TelemetryRow key={t.label} {...t} />)}
+            {HEALTH_ROWS.map(({ key, label }) => {
+              const status = health?.components?.[key]?.status;
+              return (
+                <TelemetryRow
+                  key={key}
+                  label={label}
+                  value={status ? status.toUpperCase() : health === null ? 'CHECKING' : 'UNREACHABLE'}
+                  tone={TONE_FOR[status] ?? 'muted'}
+                />
+              );
+            })}
           </div>
         </div>
       </aside>

@@ -20,6 +20,7 @@ Contracts:
 from __future__ import annotations
 
 import uuid as _uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -219,3 +220,111 @@ class TestConcurrentWrites:
                 (await verify_session.execute(_select(AuditLog).where(AuditLog.tenant_id == tenant.id))).scalars().all()
             )
             assert len(rows) == 8
+
+
+@pytest.mark.asyncio
+async def test_rows_written_before_the_chain_are_not_called_tampered(db):
+    """Legacy rows are outside the chain, and saying so is the whole point.
+
+    Every deployment that predates the hash chain has audit rows with NULL
+    hashes. Recomputing a digest for them and comparing it to NULL fails, and
+    the verifier used to report that failure as
+
+        self_hash mismatch (row content tampered)
+
+    — an accusation of evidence tampering, raised against a healthy system, in
+    the one feature whose value is that its answer can be trusted. It painted a
+    red "Audit chain integrity broken" banner across the whole application.
+    """
+    tenant = Tenant(id=str(_uuid.uuid4()), name=f"legacy-{_uuid.uuid4().hex[:6]}")
+    db.add(tenant)
+    await db.commit()
+
+    for idx in range(3):
+        db.add(
+            AuditLog(
+                id=str(_uuid.uuid4()),
+                tenant_id=tenant.id,
+                user_id=None,
+                action=f"LEGACY_{idx}",
+                resource_type="leak",
+                resource_id=str(idx),
+                details={},
+                prev_hash=None,
+                self_hash=None,
+            )
+        )
+    await db.commit()
+
+    result = await verify_chain(db, tenant_id=tenant.id)
+
+    assert result.ok is True, f"legacy rows reported as a break: {result.reason}"
+    assert result.legacy_unhashed == 3
+    assert result.verified == 0
+    assert result.reason is None
+
+
+@pytest.mark.asyncio
+async def test_the_chain_continues_over_legacy_rows(db):
+    """New writes after legacy rows verify, and the counts stay honest."""
+    tenant = Tenant(id=str(_uuid.uuid4()), name=f"mixed-{_uuid.uuid4().hex[:6]}")
+    db.add(tenant)
+    await db.commit()
+
+    db.add(
+        AuditLog(
+            id=str(_uuid.uuid4()),
+            tenant_id=tenant.id,
+            action="LEGACY_0",
+            details={},
+            prev_hash=None,
+            self_hash=None,
+        )
+    )
+    await db.commit()
+
+    for idx in range(2):
+        await write_audit(db, tenant_id=tenant.id, user_id=None, action=f"NEW_{idx}", details={"i": idx})
+
+    result = await verify_chain(db, tenant_id=tenant.id)
+
+    assert result.ok is True, result.reason
+    assert result.legacy_unhashed == 1
+    assert result.verified == 2
+
+
+@pytest.mark.asyncio
+async def test_an_unhashed_row_inside_the_chain_is_still_a_break(db):
+    """Skipping legacy rows must not become a way to launder a deletion.
+
+    A row with no hash *after* the chain has started is not a legacy row: the
+    chain was running when it was written. It fails, with a reason that says
+    what was actually observed rather than guessing at intent.
+    """
+    tenant = Tenant(id=str(_uuid.uuid4()), name=f"gap-{_uuid.uuid4().hex[:6]}")
+    db.add(tenant)
+    await db.commit()
+
+    await write_audit(db, tenant_id=tenant.id, user_id=None, action="REAL_0", details={})
+    # An explicit, later timestamp. The walk orders by (timestamp, id), and two
+    # rows written in the same second tie — leaving a random UUID to decide
+    # which comes first, which would put this row at the head and make it look
+    # like a legacy row.
+    db.add(
+        AuditLog(
+            id=str(_uuid.uuid4()),
+            tenant_id=tenant.id,
+            action="SNEAKY",
+            details={},
+            timestamp=datetime.now(timezone.utc) + timedelta(minutes=5),
+            prev_hash=None,
+            self_hash=None,
+        )
+    )
+    await db.commit()
+
+    result = await verify_chain(db, tenant_id=tenant.id)
+
+    assert result.ok is False
+    assert "unhashed row inside the chain" in result.reason
+    assert result.legacy_unhashed == 0

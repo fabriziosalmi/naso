@@ -238,7 +238,13 @@ export default function App() {
       if (location.pathname === '/topology') fetchGraphData();
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchLeaks, fetchSystemStatus, fetchIdentities, fetchAuditLogs, fetchGraphData, location.pathname]);
+    // `isAuthenticated` belongs in here. Every fetch above returns early when
+    // it is false — which it is on mount, before the session probe answers —
+    // and none of the other dependencies change when it flips. So the effect
+    // ran once, fetched nothing, and never ran again: the dashboard sat on its
+    // "the operational data lake is empty" state with a database full of leaks,
+    // and a reload did not help because the same race repeats on every mount.
+  }, [isAuthenticated, fetchLeaks, fetchSystemStatus, fetchIdentities, fetchAuditLogs, fetchGraphData, location.pathname]);
 
   const isFullHeightView = ['/ai-analyst', '/docs'].includes(location.pathname);
 

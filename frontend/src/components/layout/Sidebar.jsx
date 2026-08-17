@@ -1,5 +1,5 @@
-import React, {useState, useEffect} from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo } from 'react';
+import { NavLink, useNavigate, useMatch } from 'react-router-dom';
 import useNasoStore from '@/store/useNasoStore';
 import {
   Radar, LayoutDashboard, Share2, Fingerprint, Flame, ScrollText, Brain, BookOpen, X,
@@ -25,6 +25,22 @@ const INTEL_ITEMS = [
 
 function NavItem({ item, onNavigate }) {
   const { icon: Icon, to, label, tip, tour } = item;
+
+  // isActive is computed here rather than through NavLink's function form of
+  // `className`, because this NavLink is the child of `Tooltip.Trigger asChild`.
+  // Radix's Slot merges the trigger's props into the child by concatenating
+  // className as a string — so a function arrives at the DOM as its own source
+  // code:
+  //
+  //   class="({isActive:c})=>`flex flex-nowrap flex-row items-center ...`"
+  //
+  // The browser matched none of those class names. Every navigation item in the
+  // application rendered as an unstyled inline anchor: the icon and the label
+  // stacked on separate lines, no padding, no rounding, and no active state
+  // anywhere in the sidebar. It shipped that way, and no test looks at styling.
+  const match = useMatch({ path: to, end: to === '/' });
+  const isActive = Boolean(match);
+
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
@@ -33,11 +49,9 @@ function NavItem({ item, onNavigate }) {
           end={to === '/'}
           onClick={onNavigate}
           data-tour={tour}
-          className={({ isActive }) =>
-            `flex flex-nowrap flex-row items-center gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium w-full whitespace-nowrap ${
-              isActive ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'
-            }`
-          }
+          className={`flex flex-nowrap flex-row items-center gap-3 h-9 px-3 rounded-lg transition-all text-[13px] font-medium w-full whitespace-nowrap ${
+            isActive ? 'bg-[#0A84FF] text-white shadow-sm' : 'text-zinc-400 hover:text-white hover:bg-white/[0.06]'
+          }`}
         >
           <Icon size={16} strokeWidth={1.5} /> <span>{label}</span>
         </NavLink>
@@ -61,9 +75,11 @@ export default function Sidebar({ onEditProfile, open, onClose }) {
   const logout = useNasoStore((s) => s.logout);
   const verifyAuditChain = useNasoStore((s) => s.verifyAuditChain);
   const refreshAuditIntegrity = useNasoStore((s) => s.refreshAuditIntegrity);
+  const auditIntegrity = useNasoStore((s) => s.auditIntegrity);
+  const auditLogs = useNasoStore((s) => s.auditLogs);
+  const fetchAuditLogs = useNasoStore((s) => s.fetchAuditLogs);
   const navigate = useNavigate();
   const role = user?.role;
-  const [terminalLogs, setTerminalLogs] = useState([]);
 
   // Close drawer on ESC (mobile only)
   useEffect(() => {
@@ -73,28 +89,35 @@ export default function Sidebar({ onEditProfile, open, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  // The panel is visible on every route, so it cannot rely on the /audit page
+  // having been opened to populate it.
   useEffect(() => {
-    const events = [
-        "Inbound telemetry from TOR node node_alfa_3",
-        "YARA scan complete: 12 matches found",
-        "AI Triage initiated for artifact 8f2c3",
-        "Identity correlation engine updated MasterProfile: f.salmi",
-        "MinIO object storage verified: artifact_01.png",
-        "Distributed trace: elasticsearch indexing success",
-        "Circuit Breaker [Elasticsearch]: Status CLOSED"
-    ];
+    fetchAuditLogs();
+  }, [fetchAuditLogs]);
 
-    const interval = setInterval(() => {
-        const newLog = {
-            time: new Date().toLocaleTimeString(),
-            msg: events[Math.floor(Math.random() * events.length)],
-            type: Math.random() > 0.8 ? 'warn' : 'info'
-        };
-        setTerminalLogs(prev => [...prev.slice(-49), newLog]);
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Real audit entries, newest last, so the panel reads like a tail.
+  //
+  // It used to pick a line every four seconds from a hardcoded array —
+  // "YARA scan complete: 12 matches found", "Identity correlation engine
+  // updated MasterProfile: f.salmi" — and colour a random fifth of them as
+  // warnings. Invented findings, invented counts, and the author's own name, in
+  // a panel labelled System Logs, inside a tool whose entire proposition is that
+  // what it shows you is evidence. The audit log is the real version of the same
+  // idea: actor, action, resource, timestamp, and it is already tenant-scoped.
+  const terminalLogs = useMemo(
+    () =>
+      (auditLogs ?? [])
+        .slice(0, 50)
+        .map((entry) => ({
+          time: new Date(entry.timestamp).toLocaleTimeString(),
+          msg: `${entry.action}${entry.resource_type ? ` · ${entry.resource_type}` : ''}${
+            entry.resource_id ? ` ${String(entry.resource_id).slice(0, 8)}` : ''
+          }`,
+          type: 'info',
+        }))
+        .reverse(),
+    [auditLogs]
+  );
 
   return (
     <>
@@ -140,9 +163,19 @@ export default function Sidebar({ onEditProfile, open, onClose }) {
                   <span className="text-[11px] font-medium text-zinc-400">Role</span>
                   <Badge variant="outline" className="text-[10px] h-5 border-white/[0.1] bg-white/[0.02]">{role || "Operator"}</Badge>
               </div>
+              {/* Audit chain, not "Vault" — there is no vault in this system,
+                  and a green dot that always says Active is decoration wearing
+                  the clothes of a status indicator. This one reflects the last
+                  answer from GET /system/audit/verify. */}
               <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-medium text-zinc-400">Vault</span>
-                  <span className="text-[11px] text-[#32D74B] font-medium flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#32D74B]"></div> Active</span>
+                  <span className="text-[11px] font-medium text-zinc-400">Audit chain</span>
+                  {auditIntegrity === null ? (
+                    <span className="text-[11px] text-zinc-500 font-medium flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-zinc-600"></div> Unknown</span>
+                  ) : auditIntegrity?.ok ? (
+                    <span className="text-[11px] text-[#32D74B] font-medium flex items-center gap-1.5" title={auditIntegrity.legacy_unhashed ? `${auditIntegrity.legacy_unhashed} entries predate the hash chain and are outside it` : undefined}><div className="w-1.5 h-1.5 rounded-full bg-[#32D74B]"></div> {auditIntegrity.verified ?? 0} verified{auditIntegrity.legacy_unhashed ? ` · ${auditIntegrity.legacy_unhashed} legacy` : ''}</span>
+                  ) : (
+                    <span className="text-[11px] text-[#FF453A] font-medium flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#FF453A]"></div> Broken</span>
+                  )}
               </div>
             </div>
           </div>

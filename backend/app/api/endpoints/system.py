@@ -97,6 +97,11 @@ async def verify_audit_chain_endpoint(
         "broken_at": result.broken_at,
         "reason": result.reason,
         "total": total,
+        # Rows written before the hash chain existed. They are outside the
+        # chain, not evidence of tampering, and reporting the count is how an
+        # operator can tell "nothing to verify yet" from "verified".
+        "legacy_unhashed": result.legacy_unhashed,
+        "verified": result.verified,
         "tenant_id": tenant_id,
     }
 

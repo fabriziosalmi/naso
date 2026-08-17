@@ -87,6 +87,12 @@ class VerifyResult:
     ok: bool
     broken_at: int | None = None
     reason: str | None = None
+    #: Rows at the head of the log written before the hash chain existed, and
+    #: so outside it. Not a fault, and deliberately not repaired — see the
+    #: comment in :func:`verify_chain`.
+    legacy_unhashed: int = 0
+    #: Rows actually covered by the walk.
+    verified: int = 0
 
 
 # ─── Canonical hashing ───────────────────────────────────────────────────────
@@ -251,13 +257,53 @@ async def verify_chain(db: AsyncSession, *, tenant_id: str | None) -> VerifyResu
     stmt = select(AuditLog).where(AuditLog.tenant_id == tenant_id).order_by(AuditLog.timestamp, AuditLog.id)
     rows = (await db.execute(stmt)).scalars().all()
 
+    # Rows written before the chain existed carry no hashes at all. Verifying
+    # them against a recomputed digest compares something to NULL and fails, and
+    # the failure this function used to report was
+    #
+    #     self_hash mismatch (row content tampered)
+    #
+    # — an accusation of evidence tampering, raised on every deployment that
+    # predates the hash chain, in the one part of the product whose value is
+    # that its answer can be trusted. On this machine that was four rows out of
+    # four: a red "integrity broken" banner across an application that was
+    # working perfectly.
+    #
+    # They are counted and skipped, not back-filled. Hashing them now would be
+    # trivial and would be a lie: it would present rows whose integrity was
+    # never protected as verified, which is the exact thing this chain exists to
+    # make impossible.
+    legacy_unhashed = 0
+    start = 0
+    for row in rows:
+        if row.self_hash is None and row.prev_hash is None:
+            legacy_unhashed += 1
+            start += 1
+            continue
+        break
+
     expected_prev: str | None = None
-    for idx, row in enumerate(rows):
+    for idx, row in enumerate(rows[start:], start=start):
+        # A row with no hash *after* the chain has begun is a different animal
+        # from a legacy row: the writer that produced it skipped the chain, or
+        # somebody replaced a row with an unhashed one. Neither is "tampered
+        # content", and neither is fine.
+        if row.self_hash is None:
+            return VerifyResult(
+                ok=False,
+                broken_at=idx,
+                reason="unhashed row inside the chain (written without the chain writer, or replaced)",
+                legacy_unhashed=legacy_unhashed,
+                verified=idx - start,
+            )
+
         if row.prev_hash != expected_prev:
             return VerifyResult(
                 ok=False,
                 broken_at=idx,
                 reason="prev_hash mismatch (linkage broken)",
+                legacy_unhashed=legacy_unhashed,
+                verified=idx - start,
             )
 
         recomputed = _sha256_hex(
@@ -277,11 +323,19 @@ async def verify_chain(db: AsyncSession, *, tenant_id: str | None) -> VerifyResu
                 ok=False,
                 broken_at=idx,
                 reason="self_hash mismatch (row content tampered)",
+                legacy_unhashed=legacy_unhashed,
+                verified=idx - start,
             )
 
         expected_prev = row.self_hash
 
-    return VerifyResult(ok=True, broken_at=None, reason=None)
+    return VerifyResult(
+        ok=True,
+        broken_at=None,
+        reason=None,
+        legacy_unhashed=legacy_unhashed,
+        verified=len(rows) - start,
+    )
 
 
 __all__ = ["VerifyResult", "write_audit", "verify_chain"]

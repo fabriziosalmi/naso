@@ -18,7 +18,7 @@ hero:
 
 features:
   - title: Model Context Protocol
-    details: "An MCP server exposes six tools — dark-web, Shodan and Telegram recon, identity and leak lookups, and VIP protection — over the same tenant-scoped queries the API uses, so a client gets no second access path to the database. Inference runs on your own hardware; payloads never leave it."
+    details: "An MCP server exposes six tools — dark-web, Shodan and Telegram recon, identity and leak lookups, and VIP protection — over the same tenant-scoped queries the API uses, and the tenant it is bound to is fixed in its environment, out of the model’s reach — so a client cannot reach another tenant. It is still a direct database connection: see the guide. Inference runs on your own hardware; payloads never leave it."
   - title: Streaming bulk ingestion
     details: "Large dumps are read line by line from a local file or a URL, never loaded whole. A regex pre-pass forwards only the matching chunks to the pipeline, on a worker pinned to concurrency 1 so one big job cannot starve the per-hit queue."
   - title: Identity correlation

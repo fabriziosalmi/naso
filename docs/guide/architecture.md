@@ -93,6 +93,7 @@ A fleet of 5 Tor containers behind an HAProxy load balancer provides anonymized 
 - **Audit Logging**: User and AI actions are recorded in `audit_logs` with the
   actor, the tenant, the action, the resource, a timestamp and a structured
   `details` field — and a SHA-256 chain over the row and its predecessor, so a
-  deletion or an edit is detectable through `GET /system/audit/verify`. There is
-  **no IP address column**; this page claimed one for months, and if you need
-  request provenance it has to be added to the model first.
+  deletion or an edit is detectable through `GET /system/audit/verify`.
+  `audit_logs.ip_address` exists as a column and **nothing ever writes to it**;
+  this page used to list it among the fields recorded. If you need request
+  provenance, the column is there and the writers are not.

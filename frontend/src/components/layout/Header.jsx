@@ -60,15 +60,21 @@ export default function Header({ systemStatus, onOpenNotifications, onOpenSideba
             </div>
 
             <div className="hidden lg:flex items-center gap-5 px-3 py-1 bg-black/40 rounded-full border border-white/5">
+              {/* A measurement or nothing. The fallback here was the literal
+                  string '0.42', so a stack that had never answered a probe
+                  displayed a plausible database latency to three significant
+                  figures. */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-zinc-500">Latency</span>
-                <span className="text-[11px] font-medium text-zinc-300">{systemStatus?.latency_ms?.total || '0.42'}ms</span>
+                <span className="text-[11px] font-medium text-zinc-500">DB latency</span>
+                <span className="text-[11px] font-medium text-zinc-300">
+                  {typeof systemStatus?.latency_ms?.total === 'number' && systemStatus.latency_ms.total >= 0
+                    ? `${systemStatus.latency_ms.total}ms`
+                    : '—'}
+                </span>
               </div>
-              <div className="w-[1px] h-3 bg-zinc-800"></div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-medium text-zinc-500">Cluster</span>
-                <span className="text-[11px] font-medium text-[#0A84FF]">#Alfa-7</span>
-              </div>
+              {/* "Cluster #Alfa-7" was a fixed string. NASO has no cluster
+                  concept and no node called Alfa-7; it was set dressing in the
+                  one strip of the interface a reader takes for instrumentation. */}
               <div className="w-[1px] h-3 bg-zinc-800"></div>
               {online ? (
                 <div className="flex items-center gap-1.5 px-1 py-0.5 rounded-full bg-[#32D74B]/10">

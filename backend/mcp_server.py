@@ -17,6 +17,7 @@ The other change is tenant scoping; see :func:`mcp_tenant_id`.
 import contextlib
 import logging
 import os
+import uuid
 
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy.future import select
@@ -64,6 +65,18 @@ def mcp_tenant_id() -> str:
             "one tenant explicitly — otherwise every query returns every "
             "tenant's data. Set it in the MCP client's env block."
         )
+    # Shape-checked, because the failure mode of a typo is silence: every tool
+    # returns "no results", which reads as an empty tenant rather than as a
+    # misconfiguration, and an operator can spend a long time looking at the
+    # wrong thing. Tenant ids are UUIDs (`shared/models.py`).
+    try:
+        uuid.UUID(tenant_id)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"NASO_MCP_TENANT_ID is not a UUID: {tenant_id!r}. Tenant ids look "
+            "like 3f2504e0-4f89-11d3-9a0c-0305e82c3301 — list them with "
+            "`docker exec naso-db psql -U $DB_USER -d $DB_NAME -c 'select id, name from tenants'`."
+        ) from exc
     return tenant_id
 
 
@@ -146,12 +159,23 @@ async def naso_telegram_intel(channel_name: str) -> str:
         return f"Telegram intel failed: {str(e)}"
 
 
-@server.tool(description="List the identities this tenant monitors.")
+@server.tool(description="List the identities this tenant monitors, highest risk first.")
 async def naso_get_identities(limit: int = 50) -> str:
-    """List monitored identities, newest first, capped at *limit*."""
+    """List monitored identities, highest risk first, capped at *limit*.
+
+    The ordering is explicit and the limit is clamped: without an ORDER BY the
+    result order is whatever the database felt like, and `limit` arrives from a
+    model, which can ask for a million rows as easily as fifty.
+    """
+    limit = max(1, min(int(limit), 200))
     async for db in get_db_session():
         try:
-            stmt = select(Identity).where(Identity.tenant_id == mcp_tenant_id()).limit(limit)
+            stmt = (
+                select(Identity)
+                .where(Identity.tenant_id == mcp_tenant_id())
+                .order_by(Identity.risk_score.desc(), Identity.id)
+                .limit(limit)
+            )
             identities = (await db.execute(stmt)).scalars().all()
             if not identities:
                 return "No identities tracked yet."
