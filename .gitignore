@@ -50,3 +50,6 @@ frontend/test-results/
 # Personal, uncommitted Compose customization. Compose applies a file with
 # this name automatically, so it must never be committed.
 docker-compose.override.yml
+
+# Recorded demo output (regenerate with `node frontend/demo/record.mjs`)
+frontend/demo/out/

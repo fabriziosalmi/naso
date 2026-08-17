@@ -55,7 +55,7 @@ Add the following JSON block:
       "args": ["backend/mcp_server.py"],
       "cwd": "/absolute/path/to/your/naso/repo",
       "env": {
-        "DATABASE_URL": "postgresql+asyncpg://user:pass@localhost:5432/naso_db",
+        "DATABASE_URL": "postgresql+asyncpg://naso_admin:<db-password>@localhost:5432/naso_db",
         "NASO_MCP_TENANT_ID": "the-tenant-uuid-from-above"
       }
     }

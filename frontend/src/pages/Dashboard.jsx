@@ -241,9 +241,17 @@ export default function Dashboard({ setViewingScreenshotId }) {
     const n = identities.length;
     return [Math.max(0, n - 3), Math.max(0, n - 2), Math.max(0, n - 2), Math.max(0, n - 1), n, n, n];
   }, [identities.length]);
-  // Infrastructure load is pseudo-live; generate a stable-ish series from value.
-  const infraValue = 18.4;
-  const infraSeries = [16.1, 17.8, 19.5, 18.9, 17.2, 18.0, infraValue];
+  // Was `const infraValue = 18.4` — a constant, presented as "Infrastructure
+  // Load · Worker cluster utilization" with a hand-written sparkline beside it.
+  // Nothing in this application measures worker utilization, so the card
+  // reported a number that could never be right or wrong.
+  //
+  // Triage backlog is the same shape of question and can actually be answered
+  // from what is already loaded: critical hits nobody has acknowledged yet.
+  const unacknowledgedCritical = useMemo(
+    () => leaks.filter((l) => l.severity_score >= 80 && !l.acknowledged_at).length,
+    [leaks]
+  );
 
   if (isPlatformEmpty) {
     return <OnboardingHero navigate={navigate} />;
@@ -279,12 +287,11 @@ export default function Dashboard({ setViewingScreenshotId }) {
           sparkColor="#FFD60A"
         />
         <StatCard
-          title="Infrastructure Load"
-          value={`${infraValue}%`}
+          title="Awaiting triage"
+          value={unacknowledgedCritical}
           icon={Cpu}
-          description="Worker cluster utilization"
-          series={infraSeries}
-          sparkColor="#32D74B"
+          description="Critical hits not yet acknowledged"
+          sparkColor="#FFD60A"
           invertTrend
         />
       </div>
