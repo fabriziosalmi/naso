@@ -1,4 +1,4 @@
-FROM alpine:3.22
+FROM alpine:3.24
 
 # Fetched over HTTPS. An earlier revision rewrote the repository URLs to plain
 # http "to avoid TLS issues during build in some environments" — the same trade
