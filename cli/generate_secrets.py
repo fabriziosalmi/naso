@@ -74,6 +74,13 @@ def main():
 
     # 2. Generate hardened passwords. The *.txt names are the ones
     # docker-compose.yml references in its top-level `secrets:` block.
+    #
+    # Elasticsearch is the exception and gets no file: it validates the mode of
+    # its password file and accepts only 400 or 600, which contradicts the 0444
+    # every other file here needs, so it reads ELASTIC_PASSWORD from .env
+    # instead -- rendered below from the same generated value. A file nothing
+    # reads would be worse than absent: in a secrets directory, dead entries
+    # are what an operator mistakes for the live ones.
     passwords = {
         "db": secrets.token_urlsafe(24),
         "rabbit": secrets.token_urlsafe(24),
@@ -83,7 +90,6 @@ def main():
     create_secret("db_password.txt", passwords["db"])
     create_secret("rabbit_password.txt", passwords["rabbit"])
     create_secret("minio_password.txt", passwords["minio"])
-    create_secret("elastic_password.txt", passwords["elastic"])
 
     print(f"Development secrets generated in {SECRETS_DIR}/ (dir 0755, files 0444).")
     write_env(passwords)
