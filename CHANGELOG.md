@@ -20,6 +20,24 @@ that NASO is pre-1.0 and the public API may change in a minor release.
 > stability nobody here is in a position to keep. The version rises to `1.0.0`
 > when the HTTP API stops changing shape, not when the code feels finished.
 
+## [0.1.2] — 2026-08-18
+
+### Fixed
+
+- **Two of the application's own pages were unreachable by URL.** The dev and
+  preview proxy matched API prefixes by string prefix, so `/ai` swallowed
+  `/ai-analyst` and `/identities` collided exactly. A reload, a bookmark or a
+  shared link to either rendered `{"detail":"Not Found"}` from the API instead
+  of the application. All seven routes are now covered by a test that loads them
+  directly.
+- Three more claims the interface made and the code does not support: the
+  "Ahmia Active · Tor Circuit On · Correlation On" dots under the dark-web probe
+  (wired to nothing, and *On* throughout the Tor crash loop); "Immutable
+  forensic accountability — every operation hashed and logged" on the audit page
+  (tamper-evident, not immutable; authentication is not audited; legacy rows
+  carry no hash); and an in-app API reference with a wrong Telegram parameter, a
+  stale audit description, and two missing routes.
+
 ## [0.1.1] — 2026-08-18
 
 Everything here was found by driving the interface in a browser after 0.1.0 was
@@ -221,5 +239,6 @@ Summarised, not reconstructed. Roughly in the order it happened:
 - Test infrastructure: pytest for the backend, Vitest for the frontend store,
   Playwright for end-to-end flows, and `cli/validate.sh` as the structural gate.
 
+[0.1.2]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.2
 [0.1.1]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.1
 [0.1.0]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.0
