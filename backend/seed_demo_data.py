@@ -5,14 +5,18 @@ from datetime import datetime, timedelta, timezone
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from sqlalchemy.future import select
 
-from shared.database import async_session
+from shared.database import AsyncSessionLocal
 from shared.models import Identity, LeakHit, Tenant
 
 console = Console()
 
 # Configure Synthetic Operation Target
 OPERATION_NAME = "Operation Lazarus Drop"
+TENANT_NAME = "Demo Corp Intel"
+# .local and .invalid are special-use TLDs that cannot resolve or receive mail,
+# which is the point: every address below is unmistakably synthetic.
 TARGET_DOMAIN = "corp.local"
 
 VIP_IDENTITIES = [f"ceo@{TARGET_DOMAIN}", f"cto@{TARGET_DOMAIN}", f"admin-root@{TARGET_DOMAIN}"]
@@ -30,16 +34,36 @@ YARA_HITS = ["SUSP_OBFUSCATED_POWERSHELL", "CREDENTIAL_DUMP_LSASS", "RANSOMWARE_
 async def seed_demo():
     console.print("\n[bold cyan]🚀 NASO Forensic Engine - Bootstrapping Zero-to-Hero Demo Data...[/bold cyan]\n")
 
-    async with async_session() as db:
+    async with AsyncSessionLocal() as db:
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             transient=True,
         ) as progress:
-            task1 = progress.add_task("[yellow]Initializing Core Tenant (Demo Corp Intel)...", total=1)
+            task1 = progress.add_task(f"[yellow]Initializing Core Tenant ({TENANT_NAME})...", total=1)
 
-            # Check for demo tenant or fallback to default
-            tenant = Tenant(name="Demo Corp Intel")
+            # The comment here used to say "check for demo tenant or fallback to
+            # default" while the code below unconditionally inserted one.
+            # `tenants.name` is unique, so the second `make demo` on any stack
+            # died with UniqueViolationError -- and after the correlation-engine
+            # migration the identities would have collided on
+            # (tenant_id, type, normalized_identifier) right after it.
+            result = await db.execute(select(Tenant).where(Tenant.name == TENANT_NAME))
+            existing = result.scalar_one_or_none()
+            if existing is not None:
+                progress.stop()
+                console.print(
+                    f"[yellow]Tenant '{TENANT_NAME}' already exists — the demo data is already "
+                    "seeded, and this script only knows how to seed it once.[/yellow]"
+                )
+                console.print(
+                    "[dim]To reseed from scratch, delete that tenant first "
+                    "(Settings → Tenants, or DELETE /tenants/{id} as an admin), "
+                    "then run `make demo` again.[/dim]\n"
+                )
+                return
+
+            tenant = Tenant(name=TENANT_NAME)
             db.add(tenant)
             await db.commit()
             await db.refresh(tenant)

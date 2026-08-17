@@ -17,6 +17,7 @@ Both assertions below fail against that code:
 """
 
 import pytest
+
 from shared.core import es_client
 
 
