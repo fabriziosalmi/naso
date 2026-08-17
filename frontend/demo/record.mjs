@@ -113,7 +113,9 @@ async function main() {
     await shot(page, name);
   }
 
-  console.log('· reload — the session survives it');
+  console.log('· back to the dashboard, then reload — the session survives it');
+  await page.getByRole('link', { name: 'Dashboard' }).first().click();
+  await page.waitForTimeout(BEAT);
   await page.reload();
   await page.waitForTimeout(BEAT * 2);
   await shot(page, '08-after-reload');
