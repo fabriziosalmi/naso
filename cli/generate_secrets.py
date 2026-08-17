@@ -35,9 +35,6 @@ ENV_TEMPLATE = ".env.example"
 # Docker mounts real secrets as 0444 files under a 0755 mount point.
 DIR_MODE = 0o755
 FILE_MODE = 0o444
-# Elasticsearch validates the mode of its own password file and accepts only
-# 400 or 600. See the comment at the call site.
-ES_FILE_MODE = 0o600
 
 
 def create_secret(name, content, mode=FILE_MODE):
@@ -77,6 +74,13 @@ def main():
 
     # 2. Generate hardened passwords. The *.txt names are the ones
     # docker-compose.yml references in its top-level `secrets:` block.
+    #
+    # Elasticsearch is the exception and gets no file: it validates the mode of
+    # its password file and accepts only 400 or 600, which contradicts the 0444
+    # every other file here needs, so it reads ELASTIC_PASSWORD from .env
+    # instead -- rendered below from the same generated value. A file nothing
+    # reads would be worse than absent: in a secrets directory, dead entries
+    # are what an operator mistakes for the live ones.
     passwords = {
         "db": secrets.token_urlsafe(24),
         "rabbit": secrets.token_urlsafe(24),
@@ -86,20 +90,8 @@ def main():
     create_secret("db_password.txt", passwords["db"])
     create_secret("rabbit_password.txt", passwords["rabbit"])
     create_secret("minio_password.txt", passwords["minio"])
-    # Elasticsearch is the exception, and it is not negotiable: its entrypoint
-    # refuses to start with
-    #   "File /run/secrets/elastic_password from ELASTIC_PASSWORD_FILE must
-    #    have file permissions 400 or 600, but actually has: 444"
-    # and crash-loops. 0444 is right for every other secret here -- the
-    # application containers run cap_drop: ALL, have no CAP_DAC_OVERRIDE, and
-    # so cannot read a file they do not own -- but the Elasticsearch container
-    # keeps its capabilities and starts as root, so it can read 0600 whoever
-    # owns it. Nothing else reads this file: the API and the workers take
-    # ES_PASSWORD from .env, not from /run/secrets, because pydantic-settings
-    # matches secret files by field name and this one is elastic_password.
-    create_secret("elastic_password.txt", passwords["elastic"], mode=ES_FILE_MODE)
 
-    print(f"Development secrets generated in {SECRETS_DIR}/ (dir 0755, files 0444; elastic_password 0600).")
+    print(f"Development secrets generated in {SECRETS_DIR}/ (dir 0755, files 0444).")
     write_env(passwords)
 
 

@@ -73,18 +73,46 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=true
-      - ELASTIC_PASSWORD_FILE=/run/secrets/elastic_password
+      # Straight from .env, not through /run/secrets, and that is the whole
+      # point. Elasticsearch validates the mode of a password file and accepts
+      # only 400 or 600; the API and worker containers run cap_drop: ALL, have
+      # no CAP_DAC_OVERRIDE, and so need the secrets they read to be 0444. Both
+      # constraints are real and they contradict each other on one shared
+      # directory.
+      #
+      # The previous attempt to satisfy both -- 0600 for this file, 0444 for
+      # the rest -- passed the mode check and then failed one step later with
+      # "cat: /run/secrets/elastic_password: Permission denied", because the
+      # entrypoint reads the file as the elasticsearch user, not as root. It
+      # looked fixed: the old error was gone and the modules loaded. It was
+      # not: the container boots, throws a fatal exception and restarts, in a
+      # loop.
+      #
+      # generate_secrets.py already renders ELASTIC_PASSWORD into .env with the
+      # same value, and Compose interpolates .env by itself, so dropping the
+      # file indirection removes the conflict rather than balancing it. This is
+      # the development stack; in production use real Docker secrets, where the
+      # orchestrator owns the file as the service user.
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?run "make bootstrap" first}
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
-    secrets:
-      - elastic_password
     security_opt:
       - no-new-privileges:true
     volumes:
-      - ./data/elasticsearch:/usr/share/elasticsearch/data
+      # A named volume, not a ./data bind mount like the other datastores.
+      # Postgres and MinIO get away with a bind mount because their entrypoints
+      # start as root and chown the directory -- which is exactly why they are
+      # granted CHOWN, FOWNER and DAC_OVERRIDE above. Elasticsearch does not:
+      # it runs as uid 1000 from the start, so a host directory Docker created
+      # as root is simply not writable, and it dies with
+      #     failed to obtain node locks, tried [/usr/share/elasticsearch/data];
+      #     maybe these locations are not writable
+      # Docker initialises a named volume with the image's own ownership, so
+      # uid 1000 owns it and the problem does not arise.
+      - naso-es-data:/usr/share/elasticsearch/data
     networks:
       - naso-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf --user elastic:$$(cat /run/secrets/elastic_password) https://localhost:9200 -k >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -sf --user elastic:$${ELASTIC_PASSWORD} https://localhost:9200 -k >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -326,6 +354,9 @@ networks:
   naso-net:
     driver: bridge
 
+volumes:
+  naso-es-data:
+
 secrets:
   db_password:
     file: .secrets-mock/db_password.txt
@@ -333,5 +364,3 @@ secrets:
     file: .secrets-mock/rabbit_password.txt
   minio_password:
     file: .secrets-mock/minio_password.txt
-  elastic_password:
-    file: .secrets-mock/elastic_password.txt
