@@ -38,7 +38,6 @@ otherwise pass unremarked does not pass unremarked for these.
 |---|---|---|
 | `/identities/` | `GET` | List identities for the current tenant |
 | `/identities/` | `POST` | Register a new monitored identity |
-| `/identities/{id}` | `GET` | Get a single identity by ID |
 | `/identities/{id}/insights` | `GET` | Deep forensic profile with breach timeline |
 | `/identities/{id}/protect` | `PATCH` | Toggle VIP protection status |
 | `/identities/graph` | `GET` | Force-graph topology data for the tenant |
