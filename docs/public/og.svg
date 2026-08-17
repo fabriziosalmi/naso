@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#0A0A0C" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="innerCirc">
+      <circle cx="50" cy="50" r="38"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0A0A0C"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1200" height="6" fill="url(#accent)"/>
+
+  <!-- logo mark, same motif as docs/public/logo.svg -->
+  <g transform="translate(96,96) scale(1.6)">
+    <circle cx="50" cy="50" r="48" fill="#FFFFFF" stroke="#050507" stroke-width="4"/>
+    <circle cx="50" cy="50" r="38" fill="#0A0A0C"/>
+    <g clip-path="url(#innerCirc)">
+      <rect x="26" y="0" width="12" height="100" fill="#FFFFFF"/>
+      <rect x="62" y="0" width="12" height="100" fill="#FFFFFF"/>
+    </g>
+  </g>
+
+  <text x="96" y="392" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="132" font-weight="700" letter-spacing="-4" fill="#FFFFFF">NASO</text>
+
+  <text x="96" y="452" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="500" fill="#E4E4E7">Self-hosted breach &amp; dark-web exposure monitoring</text>
+
+  <text x="96" y="500" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="25" font-weight="400" fill="#8b8b95">Ingest leaks · correlate identities · triage with a local LLM</text>
+
+  <rect x="96" y="540" width="4" height="34" fill="url(#accent)"/>
+  <text x="116" y="566" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="500" fill="#a1a1aa">github.com/fabriziosalmi/naso</text>
+  <text x="1104" y="566" text-anchor="end" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="500" fill="#71717a">AGPL-3.0 · v0.1.0</text>
+</svg>
