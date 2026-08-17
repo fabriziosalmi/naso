@@ -96,6 +96,133 @@ check_docker_status() {
     print_success "Infrastructure is online and healthy."
 }
 
+# How long to wait for every container to settle, and for the composite health
+# endpoint to report all-clear.
+STACK_WAIT_SECONDS="${NASO_STACK_WAIT_SECONDS:-180}"
+
+# The gate above checks one container. That was the whole of it, and it is why
+# this script printed "ALL SYSTEMS NOMINAL" while six containers were in a
+# permanent crash loop: the five Tor instances could not create their data
+# directory and the haproxy front end aborted at boot because their names did
+# not resolve. Every CI run was green throughout.
+#
+# A container that is `restarting` is not a slow start, it is a failure with a
+# retry attached, so it has to fail the build.
+check_stack_state() {
+    print_step "SYSTEM" "Verifying every container reaches a steady running state"
+
+    local waited=0
+    local report=""
+    while [ "$waited" -lt "$STACK_WAIT_SECONDS" ]; do
+        report="$(docker compose ps -a --format json 2>/dev/null | python3 -c '
+import json, sys
+
+bad = []
+seen = 0
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    # Compose v2 emits one JSON object per line; some versions emit one array.
+    try:
+        parsed = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    for c in parsed if isinstance(parsed, list) else [parsed]:
+        seen += 1
+        name = c.get("Name", "?")
+        state = (c.get("State") or "").lower()
+        health = (c.get("Health") or "").lower()
+        # No backslashes inside f-string expressions: that is a syntax error
+        # before Python 3.12, and this runs on whatever the host provides.
+        if state != "running":
+            bad.append(name + ": " + (state or "unknown"))
+        elif health == "unhealthy":
+            bad.append(name + ": running but unhealthy")
+        elif health == "starting":
+            bad.append(name + ": health starting")
+if not seen:
+    print("NONE no containers found")
+elif bad:
+    print("BAD " + "; ".join(bad))
+else:
+    print("OK " + str(seen))
+')"
+        case "$report" in
+            OK*) break ;;
+        esac
+        sleep 3
+        waited=$((waited + 3))
+    done
+
+    case "$report" in
+        OK*)
+            echo -e "  ${CYAN}note${RESET}: ${report#OK } containers running (settled in ${waited}s)."
+            print_success "Every container is running."
+            ;;
+        *)
+            print_error "Containers did not settle within ${STACK_WAIT_SECONDS}s — ${report#* }"
+            docker compose ps -a 2>&1 || true
+            exit 1
+            ;;
+    esac
+}
+
+# `/system/status` answers 200 with {"status": "degraded"} when a dependency is
+# down, and the composite endpoint answers 503 with the component that broke.
+# Neither was ever checked here, so an Elasticsearch the application could not
+# reach — it spoke https to a plaintext listener for months — never failed a
+# build either.
+#
+# `disabled` is a pass: Elasticsearch and MinIO are optional, and a minimal
+# install that leaves them unconfigured is a correct install.
+check_composite_health() {
+    print_step "SYSTEM" "Verifying /system/health reports every component healthy"
+
+    local waited=0
+    local report=""
+    while [ "$waited" -lt "$STACK_WAIT_SECONDS" ]; do
+        report="$(curl -s --max-time 15 http://localhost:8000/system/health 2>/dev/null | python3 -c '
+import json, sys
+
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("BAD endpoint returned no parsable JSON")
+    raise SystemExit(0)
+components = d.get("components") or {}
+if not components:
+    print("BAD response carried no components")
+    raise SystemExit(0)
+def describe(item):
+    return item[0] + "=" + str(item[1].get("status"))
+
+bad = [describe(i) for i in components.items() if i[1].get("status") not in ("ok", "disabled")]
+if bad:
+    print("BAD " + ", ".join(bad))
+else:
+    print("OK " + ", ".join(describe(i) for i in sorted(components.items())))
+')"
+        case "$report" in
+            OK*) break ;;
+        esac
+        sleep 3
+        waited=$((waited + 3))
+    done
+
+    case "$report" in
+        OK*)
+            echo -e "  ${CYAN}note${RESET}: ${report#OK }"
+            print_success "Composite health is clear."
+            ;;
+        *)
+            print_error "Composite health never cleared within ${STACK_WAIT_SECONDS}s — ${report#* }"
+            curl -s --max-time 15 http://localhost:8000/system/health 2>&1 | head -40
+            exit 1
+            ;;
+    esac
+}
+
 run_backend_tests() {
     print_step "BACKEND" "Executing PyTest Draconian Suite (API & AI Core)"
     # -p no:cacheprovider: the API container has a read_only root filesystem, so
@@ -155,6 +282,8 @@ print_summary() {
 # --- MAIN EXECUTION ---
 print_banner
 check_docker_status
+check_stack_state
+check_composite_health
 run_backend_tests
 run_frontend_unit_tests
 run_e2e_tests
