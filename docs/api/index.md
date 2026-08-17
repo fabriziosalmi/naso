@@ -4,8 +4,13 @@ NASO exposes an asynchronous RESTful API built on FastAPI. All responses follow 
 
 ## Authentication
 
-All endpoints except the two health checks require authentication. Log in to
-obtain a token:
+Three routes answer without credentials, and no others: `POST /auth/login`,
+`GET /system/status` and `GET /system/health`. The first is how a client
+bootstraps a session; the other two exist for orchestrators and load balancers,
+which hold none — and are written to say nothing an anonymous caller could use.
+Everything else, `GET /ai/health` included, requires authentication.
+
+Log in to obtain a token:
 
 ```bash
 curl -X POST http://localhost:8000/auth/login \
