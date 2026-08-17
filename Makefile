@@ -1,5 +1,7 @@
 # NASO Forensic Engine — Master Makefile
 
+PYTHON ?= python3
+
 .PHONY: help bootstrap up down build logs demo test
 
 help:
@@ -16,8 +18,13 @@ help:
 # The script also renders .env from .env.example with the generated values, so
 # the credentials the containers are provisioned with and the ones the
 # application connects with actually agree. An existing .env is left alone.
+#
+# `python` and not `python3` was a portability bug in the first command of the
+# documented quickstart: macOS ships no `python`, so a clean clone failed at
+# `make bootstrap` with "make: python: No such file or directory". Override
+# with `make bootstrap PYTHON=…` to use a specific interpreter or a venv.
 bootstrap:
-	python cli/generate_secrets.py
+	$(PYTHON) cli/generate_secrets.py
 
 up:
 	docker compose up -d
