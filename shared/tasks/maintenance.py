@@ -7,6 +7,7 @@ from minio import Minio
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from shared.celery_app import celery_app
 from shared.config import settings
@@ -24,7 +25,22 @@ logger = logging.getLogger("naso-maintenance")
 # No credential-bearing fallback: if DATABASE_URL is unset this should fail
 # loudly rather than quietly try a password baked into the source.
 DB_URL = settings.DATABASE_URL
-engine = create_async_engine(DB_URL)
+# NullPool for exactly the reason pipeline.py uses it, and this is the copy that
+# was missed. delete_tenant_saga runs each step under its own asyncio.run(),
+# which opens a fresh event loop and closes it. With the default pool the asyncpg
+# connection is returned to a module-level pool still bound to that now-closed
+# loop; the NEXT tenant deletion in the same long-lived prefork worker checks it
+# back out and every query fails with "Event loop is closed", through all five
+# retries, until the process restarts. So the first erasure per worker succeeded
+# and every one after it silently failed — a GDPR right-to-erasure operation.
+# NullPool opens and closes a connection per use, so nothing is retained across
+# loops.
+engine = create_async_engine(
+    DB_URL,
+    poolclass=NullPool,
+    pool_pre_ping=True,
+    connect_args={"prepared_statement_cache_size": 0, "statement_cache_size": 0},
+)
 
 from shared.utils.worker_tracing import setup_worker_tracing
 

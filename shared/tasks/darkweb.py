@@ -49,39 +49,47 @@ def deep_portal_crawl(self, root_url, tenant_id, max_pages=10):
                 content = loop.run_until_complete(stealth_browser.get_content_with_screenshot(url, screenshot_path))
                 visited.add(url)
 
-            if content:
-                # Cap the content size to keep the worker from running out of memory (G-07)
-                # A malicious onion page over 1MB would be truncated before it is
-                # handed to the AI pipeline and indexed.
-                MAX_CONTENT_BYTES = 1 * 1024 * 1024  # 1 MB
-                if len(content) > MAX_CONTENT_BYTES:
-                    logger.warning(
-                        f"[DEEP CRAWL] Content truncated for {url} ({len(content)} bytes > {MAX_CONTENT_BYTES})"
-                    )
-                    content = content[:MAX_CONTENT_BYTES]
+                # This block belongs INSIDE the while loop. It was indented
+                # one level out, so the crawl popped a page, screenshotted it,
+                # marked it visited — and never processed it, never counted it,
+                # and never queued its links. The loop therefore drained the
+                # initial [root_url] in one pass and stopped: a "deep recursive
+                # crawl" that scanned exactly one page and reported
+                # pages_crawled from a counter it never incremented (and would
+                # raise NameError on `content` if max_pages were 0).
+                if content:
+                    # Cap the content size to keep the worker from running out of memory (G-07)
+                    # A malicious onion page over 1MB would be truncated before it is
+                    # handed to the AI pipeline and indexed.
+                    MAX_CONTENT_BYTES = 1 * 1024 * 1024  # 1 MB
+                    if len(content) > MAX_CONTENT_BYTES:
+                        logger.warning(
+                            f"[DEEP CRAWL] Content truncated for {url} ({len(content)} bytes > {MAX_CONTENT_BYTES})"
+                        )
+                        content = content[:MAX_CONTENT_BYTES]
 
-                pages_crawled += 1
-                logger.info(f"[DEEP CRAWL] Scanned {url} ({pages_crawled}/{max_pages})")
+                    pages_crawled += 1
+                    logger.info(f"[DEEP CRAWL] Scanned {url} ({pages_crawled}/{max_pages})")
 
-                # Push into the pipeline
-                hit_data = {
-                    "tenant_id": tenant_id,
-                    "source": f"DarkWeb Deep: {root_url}",
-                    "screenshot_tmp": screenshot_path,
-                    "metadata_json": {"url": url, "depth": "recursive"},
-                }
-                process_potential_leak.delay(hit_data, content)
+                    # Push into the pipeline
+                    hit_data = {
+                        "tenant_id": tenant_id,
+                        "source": f"DarkWeb Deep: {root_url}",
+                        "screenshot_tmp": screenshot_path,
+                        "metadata_json": {"url": url, "depth": "recursive"},
+                    }
+                    process_potential_leak.delay(hit_data, content)
 
-                # Extract internal links
-                soup = BeautifulSoup(content, "html.parser")
-                for link in soup.find_all("a", href=True):
-                    href = link["href"]
-                    full_url = urljoin(url, href)
+                    # Extract internal links
+                    soup = BeautifulSoup(content, "html.parser")
+                    for link in soup.find_all("a", href=True):
+                        href = link["href"]
+                        full_url = urljoin(url, href)
 
-                    # Stay within the same .onion domain
-                    if urlparse(full_url).netloc == urlparse(root_url).netloc:
-                        if full_url not in visited and full_url not in to_visit:
-                            to_visit.append(full_url)
+                        # Stay within the same .onion domain
+                        if urlparse(full_url).netloc == urlparse(root_url).netloc:
+                            if full_url not in visited and full_url not in to_visit:
+                                to_visit.append(full_url)
         finally:
             loop.close()
 

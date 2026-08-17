@@ -32,7 +32,16 @@ from shared.utils.worker_tracing import setup_worker_tracing
 logger = logging.getLogger("naso-pipeline")
 
 # Optional Component Initializations (No hard crashes!)
-es = make_es_client_if_configured()
+#
+# ES_ENABLED is a marker, NOT a live client. An AsyncElasticsearch built here, at
+# import, binds its aiohttp session to the first event loop it runs on; every
+# task then runs under a fresh asyncio loop (see the bottom of
+# process_potential_leak), so after the first leak the session is bound to a
+# closed loop and every subsequent index() fails — swallowed by the circuit
+# breaker, so ES indexing simply stopped after the first leak per worker with no
+# error surfaced. The client is now built per task, inside store_and_index,
+# which runs in the task's own loop.
+ES_ENABLED = settings.ES_PASSWORD is not None
 
 if settings.MINIO_ACCESS_KEY and settings.MINIO_SECRET_KEY:
     minio_client = Minio(
@@ -63,9 +72,12 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 _YARA_REFRESH_INTERVAL: float = 60.0
 _last_yara_refresh: float = 0.0
 
-# P-05: persistent async HTTP client for SOAR webhook.
-# Re-creating a client per alert pays TCP+TLS setup cost every time.
-_soar_client = httpx.AsyncClient(timeout=3.0)
+# The SOAR webhook client is created per firing, not at module scope. A
+# module-level httpx.AsyncClient binds its connection pool to the loop it first
+# runs on; with a fresh loop per task, critical SIEM webhooks stopped firing
+# after the first high-severity leak per worker. A critical hit is rare enough
+# that paying one TCP+TLS setup when it happens is the right trade against
+# silently never alerting.
 
 
 def generate_idempotency_key(content: str):
@@ -172,7 +184,8 @@ def process_potential_leak(self, hit_data, raw_content):
                     # reasonable thing to want; claiming it because a variable
                     # was named after it is not.
                     soar_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
-                    await _soar_client.post(webhook_url, json=soar_payload)  # P-05: async, no thread blocking
+                    async with httpx.AsyncClient(timeout=3.0) as soar_client:
+                        await soar_client.post(webhook_url, json=soar_payload)
                     logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
                 else:
                     logger.info("[SOAR] SOAR_WEBHOOK_URL not configured, skipping webhook dispatch")
@@ -238,8 +251,9 @@ async def store_and_index(hit_data, raw_content):
         hit_data["storage_path"] = None
         hit_data["screenshot_path"] = None
 
-    # 2. Elasticsearch Indexing
-    if es:
+    # 2. Elasticsearch Indexing — client built here, in the task's loop.
+    if ES_ENABLED:
+        es = make_es_client_if_configured()
         es_doc = {
             "tenant_id": hit_data["tenant_id"],
             "source": hit_data["source"],
@@ -258,6 +272,8 @@ async def store_and_index(hit_data, raw_content):
             logger.info(f"[NASO BATTLE-READY] Leak indexed in ES for tenant {hit_data['tenant_id']}")
         except Exception as e:
             logger.error(f"[CIRCUIT BREAKER] ES indexing skipped/failed: {e}")
+        finally:
+            await es.close()
     else:
         logger.warning(f"ES indexing skipped for tenant {hit_data['tenant_id']} (ES disabled)")
 
