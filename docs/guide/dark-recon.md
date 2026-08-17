@@ -22,7 +22,18 @@ The primary search vector uses the Ahmia onion search engine. Queries are dispat
 |---|---|---|
 | `GET /leaks/recon/darkweb?q=<query>` | `GET` | Execute a dark web probe via Ahmia |
 | `GET /leaks/recon/shodan?ip=<ip>` | `GET` | Query Shodan for a given IP address |
-| `POST /leaks/recon/telegram` | `POST` | Search Telegram via official Bot API (requires `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`) |
+| `GET /leaks/recon/telegram?channel=<name>` | `GET` | Read a public channel's recent messages |
+
+### How the Telegram probe works
+
+It fetches `https://t.me/s/<channel>` — the public web preview Telegram serves to
+anyone — and parses the message widgets out of the HTML. **No Bot API, no
+credentials, and no `TELEGRAM_API_ID` / `TELEGRAM_API_HASH`**: this page used to
+claim all three. Those two variables belong to the separate Telethon listener in
+`shared/tasks/telegram.py`, which is a different feature.
+
+It follows that the probe only sees channels Telegram exposes publicly, and that
+it goes out over the clearnet, not through Tor.
 
 ## Error Handling
 

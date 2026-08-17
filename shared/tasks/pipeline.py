@@ -163,8 +163,16 @@ def process_potential_leak(self, hit_data, raw_content):
             try:
                 webhook_url = os.getenv("SOAR_WEBHOOK_URL")
                 if webhook_url:
-                    stix_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
-                    await _soar_client.post(webhook_url, json=stix_payload)  # P-05: async, no thread blocking
+                    # Named for what it is. It was called `stix_payload`, and
+                    # the README and the docs home page advertised "STIX
+                    # profiles" on the strength of that name — but there is no
+                    # `type`, no `spec_version`, no `id`, and no SDO or SRO
+                    # anywhere in it. A SIEM configured to expect STIX would
+                    # reject every one of these. Emitting real STIX 2.1 is a
+                    # reasonable thing to want; claiming it because a variable
+                    # was named after it is not.
+                    soar_payload = {"alert_type": "CRITICAL_OSINT_LEAK", "details": hit_data}
+                    await _soar_client.post(webhook_url, json=soar_payload)  # P-05: async, no thread blocking
                     logger.info(f"[SOAR] Fired webhook to SIEM at {webhook_url}")
                 else:
                     logger.info("[SOAR] SOAR_WEBHOOK_URL not configured, skipping webhook dispatch")

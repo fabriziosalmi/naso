@@ -1,6 +1,6 @@
 # Identity Hub
 
-The NASO Identity Hub is the central correlation matrix for digital identities extracted from breach data, social networks, and dark-web telemetry.
+The Identity Hub is where the identifiers pulled out of breach material — email addresses, usernames, wallet addresses — are correlated into people.
 
 ## Core Capabilities
 
@@ -9,9 +9,12 @@ The NASO Identity Hub is the central correlation matrix for digital identities e
 When overlapping indicators are detected across separate data sources (e.g., an email address appearing in a Telegram dump that also matches a username from a paste site), NASO clusters them under a unified **Master Identity** record.
 
 The merge process:
-- Runs as an OOM-safe batch operation within the Celery pipeline worker
-- Uses deterministic hashing to prevent duplicate merges across concurrent executions
-- Is triggered automatically when new leaks are ingested, or manually via the UI
+- Proposes a pair when two identities appear in the same leak, and carries the
+  shared leak ids as the evidence for that proposal
+- Writes every merge to an append-only ledger (`merge_events`), chained and
+  reversible — `POST /identities/merges/{id}/reverse` undoes one and records
+  the reason
+- Runs in the Celery pipeline worker on ingest, or on demand from the UI
 
 ### Risk Scoring
 
@@ -22,7 +25,12 @@ Each identity accumulates a composite risk score based on:
 
 ### VIP Protection
 
-Critical identities can be flagged as `is_protected = true` via the UI toggle or the `PATCH /identities/{id}/protect` endpoint. Protected identities receive elevated monitoring and are visually distinguished in all views.
+Critical identities can be flagged as `is_protected = true` via the UI toggle or the `PATCH /identities/{id}/protect` endpoint, and are visually distinguished in all views.
+
+Concretely, the flag changes one thing in the pipeline: a hit involving a
+protected identity raises a priority notification and fires the outbound webhook
+**below** the normal critical threshold, tagged `[VIP]`. A leak that would
+otherwise pass unremarked does not pass unremarked for these.
 
 ## API Reference
 
