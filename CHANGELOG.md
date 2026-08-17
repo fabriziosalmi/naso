@@ -20,6 +20,40 @@ that NASO is pre-1.0 and the public API may change in a minor release.
 > stability nobody here is in a position to keep. The version rises to `1.0.0`
 > when the HTTP API stops changing shape, not when the code feels finished.
 
+## [0.1.1] — 2026-08-18
+
+Everything here was found by driving the interface in a browser after 0.1.0 was
+tagged, and none of it was visible from the code or from the test suite.
+
+### Fixed
+
+- **The interface stopped inventing what it reports.** A hardcoded array of
+  seven log lines displayed at random under *System Logs* — including an
+  invented YARA match count and the author's own name — now tails the real audit
+  log. `Cluster #Alfa-7`, a `'0.42'` fallback for database latency, four
+  constant service-status rows on the login screen, and a constant
+  `Infrastructure Load` percentage are gone; the login screen reads the
+  unauthenticated `/system/health` instead, and the dashboard card reports
+  unacknowledged criticals, which the data can answer.
+- **The sidebar had no styling at all.** `NavLink` inside `Tooltip.Trigger
+  asChild` had its function `className` stringified by Radix's Slot, so every
+  navigation item rendered as a bare inline anchor.
+- **The dashboard never loaded data.** `isAuthenticated` was missing from the
+  fetch effect's dependency array, so with a full database the dashboard showed
+  its empty state and a reload repeated the race.
+- **The session probe logged you out.** A 401 from `GET /users/me` — the correct
+  answer for an anonymous browser — triggered the global interceptor's logout.
+- **The audit verifier stopped accusing.** Rows predating the hash chain were
+  reported as `row content tampered`; they are counted as `legacy_unhashed` and
+  skipped, and deliberately not back-filled.
+- **The MCP server** shape-checks its tenant id, orders explicitly and clamps a
+  model-supplied limit.
+
+### Added
+
+- `frontend/demo/record.mjs` — the scripted walkthrough that found all of it.
+- Open Graph card, sitemap and a meta description for the documentation site.
+
 ## [0.1.0] — 2026-08-17
 
 First tagged release. Everything below happened before the tag; the sections
@@ -187,4 +221,5 @@ Summarised, not reconstructed. Roughly in the order it happened:
 - Test infrastructure: pytest for the backend, Vitest for the frontend store,
   Playwright for end-to-end flows, and `cli/validate.sh` as the structural gate.
 
+[0.1.1]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.1
 [0.1.0]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.0
