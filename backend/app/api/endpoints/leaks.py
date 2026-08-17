@@ -20,9 +20,33 @@ from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
 
 from ...infrastructure.rabbitmq import rabbitmq_pool
+from ...limiter import limiter
 from ..deps import get_current_user
 
 router = APIRouter()
+
+# Characters a spreadsheet treats as the start of a formula rather than text.
+# Tab and carriage return are in here because Excel strips them and then reads
+# whatever follows, so "\t=cmd|..." is a formula too.
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value):
+    """Neutralise spreadsheet formula injection in one exported cell.
+
+    Every string in a NASO export originates somewhere hostile — dark-web dumps,
+    pastebin scrapes, GitHub search results, an unauthenticated ingest webhook.
+    A `source` or `status` of `=cmd|' /c calc'!A1` is a formula the moment an
+    analyst opens the file in Excel or LibreOffice, and the analyst is precisely
+    the person with credentials worth stealing (CWE-1236).
+
+    A leading apostrophe is the conventional fix: spreadsheets read the rest of
+    the cell as literal text, and `csv.writer` quoting alone does not help
+    because quoting is stripped before the formula parser sees the value.
+    """
+    if isinstance(value, str) and value.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + value
+    return value
 
 
 class WebhookPayload(BaseModel):
@@ -32,11 +56,22 @@ class WebhookPayload(BaseModel):
 
 
 @router.post("/ingest/webhook", status_code=202)
+@limiter.limit("60/minute")
 async def unified_ingestion_webhook(request: Request, current_user=Depends(get_current_user)):
     """
     ZERO-ALLOCATION WEBHOOK INGESTION (SOTA)
     Reads raw bytes stream via orjson and directly writes to RabbitMQ
     Celery Queue via aio_pika, bypassing heap allocation buffering.
+
+    Rate-limited because this is the cheapest way into the Celery pipeline:
+    one authenticated POST publishes one task, and the workers are the expensive
+    end of that. `/auth/login` has been capped at 10/minute since the OWASP
+    hardening pass while the endpoint SECURITY.md names in the same breath — "the
+    ingest webhook and the Celery task boundary" — had no limit at all.
+
+    60/minute is deliberately generous: legitimate scrapers batch, and the point
+    is to bound a runaway or hostile client rather than to shape normal traffic.
+    Note the limit is per API process (see the known gaps in SECURITY.md).
     """
     raw_body = await request.body()
     try:
@@ -433,7 +468,15 @@ async def bulk_export_leaks(
         writer = csv.writer(output)
         writer.writerow(["ID", "Source", "Severity", "Status", "Timestamp"])
         for l in leaks:
-            writer.writerow([l.id, l.source, l.severity_score, l.status, l.discovered_at.isoformat()])
+            writer.writerow(
+                [
+                    _csv_safe(l.id),
+                    _csv_safe(l.source),
+                    l.severity_score,
+                    _csv_safe(l.status),
+                    l.discovered_at.isoformat(),
+                ]
+            )
         return Response(
             content=output.getvalue(),
             media_type="text/csv",

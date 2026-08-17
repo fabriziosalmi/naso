@@ -114,7 +114,9 @@ is `/auth/login` itself. See [Security Model](/guide/security#csrf).
 |---|---|---|
 | `GET` | `/system/status` | Live database health check with latency |
 | `GET` | `/system/health` | Composite readiness across every backing service |
-| `GET` | `/system/audit` | Retrieve immutable audit log |
+| `GET` | `/system/audit` | Retrieve immutable audit log — `?limit=` (≤200) `&offset=` |
+| `GET` | `/system/audit/verify` | Verify the hash chain; admins may pass `?tenant_id=` |
+| `GET` | `/users/me` | The authenticated operator — how the SPA restores a session |
 | `PUT` | `/users/me` | Update operator profile |
 
 Both health endpoints are unauthenticated, because whatever probes them has no

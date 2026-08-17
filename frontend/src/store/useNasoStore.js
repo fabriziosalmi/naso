@@ -279,7 +279,16 @@ const useNasoStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
       // Il backend imposta il cookie httpOnly — nessun token da memorizzare in JS
-      set({ isAuthenticated: true, isLoading: false });
+      set({ isAuthenticated: true, isLoading: false, authChecked: true });
+      // Fill in `user` so the profile view is populated whether you arrived by
+      // login or by reload. Deliberately not via fetchMe(): that one fails
+      // closed, which is right when probing an unknown session and wrong here —
+      // the API has just accepted these credentials, and a hiccup on the
+      // profile call must not undo a successful sign-in.
+      try {
+        const me = await axios.get('/users/me');
+        set({ user: me.data });
+      } catch { /* session is valid; the profile fills in on the next load */ }
     } catch (err) {
       set({ error: 'Authentication failed', isLoading: false });
     }
@@ -289,7 +298,9 @@ const useNasoStore = create((set, get) => ({
     try {
       await axios.post('/auth/logout'); // Il backend cancella il cookie
     } catch { /* ignora errori di rete — il logout locale avviene sempre */ }
-    set({ user: null, isAuthenticated: false, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
+    // authChecked stays true: we have asked, and the answer is "no session".
+    // Resetting it would send App.jsx back to its loading state on sign-out.
+    set({ user: null, isAuthenticated: false, authChecked: true, token: null, leaks: [], identities: [], auditLogs: [], darkWebResults: [] });
     toast.info('Signed out', 'Session terminated.');
   },
 
@@ -755,12 +766,21 @@ const useNasoStore = create((set, get) => ({
     }
   },
 
+  // Session restore. The token lives in an httpOnly cookie that JavaScript
+  // cannot read, so the only way to know whether this browser still has a
+  // session is to ask the API. This action existed and nothing ever called it,
+  // while `GET /users/me` did not exist at all and answered 405 — so every page
+  // reload dropped the operator back to the login screen with a valid cookie in
+  // the jar. `authChecked` is what lets App.jsx tell "not logged in" from
+  // "haven't asked yet" and avoid flashing the login form on every load.
+  authChecked: false,
+
   fetchMe: async () => {
     try {
       const res = await axios.get('/users/me');
-      set({ user: res.data, isAuthenticated: true });
+      set({ user: res.data, isAuthenticated: true, authChecked: true });
     } catch {
-      set({ isAuthenticated: false, user: null });
+      set({ isAuthenticated: false, user: null, authChecked: true });
     }
   },
 }));

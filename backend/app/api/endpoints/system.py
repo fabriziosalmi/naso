@@ -2,8 +2,8 @@ import asyncio
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Response
-from sqlalchemy import text
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -21,15 +21,25 @@ router = APIRouter()
 
 
 @router.get("/audit", response_model=list[dict])
-async def get_audit_logs(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+async def get_audit_logs(
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     """
     Return the audit log for compliance purposes (#10).
+
+    Paged. The hard-coded `.limit(100)` this replaces meant an auditor could see
+    the hundred newest entries and had no way to reach the hundred-and-first —
+    on the one table in the system whose value is that it is complete. `limit` is
+    capped at 200 so a page stays a page.
     """
     query = select(AuditLog)
     if current_user.role != "admin":
         query = query.where(AuditLog.tenant_id == current_user.tenant_id)
 
-    result = await db.execute(query.order_by(AuditLog.timestamp.desc()).limit(100))
+    result = await db.execute(query.order_by(AuditLog.timestamp.desc()).limit(limit).offset(offset))
     logs = result.scalars().all()
 
     return [
@@ -48,6 +58,7 @@ async def get_audit_logs(db: AsyncSession = Depends(get_db), current_user=Depend
 
 @router.get("/audit/verify")
 async def verify_audit_chain_endpoint(
+    tenant_id: str | None = Query(None, description="Admins only: verify another tenant's chain."),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -58,13 +69,28 @@ async def verify_audit_chain_endpoint(
     Response: ``{ok, broken_at, reason, total}`` — ``total`` gives the
     operator a sense of how long a chain was verified without having to
     hit the raw audit endpoint.
+
+    The parameter is new: the docstring above promised it, no parameter was
+    declared, and the body pinned every caller to their own tenant. The same
+    capability already existed through the AI toolkit's `verify_audit_chain`
+    tool, so an admin could reach another tenant's chain by asking the model and
+    not by calling the API. A silently ignored query string is worse than an
+    absent feature — it answers about the wrong tenant and looks like an answer
+    about the one you named.
     """
-    tenant_id = current_user.tenant_id
+    if tenant_id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can verify another tenant's chain")
+    tenant_id = tenant_id or current_user.tenant_id
     result = await verify_chain(db, tenant_id=tenant_id)
 
     # Count rows for UX — "verified 247 entries, chain intact".
-    count_stmt = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
-    total = len((await db.execute(count_stmt)).scalars().all())
+    # `len(scalars().all())` loaded every audit row into the API process to
+    # measure a number, immediately after verify_chain had loaded the same rows
+    # for the same tenant: two full table reads per request on the table that
+    # only ever grows.
+    total = (
+        await db.execute(select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tenant_id))
+    ).scalar_one()
 
     return {
         "ok": result.ok,
