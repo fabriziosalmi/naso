@@ -98,7 +98,17 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      - ./data/elasticsearch:/usr/share/elasticsearch/data
+      # A named volume, not a ./data bind mount like the other datastores.
+      # Postgres and MinIO get away with a bind mount because their entrypoints
+      # start as root and chown the directory -- which is exactly why they are
+      # granted CHOWN, FOWNER and DAC_OVERRIDE above. Elasticsearch does not:
+      # it runs as uid 1000 from the start, so a host directory Docker created
+      # as root is simply not writable, and it dies with
+      #     failed to obtain node locks, tried [/usr/share/elasticsearch/data];
+      #     maybe these locations are not writable
+      # Docker initialises a named volume with the image's own ownership, so
+      # uid 1000 owns it and the problem does not arise.
+      - naso-es-data:/usr/share/elasticsearch/data
     networks:
       - naso-net
     healthcheck:
@@ -343,6 +353,9 @@ services:
 networks:
   naso-net:
     driver: bridge
+
+volumes:
+  naso-es-data:
 
 secrets:
   db_password:

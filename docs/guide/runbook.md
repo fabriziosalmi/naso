@@ -104,11 +104,39 @@ The lesson is worth more than the fix: *the old error going away is not the
 same as the thing working.* Check for a container that stays up, not for a
 string that stopped appearing.
 
-**Fix.** Elasticsearch now takes `ELASTIC_PASSWORD` from `.env`, which
+**Fix.** Elasticsearch takes `ELASTIC_PASSWORD` from `.env`, which
 `make bootstrap` renders with the same value it writes into `.secrets-mock/`.
 The file indirection is gone, so the conflict is gone with it. In production,
 use real Docker secrets, where the orchestrator owns the file as the service
 user and the conflict never arises.
+
+**And then it failed again, differently.** With the password working,
+Elasticsearch got further and hit the next wall:
+
+```
+failed to obtain node locks, tried [/usr/share/elasticsearch/data];
+maybe these locations are not writable
+```
+
+`./data/elasticsearch` is created by Docker as root. Postgres and MinIO survive
+the same treatment because their entrypoints start as root and chown the
+directory — which is why `docker-compose.yml` grants them `CHOWN`, `FOWNER` and
+`DAC_OVERRIDE`. Elasticsearch runs as uid 1000 from the start and does no such
+thing. It now uses a **named volume**, which Docker initialises with the
+image's own ownership.
+
+Three distinct failures, each hidden behind the previous one, on a service that
+had never once started in this stack. If you are debugging something here,
+expect the same shape: fixing one error reveals the next rather than finishing
+the job.
+
+::: warning CI cannot see this
+`cli/validate.sh` checks that `naso-api` is running and then runs the test
+suites. Elasticsearch is optional, so it can be in a crash loop while every
+check reports green. `/system/health` is what distinguishes `degraded` from
+`disabled` — until something gates on it, a broken Elasticsearch is invisible
+to the pipeline.
+:::
 
 ---
 
