@@ -162,11 +162,17 @@ export default function DarkRecon({ reconQuery, setReconQuery }) {
               </div>
             )}
 
-            <div className="flex gap-6 text-[11px] font-medium text-zinc-500">
-              <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#32D74B]"></div> Ahmia Active</span>
-              <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#0A84FF]"></div> Tor Circuit On</span>
-              <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-[#0A84FF]"></div> Correlation On</span>
-            </div>
+            {/* Three green and blue dots reading "Ahmia Active · Tor Circuit
+                On · Correlation On" used to sit here, and none of them was
+                connected to anything: they said On with the Tor cluster in a
+                crash loop. Nothing in the API reports Tor or Ahmia
+                reachability, so there is nothing honest to put in their place —
+                the probe result below is the real status, and it arrives when
+                you run one. */}
+            <p className="text-[11px] font-medium text-zinc-500">
+              Queries route through the Tor cluster. A probe that cannot reach it fails loudly rather than
+              returning nothing.
+            </p>
           </div>
         </CardContent>
       </Card>

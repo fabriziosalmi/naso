@@ -10,17 +10,26 @@ const __dirname = path.dirname(__filename);
 // suite runs against `preview`, so without mirroring these the API calls the
 // app makes on mount would 404 there while working in dev — a difference that
 // only shows up as a confusing test failure.
-const apiProxy = {
-  '/auth': 'http://localhost:8000',
-  '/tenants': 'http://localhost:8000',
-  '/keywords': 'http://localhost:8000',
-  '/leaks': 'http://localhost:8000',
-  '/identities': 'http://localhost:8000',
-  '/yara': 'http://localhost:8000',
-  '/system': 'http://localhost:8000',
-  '/users': 'http://localhost:8000',
-  '/ai': 'http://localhost:8000',
-}
+// Anchored on a trailing slash, and that slash is load-bearing.
+//
+// These keys used to be bare prefixes, and Vite matches a bare prefix against
+// any path that starts with it — including the application's own client-side
+// routes. `/ai` swallowed `/ai-analyst`, and `/identities` collided with the
+// route of the same name exactly. Reloading either page, or opening a bookmark
+// or a shared link to one, left the application entirely and rendered the API's
+// reply in the browser:
+//
+//     {"detail":"Not Found"}
+//
+// Every call the app makes under these prefixes has a slash after it —
+// `/ai/health`, `/identities/`, `/identities/graph` — so requiring the slash
+// separates the API from the routes without touching either. The regex form is
+// what tells Vite to match rather than prefix-test.
+const API_PREFIXES = ['auth', 'tenants', 'keywords', 'leaks', 'identities', 'yara', 'system', 'users', 'ai']
+
+const apiProxy = Object.fromEntries(
+  API_PREFIXES.map((prefix) => [`^/${prefix}/`, 'http://localhost:8000'])
+)
 
 export default defineConfig({
   plugins: [react()],

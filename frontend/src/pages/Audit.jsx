@@ -163,7 +163,16 @@ export default function Audit() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-white">Audit &amp; Compliance</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">Immutable forensic accountability — every operation hashed and logged</p>
+          {/* Not "Immutable forensic accountability — every operation hashed
+              and logged", which was wrong three times over: the chain is
+              tamper-evident rather than immutable (anyone with database access
+              can still change a row, they just cannot do it unnoticed),
+              authentication is not audited at all, and rows written before the
+              chain existed carry no hash. The security guide says all of this;
+              the page a compliance officer actually reads said the opposite. */}
+          <p className="text-[13px] text-zinc-500 mt-0.5">
+            Tamper-evident ledger — each entry hashed against the one before it, verifiable on demand
+          </p>
         </div>
         <Button onClick={exportAuditCsv} disabled={auditLogs.length === 0} variant="outline" className="h-9 px-5 text-[13px] font-medium border-white/10 bg-transparent text-zinc-300 hover:text-white hover:bg-white/10 rounded-full shrink-0">
           <Download size={14} className="mr-2" strokeWidth={1.5} /> Export CSV
