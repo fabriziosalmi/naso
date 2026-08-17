@@ -11,12 +11,19 @@ that NASO is pre-1.0 and the public API may change in a minor release.
 > What is there instead is an honest summary of where the project stood when
 > this file was written; `git log` is the authority for anything earlier.
 >
-> The version strings in the codebase disagree with each other today
-> (`backend/app/main.py` says `1.1.0`, `frontend/package.json` says `0.1.0`,
-> `docs/package.json` says `1.0.0`). Unifying them is a deliberate change that
-> belongs with the first tagged release, not a silent edit here.
+> The version strings in the codebase used to disagree with each other
+> (`backend/app/main.py` said `1.1.0`, `frontend/package.json` `0.1.0`,
+> `docs/package.json` `1.0.0`) because nothing had ever been released and each
+> had been bumped on its own occasion. They are unified at **0.1.0** with this,
+> the first tagged release. `0.x` is the honest number: this file has said the
+> project is pre-1.0 since the day it was written, and a `1.x` tag promises API
+> stability nobody here is in a position to keep. The version rises to `1.0.0`
+> when the HTTP API stops changing shape, not when the code feels finished.
 
-## [Unreleased]
+## [0.1.0] — 2026-08-17
+
+First tagged release. Everything below happened before the tag; the sections
+are grouped by what changed rather than by which pull request changed it.
 
 The work required before this repository could be published. Five items each
 blocked publication on their own.
@@ -107,13 +114,56 @@ blocked publication on their own.
 - Missing `__init__.py` across `backend/app`, `backend/app/api`,
   `backend/app/api/endpoints` and `cli`.
 
+#### Found by running the stack on a real Docker daemon
+
+Everything above was verified in CI only. The first local run found four things
+CI could not see, because the pipeline started seven of the fifteen containers
+`make up` starts and `cli/validate.sh` checked exactly one of them.
+
+- **The Tor cluster had never started.** All six containers were in a permanent
+  restart loop: `tor` ran as root against a `/var/lib/tor` owned by the `tor`
+  user and refused it, and haproxy then aborted at boot because the instance
+  names would not resolve. The balancer now tolerates missing backends
+  (`init-addr last,libc,none`), which is what makes five instances a cluster
+  rather than five single points of failure.
+- **The application had never reached Elasticsearch.** Three call sites and the
+  container healthcheck spoke `https` to a node that serves plaintext with Basic
+  auth, so `/system/health` reported `elasticsearch: degraded` and `naso-search`
+  sat `(unhealthy)` for its entire life. One client factory now owns the scheme
+  (`ES_USE_TLS`) and passes the credential as `basic_auth=` rather than in the
+  URL, where the tracing instrumentation would have recorded it.
+- **Migrations had never run, and could not.** `create_all` never alters an
+  existing table, `PYTHONPATH=/app` plus a directory named `alembic` shadowed
+  the package so the CLI could not start, and the models had drifted past the
+  one migration that existed. `init_db.py` now runs `alembic upgrade head`, the
+  tree lives in `backend/migrations/`, and `20260817_02_ack` closes the drift.
+- **`make demo` had never run.** It imported a name that does not exist, and
+  once fixed, failed on a second invocation because it inserted a tenant whose
+  name is unique. Both fixed; the seed is idempotent.
+
+#### Found by the fourth adversarial pass
+
+- **Every page reload signed the operator out.** `GET /users/me` did not exist —
+  only `PUT` — while the SPA's session probe called it and nothing called the
+  probe. Moving the token to an `httpOnly` cookie removed the SPA's only way to
+  see its own session and nothing replaced it.
+- **CSV export wrote formulas.** Values arriving from dark-web dumps and the
+  ingest webhook were written verbatim, so `=cmd|…` in a leak `source` executed
+  when an analyst opened the export (CWE-1236).
+- **`GET /system/audit/verify?tenant_id=` was documented and ignored**, quietly
+  answering about the caller's own tenant. `/system/audit` gained paging.
+
 ### Security
 
 Findings closed in this cycle: CSRF on all cookie-authenticated mutating
 endpoints; unscoped JWT acceptance; root execution inside the application
 containers; unverified PyPI certificates during image build; a hardcoded
-database credential; a seeded admin password. Reporting instructions and
-supported-version policy are in [SECURITY.md](SECURITY.md).
+database credential; a seeded admin password; a cross-tenant write on
+`PATCH /ai/plans/{id}/tasks/{taskId}`; an unauthenticated, verbose `/ai/health`;
+spreadsheet formula injection in the CSV export; an unlimited ingest webhook;
+and an Alpine package feed downgraded to plain HTTP in the Tor image.
+Reporting instructions and supported-version policy are in
+[SECURITY.md](SECURITY.md).
 
 ## Prior history (April 2026 – July 2026, untagged)
 
@@ -137,4 +187,4 @@ Summarised, not reconstructed. Roughly in the order it happened:
 - Test infrastructure: pytest for the backend, Vitest for the frontend store,
   Playwright for end-to-end flows, and `cli/validate.sh` as the structural gate.
 
-[Unreleased]: https://github.com/fabriziosalmi/naso/commits/main
+[0.1.0]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.0
