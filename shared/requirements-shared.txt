@@ -3,7 +3,7 @@
 
 sqlalchemy[asyncio]==2.0.52
 asyncpg==0.31.0
-pydantic[email]>=2.5.3
+pydantic[email]>=2.13.4
 pydantic-settings>=2.5.2
 # python-dotenv is not optional: shared/config.py sets env_file=".env", and
 # pydantic-settings raises on import without it.
