@@ -78,34 +78,37 @@ how Docker mounts real secrets. If you write secrets by hand, match those modes.
 
 ---
 
-## Elasticsearch crash-loops on the password file's permissions
+## Elasticsearch crash-loops at boot
 
-**Symptom.** `naso-search` restarts continuously, repeating:
+**Symptom.** `naso-search` restarts continuously. Everything else works,
+because Elasticsearch is optional — which is exactly why this goes unnoticed.
+`/system/health` is what tells you: it reports `elasticsearch` as `degraded`
+rather than `disabled`.
+
+**Cause, historically.** Elasticsearch reads its password from a file and
+validates that file's mode, accepting only 400 or 600. The rest of
+`.secrets-mock/` has to be 0444, because the application containers run
+`cap_drop: ALL` and cannot read a file they do not own. Those two requirements
+cannot both hold on one mounted directory.
+
+An attempt to satisfy both — 0600 for that one file, 0444 for the rest — looked
+like it worked: the `must have file permissions 400 or 600` error disappeared
+and Elasticsearch loaded all its modules. It then died one step later with
 
 ```
-ERROR: File /run/secrets/elastic_password from ELASTIC_PASSWORD_FILE must
-have file permissions 400 or 600, but actually has: 444
+cat: /run/secrets/elastic_password: Permission denied
 ```
 
-Everything else works, because Elasticsearch is optional — which is exactly why
-this can go unnoticed. `/system/health` is the thing that tells you: it reports
-`elasticsearch` as `degraded` rather than `disabled`.
+because the entrypoint reads the file as the `elasticsearch` user, not as root.
+The lesson is worth more than the fix: *the old error going away is not the
+same as the thing working.* Check for a container that stays up, not for a
+string that stopped appearing.
 
-**Cause.** Elasticsearch validates the mode of its own password file and
-accepts only 400 or 600. That collides head-on with the 0444 the other secrets
-need: the application containers run `cap_drop: ALL`, have no
-`CAP_DAC_OVERRIDE`, and so cannot read a file they do not own.
-
-**Fix.** `generate_secrets.py` writes `elastic_password.txt` at 0600 and
-everything else at 0444. Elasticsearch can afford the stricter mode because its
-container keeps its capabilities and starts as root; nothing else reads that
-file, since the API and workers take `ES_PASSWORD` from `.env`.
-
-```bash
-rm -rf .secrets-mock && make bootstrap && docker compose up -d elasticsearch
-```
-
-If you write secrets by hand, this one is the exception to the 0444 rule.
+**Fix.** Elasticsearch now takes `ELASTIC_PASSWORD` from `.env`, which
+`make bootstrap` renders with the same value it writes into `.secrets-mock/`.
+The file indirection is gone, so the conflict is gone with it. In production,
+use real Docker secrets, where the orchestrator owns the file as the service
+user and the conflict never arises.
 
 ---
 
