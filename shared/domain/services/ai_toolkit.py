@@ -597,12 +597,29 @@ async def execute_tool(
                 else current_user.tenant_id
             )
             result = await verify_chain(db, tenant_id=target_tenant)
+            # Forward the full three-valued picture, not just ok/broken_at.
+            # Returning ok=true with verified=0 and no explanation led the model
+            # to announce "CRITICAL tampering" over a healthy chain whose only
+            # rows predate the hashing. legacy_unhashed is the difference between
+            # "nothing to verify yet" and "verified and intact".
             return {
                 "tool": tool_name,
                 "tenant_id": target_tenant,
                 "ok": result.ok,
                 "broken_at": result.broken_at,
                 "reason": result.reason,
+                "verified": result.verified,
+                "legacy_unhashed": result.legacy_unhashed,
+                "summary": (
+                    f"Chain intact: {result.verified} hashed entries verified"
+                    + (
+                        f", {result.legacy_unhashed} earlier entries predate the hash chain and are outside it (not tampering)."
+                        if result.legacy_unhashed
+                        else "."
+                    )
+                    if result.ok
+                    else f"BROKEN at row {result.broken_at}: {result.reason}"
+                ),
             }
 
         # ───── find_near_duplicates ───────────────────────────────────────
