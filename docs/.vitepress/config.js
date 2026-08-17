@@ -50,8 +50,11 @@ export default {
       'meta',
       {
         property: 'og:description',
+        // The same sentence as the meta description above, deliberately: a
+        // search result and a social preview that describe the project
+        // differently are two first impressions of two different projects.
         content:
-          'Ingest breach and dark-web material, correlate it into identities, and triage it with a local LLM. Every component runs in your own Compose stack.',
+          'Self-hosted breach and dark-web exposure monitoring: ingest leaks, correlate identities, triage with a local LLM. Your infrastructure, your data.',
       },
     ],
     ['meta', { property: 'og:url', content: 'https://fabriziosalmi.github.io/naso/' }],
@@ -66,7 +69,7 @@ export default {
       {
         name: 'twitter:description',
         content:
-          'Ingest breach and dark-web material, correlate it into identities, and triage it with a local LLM. Runs entirely in your own stack.',
+          'Self-hosted breach and dark-web exposure monitoring: ingest leaks, correlate identities, triage with a local LLM. Your infrastructure, your data.',
       },
     ],
     ['meta', { name: 'twitter:image', content: 'https://fabriziosalmi.github.io/naso/og.png' }],
