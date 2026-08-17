@@ -2,8 +2,8 @@
   <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/logo.svg" width="140" alt="NASO Logo" />
   <h1>NASO Forensic Engine</h1>
   <p>
-    <strong>Mission-Critical Cyber Threat Intelligence & OSINT Automation Platform</strong><br/>
-    <em>High-performance data breach monitoring, AI correlation, and sovereign data lakes.</em>
+    <strong>Breach and dark-web exposure monitoring, self-hosted</strong><br/>
+    <em>Ingest, correlate identities, and triage with a local LLM — on infrastructure you control.</em>
   </p>
 
   <p>
@@ -15,7 +15,13 @@
 
 ---
 
-**NASO** is a Data-Sovereign, High-Performance Intelligence Engine built for enterprise SecOps and Red Teams. It fuses a non-blocking asynchronous architecture with Local AI (Model Context Protocol), bringing unstructured dark web telemetry into a crisp, actionable canvas.
+**NASO** watches breach corpora, paste sites, public GitHub, Telegram channels and
+onion services for your organisation's exposure, correlates what it finds into
+identities, and triages it with a language model you run yourself. Every
+component — database, search index, object store, LLM — runs in your own Compose
+stack; nothing leaves it. That is the whole design constraint: this software
+handles other people's personal data, and the safest place for it is somewhere
+you can point at.
 
 > [!IMPORTANT]
 > **Authorised and defensive use only.** NASO is a dual-use tool. It is built for
@@ -32,7 +38,7 @@
 ## Key Features
 
 **🛡️ Hardened Container Baseline**
-The API and worker containers run with `cap_drop: ALL`, `no-new-privileges:true`, and a `read_only` root filesystem. Service credentials are delivered through the Docker Secrets mechanism at `/run/secrets` rather than as environment variables. Cryptographic sessions use **EdDSA (Ed25519)** with Redis JTI blacklisting for instant token revocation.
+The API and worker containers run as uid 10001 with `cap_drop: ALL`, `no-new-privileges:true`, and a `read_only` root filesystem. The JWT signing keys are mounted as files under `/run/secrets` and never appear in the environment; the datastore passwords the application connects with come from `.env`, which `make bootstrap` renders with the same generated values the containers are provisioned from. Sessions are **EdDSA (Ed25519)** with `iss`/`aud`/`nbf` verified on every decode, and Redis JTI blacklisting for immediate revocation.
 
 > The shipped `docker-compose.yml` is a development and evaluation baseline, not a production configuration — it mounts generated secrets from a local directory and publishes management ports. See [SECURITY.md](SECURITY.md#operator-responsibilities) before running it against real data.
 
@@ -40,7 +46,7 @@ The API and worker containers run with `cap_drop: ALL`, `no-new-privileges:true`
 The ingest webhook (`POST /leaks/ingest/webhook`) uses `orjson` and `aio_pika` to stream raw unstructured data directly into RabbitMQ. Processing is decoupled from the API via Celery workers.
 
 **🧠 Local AI with Response Caching**
-Answers are cached in Redis under a SHA-256 key over the question and conversation history, so a repeated question returns without touching the model. The React frontend consumes the stream over SSE with exponential-backoff-and-jitter reconnection.
+Answers are cached in Redis under a SHA-256 key over the conversation history **and the tenant id**, so a repeated question returns without touching the model and no cache entry can be shared across tenants. The React frontend consumes the stream over SSE with exponential-backoff-and-jitter reconnection.
 
 **🔍 Identity Correlation Engine**
 Master identity merging clusters overlapping indicators across breach sources. Risk scoring is computed from breadth, depth, and recency of exposure. Protected (VIP) identities receive elevated monitoring.
@@ -49,7 +55,7 @@ Master identity merging clusters overlapping indicators across breach sources. R
 
 ## System Architecture
 
-NASO scales horizontally. Computational workflows are offloaded into Celery pools, separating web-serving threads from forensic inferencing.
+Ingestion is decoupled from processing: the API publishes to RabbitMQ and returns, and Celery workers do the analysis. Two worker pools, because the workloads are different — `worker-pipeline` runs the per-hit path at concurrency 4, `worker-massive` runs bulk dump processing at concurrency 1 so one large job cannot starve the rest.
 
 ```mermaid
 graph TD
@@ -63,14 +69,14 @@ graph TD
     B("⚡ POST /leaks/ingest/webhook"):::intel
     A1 & A2 -->|orjson + aio_pika| B
 
-    B --> C["Message Broker\n(RabbitMQ)"]:::worker
-    C --> D["Task Cluster\n(Celery Workers)"]:::worker
+    B --> C["Message Broker<br/>(RabbitMQ)"]:::worker
+    C --> D["Task Cluster<br/>(Celery Workers)"]:::worker
 
-    D --> E{"Local LLM (Ai-Cache)\n& YARA Engine"}:::intel
+    D --> E{"Local LLM (AI cache)<br/>& YARA Engine"}:::intel
 
-    E -->|Threat Topology| F1("GraphDB & SQL\n(PostgreSQL)"):::storage
-    E -->|Full-Text Index| F2("Search Engine\n(Elasticsearch)"):::storage
-    E -->|Malware Payloads| F3("Object Store\n(MinIO)"):::storage
+    E -->|Identities & leak hits| F1("Relational store<br/>(PostgreSQL)"):::storage
+    E -->|Full-Text Index| F2("Search Engine<br/>(Elasticsearch)"):::storage
+    E -->|Screenshots & dossiers| F3("Object Store<br/>(MinIO)"):::storage
 ```
 
 ## Stack
@@ -97,15 +103,18 @@ git clone https://github.com/fabriziosalmi/naso.git
 cd naso
 
 # 1. Generate .secrets-mock/ (docker-compose mounts it at /run/secrets and
-#    will not start without it) and create .env from the template.
+#    will not start without it) and render .env with the same values.
 make bootstrap
 
-# 2. Edit .env and replace every CHANGE_ME.
-
-# 3. Bring up Postgres, Redis, Elasticsearch, MinIO, RabbitMQ, Jaeger, the
-#    Tor cluster, the API, and the workers.
+# 2. Bring up Postgres, Redis, Elasticsearch, MinIO, RabbitMQ, Jaeger, the
+#    Tor cluster, the API, and the workers — fifteen containers.
 make up
 ```
+
+`make bootstrap` fills in every credential it generates, so there is nothing to
+edit before `make up`. What is left blank in `.env` is optional and annotated:
+third-party API keys (`SHODAN_API_KEY`, the Telegram pair), the AI endpoint, and
+the tracing toggle.
 
 The API is then on `http://localhost:8000`. **The frontend is not part of the
 Compose stack** — it runs as a Vite dev server on the host:
@@ -116,13 +125,21 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-Provision the first admin and seed synthetic data:
+Create the schema, provision the first admin, and seed synthetic data:
 
 ```bash
-export NASO_ADMIN_EMAIL="admin@naso.example.com"
-export NASO_ADMIN_PASSWORD="your_secure_password_here"
-docker exec naso-api python init_db.py
-make demo
+docker exec naso-api python init_db.py   # create_all + alembic upgrade head + admin
+make demo                                # 100+ synthetic leak artefacts
+```
+
+`init_db.py` reads `NASO_ADMIN_EMAIL` and `NASO_ADMIN_PASSWORD` **from the
+container's environment**, which Compose populates from `.env` — exporting them
+in your own shell before `docker exec` does nothing, because that shell is not
+where the process runs. `make bootstrap` has already generated a password; read
+it out of `.env`, or set your own there before `make up`:
+
+```bash
+grep '^NASO_ADMIN_' .env
 ```
 
 > Do not give the admin an address under `.local`, `.test`, `.localhost`,
@@ -145,7 +162,7 @@ variables you are most likely to touch:
 | `AI_ENDPOINT` | Local LLM endpoint (e.g. `http://host.docker.internal:1234/v1`) |
 | `AI_MODEL` | LLM model name (default: `gemma-4-e2b-it`) |
 | `NASO_OTEL_ENABLED` | Opt in to OTLP tracing. Off by default |
-| `SOAR_WEBHOOK_URL` | Optional STIX/JSON webhook fired on `severity_score >= 80` |
+| `SOAR_WEBHOOK_URL` | Optional JSON webhook fired on `severity_score >= 90` |
 | `NASO_COOKIE_SECURE` | Set to `true` in production, behind HTTPS |
 
 Note that several services take one variable to provision the container and a
@@ -155,9 +172,11 @@ different one for the application to connect with (`ELASTIC_PASSWORD` vs
 
 ## Validation
 
-`cli/validate.sh` runs the whole suite — backend pytest inside the API
-container, frontend Vitest, and the Playwright end-to-end flow — and is what CI
-runs on every pull request against `main`:
+`cli/validate.sh` is what CI runs on every pull request against `main`. Two
+gates first — every container has to reach a steady `running` state, and
+`GET /system/health` has to report every component `ok` or `disabled` — then
+backend pytest inside the API container, frontend Vitest, and the Playwright
+end-to-end flows:
 
 ```bash
 ./cli/validate.sh

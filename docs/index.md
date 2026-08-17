@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "NASO"
-  text: "The Forensic Intelligence Standard."
-  tagline: "Unify external intelligence, dark web reconnaissance, and AI-driven identity correlation in a single, high-performance platform."
+  text: "Exposure monitoring you host yourself."
+  tagline: "Ingest breach and dark-web material, correlate it into identities, and triage it with a local LLM. Every component runs in your own Compose stack — the data never leaves it."
   image:
     src: /logo.svg
     alt: NASO Logo
@@ -18,17 +18,17 @@ hero:
 
 features:
   - title: Model Context Protocol
-    details: "Native MCP support binds an MCP-capable client directly to the PostgreSQL intelligence lake. Inference can run entirely on your own hardware, so payloads never leave your infrastructure."
-  - title: Massive Data Scalability
-    details: "Async Celery worker partitioning with OOM-safe streaming. Large dumps are read line by line from a local file or URL, and only the chunks that match are forwarded to the pipeline."
-  - title: Identity Correlation
-    details: "SimHash fingerprints and Hamming-distance clustering merge threat actor aliases, email patterns, and Tor domains, with every merge recorded in a reversible audit event."
-  - title: Zero-Trust Telemetry
-    details: "Per-tenant isolation, a hash-chained audit log whose integrity can be verified on demand, and local database latency checks."
-  - title: Babel NLP Extractor
-    details: Intelligent pattern matching extracts IOCs, Cryptowallets, and keys across multilingual deep web payloads.
-  - title: SOAR Integration
-    details: Fail-fast outbound webhooks to dispatch structured JSON STIX profiles to any enterprise SIEM instance.
+    details: "An MCP server exposes six tools — dark-web, Shodan and Telegram recon, identity and leak lookups, and VIP protection — over the same tenant-scoped queries the API uses, so a client gets no second access path to the database. Inference runs on your own hardware; payloads never leave it."
+  - title: Streaming bulk ingestion
+    details: "Large dumps are read line by line from a local file or a URL, never loaded whole. A regex pre-pass forwards only the matching chunks to the pipeline, on a worker pinned to concurrency 1 so one big job cannot starve the per-hit queue."
+  - title: Identity correlation
+    details: "Identities that appear in the same leak are proposed for merging with the shared leaks as evidence, and every merge is written to an append-only ledger that can be reversed. Leak text is deduplicated separately by SimHash with a Hamming-distance threshold."
+  - title: Audit you can verify
+    details: "Per-tenant scoping on every query, and an audit log chained by SHA-256 — each row carries the previous row's hash, so a deletion or an edit breaks the chain at a position the verify endpoint reports. It detects tampering; it does not prevent it."
+  - title: Babel extractor
+    details: "Regex extraction of emails, IPv4 addresses, and Bitcoin and Monero wallets, alongside a language-detection pass, over payloads in any script."
+  - title: SOAR handoff
+    details: "A JSON webhook fires on any hit scoring 90 or above, posted asynchronously so a slow SIEM never blocks the pipeline. The payload is NASO's own shape — it is not STIX."
 ---
 
 <style>

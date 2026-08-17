@@ -31,7 +31,11 @@ fpdf2==2.7.7
 rich
 
 # ── Integrations ─────────────────────────────────────────────────────────────
-mcp>=1.28.1
+# Ceiling, not just a floor. `mcp>=1.28.1` on its own let the SDK cross a major
+# version under a file written against the 1.x decorator API, and
+# backend/mcp_server.py stopped importing — silently, because nothing imports it
+# at runtime and no test covered it. It targets the 2.x MCPServer API now.
+mcp>=2.0.0,<3
 beautifulsoup4>=4.12
 # stem: Tor control-port client used by shared.domain.services.dark_web.tor_control
 # to issue NEWNYM circuit-rotation signals. Imported lazily so clearnet-only

@@ -1,6 +1,6 @@
 # Architecture
 
-NASO is engineered as a heavily decoupled, containerized microservices platform optimized for high-throughput forensic evidence processing.
+Fifteen containers: an API, two worker pools, five datastores and a six-container Tor cluster. Ingestion is decoupled from analysis — the API publishes to RabbitMQ and returns, and Celery does the work.
 
 ## System Overview
 
@@ -79,7 +79,9 @@ Primary store for users, tenants, identities, leak records, investigation plans,
 Binary artifacts: forensic screenshots, raw data blobs, and exported dossier PDFs.
 
 ### Elasticsearch (Search Index)
-Full-text search across leak content snippets and metadata, enabling sub-millisecond retrieval for analyst queries.
+Full-text search across leak content snippets and metadata. Optional: with
+`ES_PASSWORD` unset the application skips it entirely and `/system/health`
+reports it `disabled` rather than broken.
 
 ## 4. Tor Cluster
 
@@ -88,4 +90,9 @@ A fleet of 5 Tor containers behind an HAProxy load balancer provides anonymized 
 ## 5. Observability
 
 - **Distributed Tracing**: Jaeger (OpenTelemetry) is deployed as a sidecar for end-to-end request tracing across API and worker boundaries.
-- **Audit Logging**: Every user and AI action is recorded in the `audit_logs` table with IP address, timestamp, and structured detail fields.
+- **Audit Logging**: User and AI actions are recorded in `audit_logs` with the
+  actor, the tenant, the action, the resource, a timestamp and a structured
+  `details` field — and a SHA-256 chain over the row and its predecessor, so a
+  deletion or an edit is detectable through `GET /system/audit/verify`. There is
+  **no IP address column**; this page claimed one for months, and if you need
+  request provenance it has to be added to the model first.

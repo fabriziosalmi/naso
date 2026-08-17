@@ -4,7 +4,10 @@ NASO provides structured reporting pipelines designed for compliance officers, l
 
 ## Massive Dossier Export
 
-Analysts can retrieve exhaustive PDF dossiers that bind raw JSON metadata into court-ready documentation formats. The export pipeline:
+Analysts can retrieve a PDF dossier of the tenant's leak records, signed with the
+deployment's RSA key so a recipient can verify it was not altered after export.
+Whether that satisfies any particular court is a question for a lawyer, not for
+this page. The export pipeline:
 
 - Aggregates all leak records matching the current tenant's scope.
 - Attaches forensic metadata including SHA256 artifact hashes, discovery timestamps, and source vectors.
@@ -14,20 +17,39 @@ If no matching records exist, the endpoint returns a `404` response to prevent e
 
 ## Audit Trail
 
-NASO logs every user-driven and AI-driven action into a central, immutable audit ledger accessible at `GET /system/audit`.
+Actions are written to `audit_logs`, readable at `GET /system/audit` (paged,
+`?limit=` up to 200 and `?offset=`).
+
+The ledger is **tamper-evident, not immutable**: each row carries a SHA-256 over
+its own content and the previous row's hash, so an edit or a deletion breaks the
+chain and `GET /system/audit/verify` reports the position it broke at. Anyone
+with write access to the database can still change a row — they simply cannot do
+it without the verifier noticing. Do not describe it to an auditor as immutable.
 
 ### Tracked Events
 
+The action strings as they appear in the table:
+
 | Action | Trigger |
 |---|---|
-| `LOGIN` | User authentication |
 | `CREATE_IDENTITY` | New identity registered |
-| `TOGGLE_PROTECTION` | VIP status changed |
-| `DARK_WEB_SEARCH` | Onion probe executed |
-| `AI_CHAT` | Co-Analyst session initiated |
-| `AI_DARK_WEB_PROBE` | AI-triggered dark web search |
-| `AI_FLAG_LEAK` | AI changed leak triage status |
-| `AI_TOGGLE_VIP` | AI modified identity protection |
+| `VIEW_IDENTITY_INSIGHTS` | Identity dossier opened |
+| `RUN_AUTO_MERGE` / `EXECUTE_MERGES` / `REVERSE_MERGE` | Merge proposed, applied, undone |
+| `DARK_WEB_RECON` / `SHODAN_RECON` / `TELEGRAM_RECON` | Probe executed |
+| `UPDATE_LEAK_STATUS` / `ACKNOWLEDGE_LEAK` / `ACKNOWLEDGE_ALL_CRITICAL` | Triage |
+| `GENERATE_MASSIVE_DOSSIER` / `VIEW_LEAK_SCREENSHOT` | Evidence exported or viewed |
+| `CREATE_TENANT` / `DELETE_TENANT_TRIGGERED` / `UPDATE_PROFILE` | Administration |
+| `CREATE_YARA_RULE` / `DELETE_YARA_RULE` | Rule changes |
+| `AI_CHAT` / `AI_DARK_WEB_PROBE` / `AI_FLAG_LEAK` / `AI_TOGGLE_VIP` | Co-Analyst actions |
+| `MCP_TOOL_UPDATE_PROTECTION` | VIP flag changed through the MCP server |
+
+::: warning Authentication is not audited
+There is no `LOGIN` event — this page listed one, and `auth.py` writes no audit
+entry at all. Successful and failed sign-ins are not in the ledger, and neither
+is the toggle behind `PATCH /identities/{id}/protect` when it comes from the UI
+rather than from the AI or MCP paths. If your compliance regime needs
+authentication events, they have to be added before you rely on this table.
+:::
 | `CREATE_INVESTIGATION` | New investigation plan created |
 
 ### CSV Export
