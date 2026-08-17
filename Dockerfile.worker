@@ -9,8 +9,12 @@ RUN groupadd --system --gid ${UID} pwuser \
 
 WORKDIR /app
 
-# Playwright and browser dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Playwright and browser dependencies. The `apt-get upgrade` picks up Debian
+# security updates published since the base image was last rebuilt -- see the
+# equivalent note in Dockerfile.backend for why that is worth the loss of build
+# reproducibility.
+RUN apt-get update && apt-get upgrade -y \
+ && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     yara \

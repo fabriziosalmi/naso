@@ -9,7 +9,18 @@ RUN groupadd --system --gid ${UID} naso \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `apt-get upgrade` before installing anything, so the image picks up Debian
+# security updates published since the base image was last rebuilt rather than
+# waiting for upstream to do it. CVE-2026-53615 -- an integer overflow in
+# libblkid's DOS partition parser, reaching nine binary packages from the
+# util-linux source -- turned the Trivy gate red on a day nobody had touched a
+# Dockerfile, with a fix already sitting in the Debian archive.
+#
+# The cost is that two builds of the same commit can differ. That is the right
+# trade for an image whose whole job is to be patched: pinning would freeze the
+# vulnerability along with everything else.
+RUN apt-get update && apt-get upgrade -y \
+ && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
  && rm -rf /var/lib/apt/lists/*
