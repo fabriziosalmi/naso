@@ -68,6 +68,31 @@ class TestSearchIdentities:
         assert "mine@example.com" in identifiers
         assert "theirs@example.com" not in identifiers
 
+    async def test_empty_result_reports_the_types_that_exist(self, corr_db, tenant, user):
+        # The regression: a model asked search_identities with type="person"
+        # (what the UI's own dropdown writes), the ingested data was "email", it
+        # got a bare empty list with no clue why, blamed the risk threshold, and
+        # burned all five agent iterations lowering it. An empty result now
+        # carries the vocabulary that actually exists, which turns the blind
+        # retries into one corrected call.
+        await upsert_identity(corr_db, tenant.id, "real@example.com", "email")
+        fake = FakeUser(id=user.id, tenant_id=tenant.id)
+
+        result = await execute_tool("search_identities", {"type": "person"}, corr_db, fake, None)
+
+        assert result["count"] == 0
+        assert "hint" in result
+        assert "email" in result["hint"]
+
+    async def test_a_matching_filter_carries_no_hint(self, corr_db, tenant, user):
+        await upsert_identity(corr_db, tenant.id, "real@example.com", "email")
+        fake = FakeUser(id=user.id, tenant_id=tenant.id)
+
+        result = await execute_tool("search_identities", {"type": "email"}, corr_db, fake, None)
+
+        assert result["count"] == 1
+        assert "hint" not in result
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 #   Phase 8 — new tools

@@ -86,7 +86,31 @@ NASO_TOOLS = [
                 "properties": {
                     "identifier": {"type": "string", "description": "Email, username, or name fragment."},
                     "min_risk": {"type": "integer", "description": "Minimum risk score (0-100)."},
-                    "type": {"type": "string", "description": "Identity type: person, email, username, phone, domain."},
+                    # No free-text hint here. The description used to read
+                    # "Identity type: person, email, username, phone, domain",
+                    # and a model that followed it — asking for `person`, which
+                    # is what the UI's own dropdown writes — got zero rows,
+                    # because ingestion writes `email`. It then blamed the risk
+                    # threshold, lowered it four times, and hit the iteration
+                    # limit without an answer. Enumerating the values the system
+                    # actually stores is what tool schemas are for.
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "email",
+                            "username",
+                            "domain",
+                            "wallet",
+                            "person",
+                            "organization",
+                            "crypto",
+                            "credential",
+                        ],
+                        "description": (
+                            "Identity type as stored. Ingested identities are almost always `email`; "
+                            "the other values come from identities created by hand. Omit to search all types."
+                        ),
+                    },
                 },
                 "required": [],
             },
@@ -278,8 +302,30 @@ async def execute_tool(
             if tool_args.get("type"):
                 q = q.where(Identity.type == tool_args["type"])
             identities = (await db.execute(q.order_by(Identity.risk_score.desc()).limit(15))).scalars().all()
+            # An empty result that explains itself. A filter matching nothing is
+            # indistinguishable from an empty tenant, and a model cannot tell
+            # the difference — it guesses, usually at the wrong parameter, and
+            # burns its iteration budget. Handing back the types that do exist
+            # turns five blind retries into one corrected call.
+            hint: dict[str, Any] = {}
+            if not identities:
+                type_q = select(Identity.type).distinct()
+                if current_user.role != "admin":
+                    type_q = type_q.where(Identity.tenant_id == current_user.tenant_id)
+                available = [t for t in (await db.execute(type_q)).scalars().all() if t]
+                hint = {
+                    "hint": (
+                        "No identity matched these filters. "
+                        + (
+                            f"Types present: {', '.join(sorted(available))}."
+                            if available
+                            else "This tenant has no identities yet."
+                        )
+                    )
+                }
             return {
                 "tool": tool_name,
+                **hint,
                 "count": len(identities),
                 "data": [
                     {
