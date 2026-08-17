@@ -2,8 +2,18 @@ export default {
   base: "/naso/",
   title: "NASO",
   titleTemplate: ":title - NASO Documentation",
-  description: "Advanced Forensic & Intelligence Framework.",
+  // This string is the meta description — the line a search result shows under
+  // the title, and the only prose most people will read about this project
+  // before deciding whether to click. "Advanced Forensic & Intelligence
+  // Framework" said nothing that would help them decide. Say what it monitors,
+  // what it does with it, and the one property that distinguishes it.
+  description:
+    "Self-hosted breach and dark-web exposure monitoring: ingest leaks, correlate identities, triage with a local LLM. Your infrastructure, your data.",
   cleanUrls: true,
+  // Absolute URLs for canonical tags and the sitemap. Without a hostname
+  // VitePress emits neither, so every page competes with itself across the
+  // GitHub Pages URL variants and nothing tells a crawler the page list.
+  sitemap: { hostname: "https://fabriziosalmi.github.io/naso/" },
   appearance: 'dark', // Native dark mode standard
   head: [
     // Everything this site loads is first-party. 'unsafe-inline' is required
