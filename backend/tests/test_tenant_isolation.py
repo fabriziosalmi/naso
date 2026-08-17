@@ -11,8 +11,14 @@ Seven of the eight plan endpoints already scoped by
 `InvestigationPlan.tenant_id`; that one did not. These tests exist so the odd
 one out cannot drift back, and so the claim in SECURITY.md is backed by
 something executable rather than by inspection.
+
+The second half of the file widens that from one route to the whole app: it
+probes every documented operation anonymously and fails if anything outside a
+four-entry allow-list answers. Same principle, applied to the authentication
+boundary rather than the tenant one.
 """
 
+import re
 import uuid
 
 import pytest
@@ -139,11 +145,126 @@ async def test_unauthenticated_patch_is_rejected(client, two_tenants):
 
 # ── Unauthenticated surface ─────────────────────────────────────────────────
 #
-# Exactly three routes answer without credentials, and each is deliberate:
-# /auth/login (the SPA has to bootstrap somehow), /system/status and
-# /system/health (orchestrators and load balancers hold none). Anything else
-# appearing here is a regression, and /ai/health was one — it returned
+# Four routes answer without credentials, and each is deliberate:
+#
+#   POST /auth/login    the SPA has to bootstrap somehow
+#   POST /auth/logout   takes an optional bearer and clears the cookie either
+#                       way, so an anonymous caller gets 200 and nothing else;
+#                       it removes credentials, it never returns data
+#   GET  /system/status  orchestrators and load balancers hold no credentials
+#   GET  /system/health
+#
+# Anything else answering is a regression, and /ai/health was one — it returned
 # AI_ENDPOINT, the model inventory and the raw connection error to anyone.
+#
+# The enumeration is the point. Asserting that one known-bad route is now closed
+# proves one route was fixed; it says nothing about the fifth route someone adds
+# next month. Comparing the *whole* surface against an explicit allow-list is
+# what makes this a boundary rather than a spot check.
+#
+# Two design notes, both bought with a failure:
+#
+# 1. This drives real HTTP rather than introspecting the router. The first
+#    version walked `app.routes` looking for an auth dependency in each route's
+#    dependency tree. FastAPI 0.141 stores each included router as an opaque
+#    `fastapi.routing._IncludedRouter` with no `.routes` and no `.dependant`, so
+#    the walk found the four docs endpoints, matched nothing, and reported an
+#    empty set — a boundary test that silently measured nothing while reading as
+#    coverage. A behavioural probe cannot fail that way, and it tests the
+#    property we actually care about ("does it answer?") rather than a proxy for
+#    it ("does it mention get_current_user?"). It also owes nothing to FastAPI
+#    internals, which matters because requirements.txt pins `fastapi>=0.111.0`
+#    with no ceiling.
+#
+# 2. `_ROUTE_FLOOR` exists so that enumerating nothing fails loudly. If a future
+#    refactor empties the OpenAPI schema, every assertion below becomes vacuous
+#    and the suite goes green on zero coverage. That is the exact failure mode
+#    this test was rewritten to escape, so it is asserted rather than assumed.
+
+PUBLIC_SURFACE = {
+    "POST /auth/login",
+    "POST /auth/logout",
+    "GET /system/status",
+    "GET /system/health",
+}
+
+# The app currently exposes 49 documented operations. The floor is deliberately
+# slack — it is a tripwire against enumerating nothing, not a route count to
+# keep updated on every PR.
+_ROUTE_FLOOR = 40
+
+_PROBE_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+
+
+def _documented_operations():
+    """Every (method, path) in the OpenAPI schema — the app's own public API."""
+    from app.main import app
+
+    for path, operations in sorted(app.openapi()["paths"].items()):
+        for method in sorted(operations):
+            if method.upper() in _PROBE_METHODS:
+                yield method.upper(), path
+
+
+@pytest.mark.asyncio
+async def test_the_unauthenticated_surface_is_exactly_these_four(client):
+    """Probe every documented route anonymously; only the allow-list may answer."""
+    operations = list(_documented_operations())
+    assert len(operations) >= _ROUTE_FLOOR, (
+        f"only {len(operations)} routes enumerated, expected at least {_ROUTE_FLOOR}. "
+        "The schema is empty or truncated, so this test is not checking anything."
+    )
+
+    answered, refused_oddly = [], []
+    for method, path in operations:
+        name = f"{method} {path}"
+        if name in PUBLIC_SURFACE:
+            # Deliberately open; its behaviour is asserted elsewhere. Skipped
+            # before the probe so that a public route legitimately raising
+            # cannot be misfiled as a leak below.
+            continue
+        # Path params are never reached: auth is resolved before the handler, so
+        # a syntactically valid placeholder is enough to get past routing.
+        concrete = re.sub(r"\{[^}]+\}", "00000000-0000-0000-0000-000000000000", path)
+        client.cookies.clear()
+        try:
+            response = await client.request(
+                method,
+                concrete,
+                json={} if method in {"POST", "PUT", "PATCH"} else None,
+            )
+        except Exception as exc:  # noqa: BLE001 — any escape means the handler ran
+            # An unguarded handler that reaches for a backing service raises
+            # rather than returning a status. That is still the finding: the
+            # request got past auth into application code. Catching it here
+            # keeps the failure legible instead of a transport traceback.
+            answered.append(f"{name} -> handler executed and raised {type(exc).__name__}")
+            continue
+        # 401 (no credentials) and 403 (credentials rejected) are both refusals.
+        # Anything else — including 422 — means the request was parsed before it
+        # was authorised, which leaks schema shape to an anonymous caller.
+        if response.status_code < 400:
+            answered.append(f"{name} -> {response.status_code}")
+        elif response.status_code not in (401, 403):
+            refused_oddly.append(f"{name} -> {response.status_code}")
+
+    assert not answered, "guarded routes answered an anonymous caller:\n  " + "\n  ".join(answered)
+    assert not refused_oddly, (
+        "guarded routes rejected anonymously, but not with 401/403 — auth ran "
+        "after input parsing:\n  " + "\n  ".join(refused_oddly)
+    )
+
+
+@pytest.mark.asyncio
+async def test_every_route_on_the_allow_list_still_exists(client):
+    """The allow-list is only a boundary if its entries are real routes.
+
+    Without this, deleting `/system/health` would leave a stale name in
+    PUBLIC_SURFACE that permanently excuses whatever route later takes it.
+    """
+    documented = {f"{method} {path}" for method, path in _documented_operations()}
+    missing = PUBLIC_SURFACE - documented
+    assert not missing, f"allow-list names routes that no longer exist: {sorted(missing)}"
 
 
 @pytest.mark.asyncio

@@ -42,6 +42,28 @@ print_error() {
     ((TESTS_FAILED++))
 }
 
+# How long to wait for naso-api to be running before giving up, in seconds.
+API_WAIT_SECONDS="${NASO_API_WAIT_SECONDS:-60}"
+
+# Everything we know about why naso-api is not running. Printed on failure so
+# the run explains itself instead of leaving the next person to reproduce it.
+#
+# The single line this replaces -- `docker ps | grep -q naso-api` -- produced
+# three red CI builds in which the API had answered a request seconds earlier.
+# One-shot and silent, it could not distinguish "never started" from "restarted
+# once between the health gate and here", and it printed nothing either way, so
+# each failure cost a full re-run to learn anything at all.
+dump_api_diagnostics() {
+    echo -e "${RED}--- docker compose ps -a ---${RESET}"
+    docker compose ps -a 2>&1 || true
+    echo -e "${RED}--- naso-api state ---${RESET}"
+    docker inspect -f \
+        'status={{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} error={{.State.Error}}' \
+        naso-api 2>&1 || echo "no container named naso-api exists"
+    echo -e "${RED}--- last 80 lines of backend log ---${RESET}"
+    docker compose logs --no-color --tail=80 backend 2>&1 || true
+}
+
 check_docker_status() {
     print_step "SYSTEM" "Verifying Docker infrastructure"
     if ! docker info >/dev/null 2>&1; then
@@ -49,9 +71,27 @@ check_docker_status() {
         exit 1
     fi
 
-    if ! docker ps | grep -q "naso-api"; then
-        print_error "The 'naso-api' container is not running. Please run 'make up' first."
+    # Poll rather than sample once. A container that is mid-restart is reported
+    # as not running for a second or two, which is a real state worth waiting
+    # out -- but only briefly: a crash loop never converges, and the diagnostics
+    # below are what tell the two apart.
+    local waited=0
+    local state=""
+    while [ "$waited" -lt "$API_WAIT_SECONDS" ]; do
+        state="$(docker inspect -f '{{.State.Status}}' naso-api 2>/dev/null || echo absent)"
+        [ "$state" = "running" ] && break
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    if [ "$state" != "running" ]; then
+        print_error "The 'naso-api' container is '${state}' after ${API_WAIT_SECONDS}s (expected 'running'). Try 'make up' first."
+        dump_api_diagnostics
         exit 1
+    fi
+
+    if [ "$waited" -gt 0 ]; then
+        echo -e "  ${CYAN}note${RESET}: naso-api took ${waited}s to report 'running'."
     fi
     print_success "Infrastructure is online and healthy."
 }

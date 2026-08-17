@@ -4,11 +4,30 @@ NASO exposes an asynchronous RESTful API built on FastAPI. All responses follow 
 
 ## Authentication
 
-Three routes answer without credentials, and no others: `POST /auth/login`,
-`GET /system/status` and `GET /system/health`. The first is how a client
-bootstraps a session; the other two exist for orchestrators and load balancers,
-which hold none — and are written to say nothing an anonymous caller could use.
-Everything else, `GET /ai/health` included, requires authentication.
+Four routes answer without credentials, and no others:
+
+| Route | Why it is open |
+|---|---|
+| `POST /auth/login` | how a client bootstraps a session |
+| `POST /auth/logout` | takes an optional bearer and clears the cookie either way; an anonymous caller gets `200` and nothing else. It removes credentials, it never returns any |
+| `GET /system/status` | orchestrators and load balancers hold no credentials, and both are written to say nothing an anonymous caller could use |
+| `GET /system/health` | |
+
+Everything else — all 45 remaining operations, `GET /ai/health` included —
+requires authentication. This is not a claim from inspection:
+`backend/tests/test_tenant_isolation.py` walks the OpenAPI schema and issues an
+anonymous request to every documented route, failing if anything outside that
+table answers, or if a guarded route rejects with anything other than `401`/`403`
+(a `422` would mean the request was parsed before it was authorised).
+
+::: warning The interactive docs are not behind auth
+`/api/docs`, `/api/redoc` and `/api/openapi.json` are served to anyone who can
+reach the port. They expose the full route inventory and every request schema —
+no data, but a complete map. That is a reasonable default for development and a
+poor one on an exposed deployment; pass `docs_url=None, redoc_url=None,
+openapi_url=None` to `FastAPI()` in `backend/app/main.py`, or block the three
+paths at the reverse proxy.
+:::
 
 Log in to obtain a token:
 
