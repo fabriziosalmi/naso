@@ -478,7 +478,7 @@ export default function DocsView() {
 
         <div className="p-4 border-t border-white/[0.06]">
           <p className="text-[10px] text-zinc-700">NASO</p>
-          <p className="text-[10px] text-zinc-700">v1.1.0 · API docs at /api/docs</p>
+          <p className="text-[10px] text-zinc-700">v0.1.3 · API docs at /api/docs</p>
         </div>
       </div>
 

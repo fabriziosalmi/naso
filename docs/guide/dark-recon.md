@@ -37,4 +37,4 @@ it goes out over the clearnet, not through Tor.
 
 ## Error Handling
 
-When Tor nodes or external services become unreachable, the system raises an explicit error. The API returns an HTTP 503 with a descriptive message. Audit logs capture the failure event for post-incident review.
+A successful probe is written to the audit log (`DARK_WEB_RECON`) with the query and result count. If the Tor cluster or Ahmia is unreachable the probe raises, and the request surfaces as an error to the caller — it is not currently normalised to a 503, and a *failed* probe writes no audit entry (the audit write follows the search). Treat the audit log as a record of completed probes, not attempts.

@@ -20,8 +20,15 @@ class TelegramOSINTService:
         """
         Scrapes a public Telegram channel directly via HTTP.
         """
-        # Clean channel name (remove @ or t.me/ prefixes)
-        channel_name = channel_name.replace("@", "").replace("t.me/", "").replace("https://", "").strip()
+        # Clean, then validate against Telegram's handle grammar before it
+        # reaches the URL. The old code only stripped a few prefixes by
+        # blacklist string-replacement, so a value like "foo/../admin?x=1" or
+        # one containing a slash or "#" was interpolated straight into the path,
+        # steering the request off t.me/s/<channel> to an arbitrary path or
+        # query — request-shaping driven by attacker-controlled input.
+        channel_name = channel_name.replace("@", "").replace("t.me/", "").replace("https://", "").strip().strip("/")
+        if not re.fullmatch(r"[A-Za-z0-9_]{3,64}", channel_name):
+            return [{"error": f"Invalid Telegram channel handle: {channel_name!r}"}]
 
         # We use the web preview /s/ URL
         url = f"https://t.me/s/{channel_name}"

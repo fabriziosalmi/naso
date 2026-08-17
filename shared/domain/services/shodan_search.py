@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 from typing import Any
 
@@ -24,6 +25,17 @@ class ShodanService:
         if not settings.SHODAN_API_KEY:
             logger.error("SHODAN_API_KEY is not configured.")
             raise ValueError("Shodan integration is disabled (missing API key).")
+
+        # Validate here, in the service, not only at the HTTP endpoint. The MCP
+        # tool (naso_shodan_scan) reaches this path without going through the
+        # endpoint's ipaddress check, so an unvalidated value was interpolated
+        # straight into the request path. Rejecting a non-IP closes that and
+        # avoids a wasted, malformed upstream call.
+        try:
+            ipaddress.ip_address(str(ip).strip())
+        except ValueError:
+            return {"error": f"Not a valid IP address: {ip!r}"}
+        ip = str(ip).strip()
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             try:

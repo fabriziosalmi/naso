@@ -13,7 +13,7 @@ Four routes answer without credentials, and no others:
 | `GET /system/status` | orchestrators and load balancers hold no credentials, and both are written to say nothing an anonymous caller could use |
 | `GET /system/health` | |
 
-Everything else — all 45 remaining operations, `GET /ai/health` included —
+Everything else — all 46 remaining operations, `GET /ai/health` included —
 requires authentication. This is not a claim from inspection:
 `backend/tests/test_tenant_isolation.py` walks the OpenAPI schema and issues an
 anonymous request to every documented route, failing if anything outside that
@@ -114,7 +114,7 @@ is `/auth/login` itself. See [Security Model](/guide/security#csrf).
 |---|---|---|
 | `GET` | `/system/status` | Live database health check with latency |
 | `GET` | `/system/health` | Composite readiness across every backing service |
-| `GET` | `/system/audit` | Retrieve immutable audit log — `?limit=` (≤200) `&offset=` |
+| `GET` | `/system/audit` | Retrieve the tamper-evident audit log — `?limit=` (≤200) `&offset=` |
 | `GET` | `/system/audit/verify` | Verify the hash chain; admins may pass `?tenant_id=` |
 | `GET` | `/users/me` | The authenticated operator — how the SPA restores a session |
 | `PUT` | `/users/me` | Update operator profile |
