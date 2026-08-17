@@ -36,7 +36,40 @@ export default {
         ]
       : []),
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/naso/logo.svg' }],
-    ['meta', { name: 'theme-color', content: '#000000' }]
+    ['meta', { name: 'theme-color', content: '#000000' }],
+
+    // Open Graph and Twitter cards. Without these a link to this site posted
+    // anywhere — LinkedIn, Slack, a chat window — renders as a bare URL with no
+    // title, no description and no image, which reads as a dead link. The image
+    // has to be an absolute URL and a raster format: relative paths are not
+    // resolved by the scrapers, and LinkedIn does not render SVG.
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:site_name', content: 'NASO' }],
+    ['meta', { property: 'og:title', content: 'NASO — self-hosted exposure monitoring' }],
+    [
+      'meta',
+      {
+        property: 'og:description',
+        content:
+          'Ingest breach and dark-web material, correlate it into identities, and triage it with a local LLM. Every component runs in your own Compose stack.',
+      },
+    ],
+    ['meta', { property: 'og:url', content: 'https://fabriziosalmi.github.io/naso/' }],
+    ['meta', { property: 'og:image', content: 'https://fabriziosalmi.github.io/naso/og.png' }],
+    ['meta', { property: 'og:image:width', content: '1200' }],
+    ['meta', { property: 'og:image:height', content: '630' }],
+    ['meta', { property: 'og:image:alt', content: 'NASO — self-hosted breach and dark-web exposure monitoring' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: 'NASO — self-hosted exposure monitoring' }],
+    [
+      'meta',
+      {
+        name: 'twitter:description',
+        content:
+          'Ingest breach and dark-web material, correlate it into identities, and triage it with a local LLM. Runs entirely in your own stack.',
+      },
+    ],
+    ['meta', { name: 'twitter:image', content: 'https://fabriziosalmi.github.io/naso/og.png' }],
   ],
   themeConfig: {
     logo: '/logo.svg',
