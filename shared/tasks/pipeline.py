@@ -9,7 +9,6 @@ import time
 from datetime import datetime
 
 import httpx
-from elasticsearch import AsyncElasticsearch
 from minio import Minio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -18,6 +17,7 @@ from sqlalchemy.pool import NullPool
 
 from shared.celery_app import celery_app
 from shared.config import settings
+from shared.core.es_client import make_es_client_if_configured
 from shared.domain.services.correlation import IdentityCorrelationService
 from shared.domain.services.cti_adapters import CTIAdapters
 from shared.domain.services.leak_ingest import ingest_leak
@@ -32,13 +32,7 @@ from shared.utils.worker_tracing import setup_worker_tracing
 logger = logging.getLogger("naso-pipeline")
 
 # Optional Component Initializations (No hard crashes!)
-if settings.ES_PASSWORD:
-    es = AsyncElasticsearch(
-        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
-        verify_certs=settings.ES_VERIFY_CERTS,
-    )
-else:
-    es = None
+es = make_es_client_if_configured()
 
 if settings.MINIO_ACCESS_KEY and settings.MINIO_SECRET_KEY:
     minio_client = Minio(

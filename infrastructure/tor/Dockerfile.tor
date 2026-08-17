@@ -1,8 +1,10 @@
 FROM alpine:3.22
 
-# Use http mirror to avoid TLS issues during build in some environments.
-RUN sed -i 's/https/http/g' /etc/apk/repositories && \
-    apk add --no-cache tor curl
+# Fetched over HTTPS. An earlier revision rewrote the repository URLs to plain
+# http "to avoid TLS issues during build in some environments" — the same trade
+# the pip `--trusted-host` flags made in the application images, removed for the
+# same reason: this is the channel that installs the software being run.
+RUN apk add --no-cache tor curl
 
 # ── Tor control-port authentication ─────────────────────────────────────────
 # NEWNYM circuit rotation requires an authenticated control channel. We
@@ -36,5 +38,21 @@ RUN set -eu; \
     } > /etc/tor/torrc
 
 EXPOSE 9050 9051
+
+# ── Run as the package's own user, not root ─────────────────────────────────
+# `apk add tor` creates the `tor` user and gives it /var/lib/tor. Tor refuses
+# to use a DataDirectory owned by somebody else, so running the default root
+# CMD produced a container that never started and, with `restart: always`,
+# restarted forever:
+#
+#   [warn] /var/lib/tor is not owned by this user (root, 0) but by tor (100).
+#   [warn] Failed to parse/validate config: Couldn't create private data
+#          directory "/var/lib/tor"
+#   [err]  Reading config failed--see warnings above.
+#
+# All five instances were in that loop, which took the haproxy front end down
+# with them — see haproxy.cfg. Both ports are above 1024, so nothing here needs
+# privileges. This also matches the non-root application images.
+USER tor
 
 CMD ["tor"]

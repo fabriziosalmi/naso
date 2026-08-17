@@ -32,7 +32,8 @@ says `"status": "degraded"`. The UI loads and every data view is empty.
 `.env` still carries `CHANGE_ME` while Postgres was provisioned with a
 generated password, or the two were generated at different times.
 
-**Fix.**
+**Fix — but read the next paragraph before running it on a stack that has
+already stored data.**
 
 ```bash
 rm .env && make bootstrap && docker compose up -d
@@ -42,6 +43,34 @@ rm .env && make bootstrap && docker compose up -d
 values substituted, precisely so the credentials the containers are provisioned
 with and the ones the application connects with cannot drift apart. An existing
 `.env` is deliberately left alone, so it has to be removed to be regenerated.
+
+::: danger Regenerating `.env` rotates the DB password; Postgres does not follow
+`POSTGRES_PASSWORD_FILE` is read by `initdb`, once, on the first start. After
+that the role keeps the password it was created with, and `data/postgres` is a
+bind mount that outlives `docker compose down`. So on any stack that has ever
+started, the command above mints a password the cluster has never heard of and
+produces the *same* `degraded` it was supposed to fix — now with
+`asyncpg.exceptions.InvalidPasswordError: password authentication failed` in
+`docker compose logs backend`.
+
+This advice used to stop at the command above and cost an afternoon to
+re-diagnose. `make bootstrap` now detects an initialised `data/postgres`,
+refuses to pretend it is done, and prints the two ways forward:
+
+```bash
+# A. keep the data — teach the cluster the new password
+make up
+docker exec naso-db psql -U "$DB_USER" -d postgres \
+  -c "ALTER ROLE \"$DB_USER\" WITH PASSWORD '<the DB_PASSWORD from the new .env>'"
+docker compose restart backend worker-pipeline worker-massive
+
+# B. start clean — discard the cluster
+docker compose down && rm -rf data/postgres && make up
+```
+
+Confirm with `curl -s localhost:8000/system/health | jq` — every component
+`ok`, not just the one you were chasing.
+:::
 
 ::: warning Never gate on the status line
 `/system/status` deliberately answers `200` when degraded. If your monitoring
@@ -201,6 +230,70 @@ docker compose logs --tail=40 naso-tor-1
   fault.
 - **The onion service is gone.** Common and not your problem.
 
+**The whole cluster is restarting.** If `docker compose ps | grep tor` shows
+`Restarting` on all six containers, this was true of every version of the stack
+up to and including `c912256`, and it means no dark-web task could work at all:
+
+```
+[warn] /var/lib/tor is not owned by this user (root, 0) but by tor (100).
+[warn] Failed to parse/validate config: Couldn't create private data directory
+```
+
+`apk add tor` creates the `tor` user and gives it `/var/lib/tor`; the image had
+no `USER`, so tor started as root and refused a data directory it did not own.
+It is `USER tor` now. The front end then fell over for a second reason worth
+knowing about, because it is the difference between a cluster and a single point
+of failure:
+
+```
+[ALERT] 'server tor-cluster/tor1' : could not resolve address 'naso-tor-1'.
+        Failed to initialize server(s) addr.
+```
+
+haproxy treats an unresolvable backend name as a fatal config error and exits,
+so five crash-looping instances took the only route to Tor down with them.
+`haproxy.cfg` now sets `init-addr last,libc,none` with Docker's resolver: an
+instance that is missing starts `down`, health checks pick it up when it
+appears, and the survivors keep serving. Verify the real thing rather than the
+container state:
+
+```bash
+docker exec naso-naso-tor-1-1 curl -s "http://naso-tor-lb:1936/;csv" | cut -d, -f1,2,18
+docker exec naso-naso-tor-1-1 curl -s --socks5-hostname naso-tor-lb:8118 \
+  https://check.torproject.org/api/ip
+# {"IsTor":true,"IP":"…"}
+```
+
+---
+
+## `/system/health` says `elasticsearch: degraded` and the container says `unhealthy`
+
+**Symptom.** Elasticsearch is up, `curl` from inside the container works, yet
+the composite health endpoint reports it degraded and `docker compose ps` has
+had `naso-search` at `(unhealthy)` since the day it was written.
+
+**Cause.** Scheme, on both sides. `xpack.security.enabled=true` on its own
+leaves `xpack.security.http.ssl.enabled` at `false` *and* suppresses the image's
+security auto-configuration, so the node has no certificate and serves plaintext
+HTTP with Basic auth. Three call sites hardcoded `https://`, as did the
+healthcheck (with `-k`, verifying nothing that existed). Proven in the
+container:
+
+```
+http  + basic_auth -> ping() True
+https + basic_auth -> ping() False
+```
+
+`AsyncElasticsearch.ping()` returns `False` on a transport error instead of
+raising, which is why months of runs produced no stack trace — only a component
+that was always `degraded`, and an index that never received a document.
+
+**Fix.** `shared/core/es_client.py` builds every client from `ES_USE_TLS` and
+`ES_VERIFY_CERTS` (both default `True`; the development stack opts out in
+`.env`), and passes the credential as `basic_auth=` rather than in the URL,
+where the tracing instrumentation would have recorded it. For a production
+deployment, terminate TLS at Elasticsearch and delete both opt-outs.
+
 ---
 
 ## Shutdown hangs
@@ -270,9 +363,22 @@ behaviour worth keeping.
 make test        # == ./cli/validate.sh
 ```
 
-Three modules run in order: backend pytest inside the API container, frontend
-Vitest, Playwright end-to-end. The script prints a tally and exits non-zero on
-any failure.
+Two gates run before any test, and both are hard failures:
+
+1. **Every container reaches a steady `running`.** A container that is
+   `restarting` is a failure with a retry attached, not a slow start.
+2. **`GET /system/health` reports every component `ok` or `disabled`.**
+   `disabled` passes because Elasticsearch and MinIO are optional.
+
+Then three test modules, in order: backend pytest inside the API container,
+frontend Vitest, Playwright end-to-end. The script prints a tally and exits
+non-zero on any failure.
+
+Those two gates are new, and they exist because the script used to check that
+one container — `naso-api` — was running, and nothing else. It printed
+`ALL SYSTEMS NOMINAL` with six containers in a permanent crash loop and
+Elasticsearch unreachable. Every CI run was green throughout. A gate that only
+looks where the bug is not will certify anything.
 
 If it fails in **under a second with no output**, the API container is not
 actually running — `docker exec` failed, not the tests. Check

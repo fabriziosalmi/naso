@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 
 from sqlalchemy.future import select
 
@@ -7,11 +8,47 @@ from shared.core.security import get_password_hash
 from shared.database import AsyncSessionLocal, engine
 from shared.models import Base, MitreTechnique, Tenant, User
 
+ALEMBIC_INI = Path(__file__).resolve().parent / "alembic.ini"
+
+
+def _upgrade_schema():
+    """Bring an existing database up to head.
+
+    ``create_all`` creates missing tables and nothing else: it never adds a
+    column to a table that already exists. So every deployment that started
+    before the correlation-engine work carried the old ``identities`` table
+    forever, and the first write against the current models died with
+
+        column "normalized_identifier" of relation "identities" does not exist
+
+    which is what `make demo` did here today, on a database created in April.
+    The migration for it has existed since 20 April and had never run — the
+    deployment guide said "Alembic migrations live in backend/alembic/" and
+    nothing anywhere invoked them, so the one documented upgrade path was a
+    claim with no mechanism behind it.
+
+    Running it from the step the README already tells operators to run is what
+    makes the claim true. The migration is written to be idempotent against a
+    schema `create_all` has already materialised, so this is safe on a fresh
+    database too: it applies what is missing and stamps the version.
+
+    Alembic's env.py drives an async engine through ``asyncio.run``, which
+    cannot be called from inside a running loop — hence the thread.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    command.upgrade(Config(str(ALEMBIC_INI)), "head")
+
 
 async def init():
     # Create the tables asynchronously
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Then migrate: create_all cannot alter what it did not just create.
+    await asyncio.to_thread(_upgrade_schema)
+    print("Schema migrated to head.")
 
     async with AsyncSessionLocal() as db:
         # Create the system tenant if it does not exist

@@ -32,6 +32,10 @@ SECRETS_DIR = ".secrets-mock"
 ENV_FILE = ".env"
 ENV_TEMPLATE = ".env.example"
 
+# docker-compose.yml bind-mounts this directory as the Postgres PGDATA, so it
+# survives `docker compose down` and every re-bootstrap.
+PGDATA_DIR = os.path.join("data", "postgres")
+
 # Docker mounts real secrets as 0444 files under a 0755 mount point.
 DIR_MODE = 0o755
 FILE_MODE = 0o444
@@ -44,6 +48,60 @@ def create_secret(name, content, mode=FILE_MODE):
     # Set explicitly rather than relying on the umask, which the caller's
     # shell controls and which cannot widen a mode anyway.
     os.chmod(path, mode)
+
+
+def initialized_pgdata() -> bool:
+    """True when data/postgres already holds a Postgres cluster.
+
+    ``PG_VERSION`` is the file the official entrypoint itself tests to decide
+    whether to run initdb.
+    """
+    return os.path.exists(os.path.join(PGDATA_DIR, "PG_VERSION"))
+
+
+def warn_password_rotation(db_user):
+    """Say out loud that the new DB password does not match the old cluster.
+
+    ``POSTGRES_PASSWORD_FILE`` is only read by ``initdb``, on the very first
+    start. Once ``data/postgres`` exists the role keeps whatever password it was
+    created with, and the freshly generated one in ``.env`` is simply wrong —
+    the stack comes up, the API answers 200 and ``/system/health`` reports
+    ``database: degraded`` forever, with ``asyncpg.exceptions.
+    InvalidPasswordError`` buried in the backend log.
+
+    That is not a hypothetical: the runbook told operators to run
+    ``rm .env && make bootstrap``, which lands here every time. Exiting
+    non-zero is deliberate — it stops a `make bootstrap && make up` chain at the
+    step that still needs a decision, rather than starting a stack that looks
+    healthy and is not.
+    """
+    print()
+    print("=" * 78)
+    print("STOP — data/postgres already contains a Postgres cluster.")
+    print("=" * 78)
+    print(
+        "\n"
+        "The new .env carries a freshly generated DB_PASSWORD. Postgres only\n"
+        "reads that password when it initialises an empty data directory, so\n"
+        "the existing cluster still expects the previous one. Nothing here can\n"
+        "recover it: it is stored hashed, and the .env that held it is gone.\n"
+        "\n"
+        "Pick one, then run the stack:\n"
+        "\n"
+        "  A. Keep the data — teach the cluster the new password:\n"
+        "       make up\n"
+        f'       docker exec naso-db psql -U "{db_user}" -d postgres \\\n'
+        f'         -c "ALTER ROLE \\"{db_user}\\" WITH PASSWORD \'$(grep '
+        "'^DB_PASSWORD=' .env | cut -d= -f2-)'\\\"\n"
+        "       docker compose restart backend worker-pipeline worker-massive\n"
+        "\n"
+        "  B. Start clean — discard the old cluster:\n"
+        "       docker compose down\n"
+        "       rm -rf data/postgres\n"
+        "       make up\n"
+        "\n"
+        "Then confirm with: curl -s localhost:8000/system/health | jq\n"
+    )
 
 
 def main():
@@ -92,7 +150,26 @@ def main():
     create_secret("minio_password.txt", passwords["minio"])
 
     print(f"Development secrets generated in {SECRETS_DIR}/ (dir 0755, files 0444).")
-    write_env(passwords)
+    rendered = write_env(passwords)
+
+    # Only a freshly rendered .env can disagree with an existing cluster; an
+    # .env left untouched still holds the password that initialised it.
+    if rendered and initialized_pgdata():
+        warn_password_rotation(read_env_value("DB_USER") or "naso_admin")
+        return 1
+    return 0
+
+
+def read_env_value(key):
+    """One value out of the rendered .env, or None."""
+    if not os.path.exists(ENV_FILE):
+        return None
+    with open(ENV_FILE, encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith(f"{key}="):
+                return stripped.split("=", 1)[1]
+    return None
 
 
 def write_env(passwords):
@@ -105,13 +182,14 @@ def write_env(passwords):
     every database connection fails authentication.
 
     An existing .env is never modified; this only fills in a fresh one.
+    Returns True when a fresh one was written.
     """
     if os.path.exists(ENV_FILE):
         print(f"{ENV_FILE} already exists, leaving it untouched.")
-        return
+        return False
     if not os.path.exists(ENV_TEMPLATE):
         print(f"{ENV_TEMPLATE} not found, skipping {ENV_FILE} generation.")
-        return
+        return False
 
     replacements = {
         "DB_PASSWORD": passwords["db"],
@@ -152,7 +230,8 @@ def write_env(passwords):
         f.write("\n".join(out) + "\n")
     os.chmod(ENV_FILE, 0o600)
     print(f"{ENV_FILE} written from {ENV_TEMPLATE} with the generated values (0600).")
+    return True
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
