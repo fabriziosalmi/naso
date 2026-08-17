@@ -7,7 +7,7 @@ pydantic[email]>=2.5.3
 pydantic-settings>=2.5.2
 # python-dotenv is not optional: shared/config.py sets env_file=".env", and
 # pydantic-settings raises on import without it.
-python-dotenv>=1.0.0
+python-dotenv>=1.2.2
 
 # shared/core/security.py imports `jwt` (PyJWT) and hashes with pbkdf2_sha256,
 # which is built into passlib — there is no extra to request for it. The
