@@ -112,7 +112,15 @@ services:
     networks:
       - naso-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf --user elastic:$${ELASTIC_PASSWORD} https://localhost:9200 -k >/dev/null || exit 1"]
+      # http, not https. `xpack.security.enabled=true` on its own leaves
+      # `xpack.security.http.ssl.enabled` at false and suppresses the image's
+      # security auto-configuration, so this node has no certificate and serves
+      # plaintext with Basic auth. Against https the check failed every single
+      # time and the container sat `unhealthy` for its whole life -- invisibly,
+      # because nothing gated on it and cli/validate.sh looked at one container.
+      # `-k` is gone with the scheme: it was suppressing verification of a
+      # certificate that does not exist.
+      test: ["CMD-SHELL", "curl -sf --user elastic:$${ELASTIC_PASSWORD} http://localhost:9200 >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

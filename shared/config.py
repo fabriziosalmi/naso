@@ -35,10 +35,15 @@ class Settings(BaseSettings):
     ES_PORT: int = 9200
     ES_USER: Optional[str] = None
     ES_PASSWORD: Optional[str] = None
-    # Defaults to verifying, so a deployment that says nothing gets the safe
-    # behaviour. The development stack runs Elasticsearch with a self-signed
-    # certificate and opts out explicitly in .env.example — an opt-out you can
-    # see beats a default you cannot.
+    # Both default to the secure setting, so a deployment that says nothing
+    # gets TLS and verifies it. The development stack opts out of both in
+    # .env.example — an opt-out you can see beats a default you cannot.
+    #
+    # It has to opt out: `xpack.security.enabled=true` on its own leaves
+    # `xpack.security.http.ssl.enabled` at false, so that Elasticsearch speaks
+    # plaintext HTTP with Basic auth and has no certificate at all. Setting the
+    # scheme from these two flags lives in shared/core/es_client.py.
+    ES_USE_TLS: bool = True
     ES_VERIFY_CERTS: bool = True
 
     # MinIO

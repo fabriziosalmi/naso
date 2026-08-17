@@ -3,7 +3,6 @@ import asyncio
 import json
 import logging
 
-from elasticsearch import AsyncElasticsearch
 from minio import Minio
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -11,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from shared.celery_app import celery_app
 from shared.config import settings
+from shared.core.es_client import make_es_client
 from shared.models import AuditLog, Identity, Keyword, LeakHit, Tenant, User, identity_leaks
 
 # pipeline.py used to re-export these as module constants and now reads them
@@ -61,10 +61,7 @@ def delete_tenant_saga(self, tenant_id: str):
 
 
 async def delete_from_es(tenant_id: str):
-    es = AsyncElasticsearch(
-        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
-        verify_certs=settings.ES_VERIFY_CERTS,
-    )
+    es = make_es_client()
     try:
         # Delete by query for the specific tenant
         query = {"query": {"term": {"tenant_id": tenant_id}}}

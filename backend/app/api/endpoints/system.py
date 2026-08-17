@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from shared.config import settings
+from shared.core.es_client import make_es_client_if_configured
 from shared.database import get_db
 from shared.models import AuditLog
 from shared.utils.audit_chain import verify_chain
@@ -158,16 +159,12 @@ async def _probe_redis():
 
 
 async def _probe_elasticsearch():
-    if not settings.ES_PASSWORD:
+    # Scheme, credentials and TLS options all come from one factory — see
+    # shared/core/es_client.py for why this probe reported `degraded` against a
+    # perfectly healthy cluster for months.
+    es = make_es_client_if_configured()
+    if es is None:
         return None
-    from elasticsearch import AsyncElasticsearch
-
-    es = AsyncElasticsearch(
-        f"https://elastic:{settings.ES_PASSWORD}@{settings.ES_HOST}:{settings.ES_PORT}",
-        # Verifies by default; the development stack opts out in .env.example
-        # because it runs Elasticsearch with a self-signed certificate.
-        verify_certs=settings.ES_VERIFY_CERTS,
-    )
     try:
         # ping() catches transport errors and returns False rather than
         # raising, so the result must be returned, not discarded.
