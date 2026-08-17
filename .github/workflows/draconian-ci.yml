@@ -73,6 +73,41 @@ jobs:
         run: |
           docker compose up -d db redis elasticsearch minio rabbitmq
           docker compose up -d --build backend worker-pipeline
+          # One Tor instance and the balancer, deliberately not all five.
+          #
+          # This job used to start seven containers while `make up` -- what the
+          # README tells a new user to run -- starts fifteen. The Tor cluster was
+          # among the eight it never touched, and all six of its containers were
+          # in a permanent restart loop for months of green builds: tor ran as
+          # root against a data directory owned by the `tor` user and refused to
+          # start, and haproxy then aborted because their names would not
+          # resolve. Nothing here could have noticed.
+          #
+          # Running one of five is the stronger test: it exercises the
+          # `init-addr last,libc,none` path, where the balancer has to come up
+          # and serve with four backends missing.
+          docker compose up -d --build naso-tor-1 naso-tor-lb
+
+      - name: Tor cluster survives four missing backends
+        run: |
+          # haproxy's check is a TCP connect to tor1:9050, so this asserts the
+          # container started and the balancer routes -- no Tor circuit, no
+          # external network, nothing that can flake on a runner.
+          for i in $(seq 1 60); do
+            csv="$(docker exec naso-naso-tor-1-1 curl -s --max-time 5 "http://naso-tor-lb:1936/;csv" || true)"
+            tor1="$(printf '%s' "$csv" | awk -F, '$1=="tor-cluster" && $2=="tor1" {print $18}')"
+            backend="$(printf '%s' "$csv" | awk -F, '$1=="tor-cluster" && $2=="BACKEND" {print $18}')"
+            if [ "$tor1" = "UP" ] && [ "$backend" = "UP" ]; then
+              echo "tor1=UP backend=UP after ${i}s (four instances deliberately absent)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::The Tor balancer never reported a usable backend"
+          docker compose ps -a naso-tor-1 naso-tor-lb || true
+          docker logs naso-tor-cluster 2>&1 | tail -30 || true
+          docker logs naso-naso-tor-1-1 2>&1 | tail -30 || true
+          exit 1
 
       - name: Wait for the API to report operational
         run: |
