@@ -25,7 +25,21 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run preview -- --port 5173 --strictPort',
     url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    // Never reuse, not even locally. The usual `!process.env.CI` would hand the
+    // suite whatever is already listening on 5173 — which for most developers
+    // most of the time is `npm run dev`. The run would then silently skip the
+    // build and test the dev server: the exact thing this configuration exists
+    // to stop, and invisible from the output.
+    //
+    // This project has been bitten twice by a local run and a CI run not
+    // meaning the same thing — once by a conftest env default that chose HS256
+    // outside a container and EdDSA inside one, and once by this very flake.
+    // A rebuild costs about ten seconds. Ambiguity about what was tested costs
+    // considerably more.
+    //
+    // --strictPort is the other half: if something else holds 5173, preview
+    // fails loudly instead of quietly serving from somewhere unexpected.
+    reuseExistingServer: false,
     // The build is inside this budget, and it is a real production build of an
     // app that bundles force-graph, recharts and Prism.
     timeout: 180 * 1000,
