@@ -9,8 +9,13 @@ RUN groupadd --system --gid ${UID} pwuser \
 
 WORKDIR /app
 
-# Playwright and browser dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Playwright and browser dependencies. The `apt-get upgrade` picks up Debian
+# security updates published since the base image was last rebuilt -- see the
+# equivalent note in Dockerfile.backend for why that is worth the loss of build
+# reproducibility, and why the upgrade needs --with-new-pkgs to not silently
+# hold back the fixes it exists to apply.
+RUN apt-get update && apt-get upgrade -y --with-new-pkgs \
+ && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     yara \
@@ -32,7 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 \
-    && rm -rf /var/lib/apt/lists/*
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
 
 # Dependencies are installed as root: pip needs write access to site-packages.
 # The --trusted-host flags that used to be here are gone on purpose — they

@@ -9,9 +9,27 @@ RUN groupadd --system --gid ${UID} naso \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `apt-get upgrade` before installing anything, so the image picks up Debian
+# security updates published since the base image was last rebuilt rather than
+# waiting for upstream to do it. CVE-2026-53615 -- an integer overflow in
+# libblkid's DOS partition parser, reaching nine binary packages from the
+# util-linux source -- turned the Trivy gate red on a day nobody had touched a
+# Dockerfile, with a fix already sitting in the Debian archive.
+#
+# The cost is that two builds of the same commit can differ. That is the right
+# trade for an image whose whole job is to be patched: pinning would freeze the
+# vulnerability along with everything else.
+# --with-new-pkgs matters here. Plain `apt-get upgrade` holds back any package
+# whose new version pulls in a dependency that is not already installed, and
+# reports it as "kept back" rather than failing -- so a security fix packaged
+# that way would be silently skipped by the very step meant to apply it. This
+# is the safe half of `dist-upgrade`: it will install new dependencies, but it
+# will not remove anything to resolve a conflict.
+RUN apt-get update && apt-get upgrade -y --with-new-pkgs \
+ && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
+ && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
 # Set to "true" to also install the test and lint tooling. docker-compose.yml
