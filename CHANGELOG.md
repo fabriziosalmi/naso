@@ -345,6 +345,7 @@ Summarised, not reconstructed. Roughly in the order it happened:
 - Test infrastructure: pytest for the backend, Vitest for the frontend store,
   Playwright for end-to-end flows, and `cli/validate.sh` as the structural gate.
 
+[0.2.0]: https://github.com/fabriziosalmi/naso/releases/tag/v0.2.0
 [0.1.2]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.2
 [0.1.1]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.1
 [0.1.0]: https://github.com/fabriziosalmi/naso/releases/tag/v0.1.0
