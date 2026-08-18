@@ -1,4 +1,6 @@
+import contextlib
 import ipaddress
+import logging
 import uuid
 from typing import Optional
 
@@ -16,12 +18,15 @@ from shared.domain.services.darkweb_search import DarkWebSearchService
 from shared.domain.services.shodan_search import ShodanService
 from shared.domain.services.telegram_search import TelegramOSINTService
 from shared.models import LeakHit
+from shared.utils.ai_triage import normalize_ai_analysis
 from shared.utils.audit import AuditLogger
 from shared.utils.reporting import ForensicReportGenerator
 
 from ...infrastructure.rabbitmq import rabbitmq_pool
 from ...limiter import limiter
 from ..deps import get_current_user
+
+logger = logging.getLogger("naso-leaks")
 
 router = APIRouter()
 
@@ -398,10 +403,18 @@ async def get_leak_intelligence(
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
         raise AuthorizationError("Access denied to this tenant's leak")
 
+    # The pipeline stores the model's reasoning inside `ai_analysis`
+    # ({thought, answer, is_valid}); only the demo seeder writes a top-level
+    # `ai_thought`. Reading the top-level key returned None for every real leak.
+    # normalize_ai_analysis lives next to the producer and guarantees
+    # ai_verdict is a string or None — never the raw dict (which leaked the
+    # model's internal keys and made the field's JSON type vary per row).
+    meta = leak.metadata_json or {}
+    thought, verdict = normalize_ai_analysis(meta.get("ai_analysis"))
     return {
         "id": leak.id,
-        "ai_thought": leak.metadata_json.get("ai_thought"),
-        "ai_verdict": leak.metadata_json.get("ai_analysis"),
+        "ai_thought": thought or meta.get("ai_thought"),
+        "ai_verdict": verdict,
         "severity": leak.severity_score,
     }
 
@@ -422,8 +435,10 @@ async def export_leak_report(leak_id: str, db: AsyncSession = Depends(get_db), c
     if current_user.role != "admin" and current_user.tenant_id != leak.tenant_id:
         raise AuthorizationError("Access denied to this tenant's leak")
 
-    # Gather the data for the report
-    ai_analysis = leak.metadata_json.get("ai_analysis", {})
+    # Gather the data for the report. metadata_json is a nullable column —
+    # the same guard get_leak_intelligence carries; without it a NULL row
+    # 500s the export before the report generator ever runs.
+    ai_analysis = (leak.metadata_json or {}).get("ai_analysis", {})
     content = leak.content_snippet or "[RAW CONTENT NOT ACCESSIBLE IN SNIPPET]"
     tenant_name = leak.tenant.name if leak.tenant else "Unknown Tenant"
 
@@ -548,8 +563,15 @@ async def get_leak_screenshot(leak_id: str, db: AsyncSession = Depends(get_db), 
         await db.commit()
 
         return Response(content=data, media_type="image/png")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve the screenshot: {str(e)}")
+    except Exception:
+        # The MinIO/S3 exception text names buckets, endpoints and object keys —
+        # detail for the log, not for the client. The try spans retrieval AND
+        # the audit write + commit, so the message must not blame MinIO for an
+        # audit-ledger failure; the traceback in the log says which it was.
+        logger.exception("screenshot endpoint failed for leak %s (retrieval or audit write)", leak_id)
+        with contextlib.suppress(Exception):
+            await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to retrieve the screenshot.")
     finally:
         if response:
             response.close()

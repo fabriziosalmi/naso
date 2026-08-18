@@ -6,6 +6,20 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from fpdf import FPDF
 
+from shared.utils.ai_triage import normalize_ai_analysis
+
+
+def _latin1(text: str) -> str:
+    """Coerce text into fpdf2's core-font charset.
+
+    Courier is a Latin-1 core font: fpdf2 raises FPDFUnicodeEncodingException
+    on the first character outside it. Model prose (em dashes, curly quotes)
+    and dark-web leak content are routinely UTF-8, and a report generator
+    that crashes on the evidence it is reporting is useless. Unmappable
+    characters degrade to '?', which is visible and honest.
+    """
+    return str(text).encode("latin-1", "replace").decode("latin-1")
+
 
 class ForensicReportGenerator:
     """
@@ -29,8 +43,8 @@ class ForensicReportGenerator:
         report_id = f"NASO-REP-{datetime.now().strftime('%Y%m%d')}-{leak_data['id'][:8]}"
         pdf.cell(200, 10, f"Report ID: {report_id}", ln=True)
         pdf.cell(200, 10, f"Timestamp: {datetime.now().isoformat()}", ln=True)
-        pdf.cell(200, 10, f"Tenant: {tenant_name}", ln=True)
-        pdf.cell(200, 10, f"Source: {leak_data['source']}", ln=True)
+        pdf.cell(200, 10, _latin1(f"Tenant: {tenant_name}"), ln=True)
+        pdf.cell(200, 10, _latin1(f"Source: {leak_data['source']}"), ln=True)
         pdf.ln(5)
 
         # Integrità dell'Evidenza
@@ -43,15 +57,18 @@ class ForensicReportGenerator:
         pdf.set_font("Courier", "B", 12)
         pdf.cell(200, 10, "AI INTELLIGENCE VERDICT", ln=True)
         pdf.set_font("Courier", "", 10)
-        verdict = ai_analysis.get("answer", "No verdict available")
-        pdf.multi_cell(0, 10, f"Verdict: {verdict}")
+        # ai_analysis is a dict {thought, answer, is_valid} from the pipeline
+        # but a plain string from the seeder; normalize_ai_analysis (which
+        # lives next to the producer) accepts either.
+        _, verdict = normalize_ai_analysis(ai_analysis)
+        pdf.multi_cell(0, 10, _latin1(f"Verdict: {verdict or 'No verdict available'}"))
         pdf.ln(5)
 
         # Content Snippet
         pdf.set_font("Courier", "B", 12)
         pdf.cell(200, 10, "EVIDENCE SNIPPET", ln=True)
         pdf.set_font("Courier", "", 8)
-        pdf.multi_cell(0, 5, content[:2000] + ("..." if len(content) > 2000 else ""))
+        pdf.multi_cell(0, 5, _latin1(content[:2000] + ("..." if len(content) > 2000 else "")))
         pdf.ln(10)
 
         # Forensic Footer
@@ -110,7 +127,7 @@ class ForensicReportGenerator:
 
         pdf.set_font("Courier", "B", 14)
         pdf.set_text_color(0, 0, 0)
-        pdf.cell(200, 10, f"Tenant: {tenant_name}", ln=True, align="C")
+        pdf.cell(200, 10, _latin1(f"Tenant: {tenant_name}"), ln=True, align="C")
         pdf.cell(200, 10, f"Date: {datetime.now().strftime('%B %Y')}", ln=True, align="C")
         pdf.ln(20)
 
@@ -129,11 +146,11 @@ class ForensicReportGenerator:
                 pdf.add_page()  # New page every 2 leaks
 
             pdf.set_font("Courier", "B", 11)
-            pdf.cell(200, 10, f"INCIDENT #{leak.id[:8]} - {leak.source}", ln=True)
+            pdf.cell(200, 10, _latin1(f"INCIDENT #{leak.id[:8]} - {leak.source}"), ln=True)
             pdf.set_font("Courier", "", 9)
             pdf.cell(200, 8, f"Detected: {leak.discovered_at.isoformat()}", ln=True)
             pdf.cell(200, 8, f"Severity: {leak.severity_score}%", ln=True)
-            pdf.multi_cell(0, 5, f"Snippet: {leak.content_snippet[:500]}...")
+            pdf.multi_cell(0, 5, _latin1(f"Snippet: {leak.content_snippet[:500]}..."))
             pdf.ln(5)
             pdf.line(10, pdf.get_y(), 200, pdf.get_y())
             pdf.ln(5)

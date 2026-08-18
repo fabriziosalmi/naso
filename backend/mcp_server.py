@@ -109,7 +109,10 @@ async def naso_darkweb_recon(query: str) -> str:
             report += f"- Title: {res['title']}\n  URL: {res['url']}\n  Snippet: {res['snippet']}\n\n"
         return report
     except Exception as e:
-        return f"Dark web recon failed: {str(e)}"
+        # The transport-level text can carry the Tor proxy host:port — log
+        # detail, generic reply, same contract as the DB tools below.
+        logger.error("mcp tool dark web recon failed: %s", e)
+        return "Dark web recon failed (see server logs)."
 
 
 @server.tool(description="Query Shodan for open ports, exposed services and known CVEs on a single IPv4 address.")
@@ -131,7 +134,9 @@ async def naso_shodan_scan(target_ip: str) -> str:
             report += f"\nVulnerabilities (CVEs): {', '.join(results.get('vulns'))}\n"
         return report
     except Exception as e:
-        return f"Shodan scan failed: {str(e)}"
+        # A requests-level failure can echo the API-key-bearing URL.
+        logger.error("mcp tool shodan scan failed: %s", e)
+        return "Shodan scan failed (see server logs)."
 
 
 @server.tool(
@@ -156,7 +161,9 @@ async def naso_telegram_intel(channel_name: str) -> str:
             report += f"[{msg.get('timestamp')}] (Views: {msg.get('views')})\n{msg.get('text')}\n---\n"
         return report
     except Exception as e:
-        return f"Telegram intel failed: {str(e)}"
+        # Telethon errors can name the session file path.
+        logger.error("mcp tool telegram intel failed: %s", e)
+        return "Telegram intel failed (see server logs)."
 
 
 @server.tool(description="List the identities this tenant monitors, highest risk first.")
@@ -187,7 +194,8 @@ async def naso_get_identities(limit: int = 50) -> str:
                 )
             return out
         except Exception as e:
-            return f"Database error: {str(e)}"
+            logger.error("mcp tool db error: %s", e)
+            return "Database error (see server logs)."
 
 
 @server.tool(description="List this tenant's recorded leak hits, optionally above a severity threshold.")
@@ -215,7 +223,8 @@ async def naso_get_leaks(min_severity: int = 0) -> str:
                 )
             return out
         except Exception as e:
-            return f"Database error: {str(e)}"
+            logger.error("mcp tool db error: %s", e)
+            return "Database error (see server logs)."
 
 
 @server.tool(description="Mark one identity as protected (VIP), or clear that flag.")
@@ -252,7 +261,8 @@ async def naso_protect_identity(identity_id: str, is_protected: bool) -> str:
             await db.commit()
             return f"Identity {identity.identifier} protection status set to: {is_protected}."
         except Exception as e:
-            return f"Database error: {str(e)}"
+            logger.error("mcp tool db error: %s", e)
+            return "Database error (see server logs)."
 
 
 async def main():

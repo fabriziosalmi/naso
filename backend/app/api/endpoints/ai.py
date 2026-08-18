@@ -36,6 +36,7 @@ from shared.database import AsyncSessionLocal, get_db
 from shared.domain.services.ai_agent import DEFAULT_MAX_ITERATIONS, run_agent_loop
 from shared.domain.services.ai_toolkit import NASO_TOOLS
 from shared.models import InvestigationPlan, InvestigationTask
+from shared.utils.ai_gate import ai_inference_gate
 from shared.utils.audit import AuditLogger
 
 from ..deps import get_current_user
@@ -169,6 +170,19 @@ async def ai_chat(
             logger.info("⚡ [AI SEMANTIC CACHE HIT] bypassing LLM for %s", cache_key)
             yield f"data: {json.dumps({'type': 'text', 'content': cached_response})}\n\n"
             yield "data: [DONE]\n\n"
+            # The ledger must record every AI interaction, served from cache
+            # or not — this early return used to skip the AI_CHAT audit write
+            # entirely, so repeated questions within the cache TTL left no
+            # trace in a product whose differentiator is the audit chain.
+            await AuditLogger.log(
+                db,
+                user_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                action="AI_CHAT",
+                details={"investigation_id": body.investigation_id, "cached": True},
+            )
+            with contextlib.suppress(Exception):
+                await db.commit()
             return
 
         # Build an httpx-backed llm_call that the agent loop can iterate
@@ -178,20 +192,29 @@ async def ai_chat(
 
             async def llm_call(msgs: list[dict]) -> dict:
                 try:
-                    resp = await client.post(
-                        f"{settings.AI_ENDPOINT}/chat/completions",
-                        json={
-                            "model": settings.AI_MODEL,
-                            "messages": msgs,
-                            "tools": NASO_TOOLS,
-                            "tool_choice": "auto",
-                            "temperature": 0.3,
-                            "stream": False,
-                        },
-                        headers={"Content-Type": "application/json"},
-                    )
-                    resp.raise_for_status()
-                    return resp.json()
+                    # Gate acquired per iteration, not per chat: between the
+                    # agent loop's rounds the triage workers get their turn at
+                    # the (single-request) local LLM. See shared/utils/ai_gate.
+                    # The acquire budget is tight (60s, not the 180s default)
+                    # because this request is pinning a pooled DB connection
+                    # while it waits — under heavy triage contention the chat
+                    # must fail fast with a visible error, not starve the
+                    # API's connection pool for minutes.
+                    async with ai_inference_gate(acquire_timeout=60.0):
+                        resp = await client.post(
+                            f"{settings.AI_ENDPOINT}/chat/completions",
+                            json={
+                                "model": settings.AI_MODEL,
+                                "messages": msgs,
+                                "tools": NASO_TOOLS,
+                                "tool_choice": "auto",
+                                "temperature": 0.3,
+                                "stream": False,
+                            },
+                            headers={"Content-Type": "application/json"},
+                        )
+                        resp.raise_for_status()
+                        return resp.json()
                 except httpx.ConnectError as exc:
                     raise RuntimeError(f"AI engine offline — check LM Studio at {settings.AI_ENDPOINT}") from exc
 

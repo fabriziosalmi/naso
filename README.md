@@ -35,6 +35,15 @@ you can point at.
 >
 > Read **[LEGAL.md](LEGAL.md)** before pointing NASO at anything.
 
+## See it in 69 seconds
+
+<a href="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/demo/naso-demo.mp4">
+  <img src="https://raw.githubusercontent.com/fabriziosalmi/naso/main/docs/public/demo/naso-demo-poster.png" alt="NASO demo video — click to watch" width="100%" />
+</a>
+
+*Click the image to watch: sign-in, live dashboard, the identity graph, dark-web recon over Tor, the tamper-evident audit ledger and the local AI co-analyst.
+The recording is scripted — regenerate it after any UI change with [`frontend/demo/record.mjs`](frontend/demo/record.mjs).*
+
 ## Key Features
 
 **🛡️ Hardened Container Baseline**
