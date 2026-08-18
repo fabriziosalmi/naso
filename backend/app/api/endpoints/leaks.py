@@ -6,7 +6,7 @@ import uuid
 import aio_pika
 import orjson
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
@@ -54,18 +54,60 @@ def _csv_safe(value):
 
 
 class WebhookPayload(BaseModel):
-    source: str = Field(..., description="Name of the external tool or script (e.g. 'custom_scraper')")
-    content: str = Field(..., description="Raw text or JSON dump discovered")
-    metadata: dict | None = Field(default={}, description="Optional tracking tags and OSINT parameters")
+    """Body of POST /leaks/ingest/webhook.
+
+    This class existed before and was never instantiated -- the handler read
+    the raw body and reached into the resulting object with `.get()`, so
+    nothing between the client and the Celery envelope ever checked a type.
+    Eight malformed bodies each produced an unhandled exception and a 500: the
+    four non-dict types in `metadata` (`null`, a string, an int, a list), and
+    any body that is not a JSON object at all (`[1,2,3]`, `"a string"`, `42`,
+    `null`). It is wired in now, and the eight are pinned by
+    `backend/tests/test_ingest_webhook_validation.py`.
+
+    The defaults reproduce the handler's previous `.get(key, fallback)`
+    behaviour exactly, so a client that omits `source` or `content` keeps
+    working. The one deliberate tightening is `metadata`: it was annotated
+    `dict | None` while every consumer treats it as a dict, starting one line
+    after it was read (`metadata["tenant_id"] = ...`). Declaring the None it
+    could never survive was the bug, so the annotation now says `dict` and the
+    default is a factory rather than a shared literal.
+    """
+
+    source: str = Field(default="webhook", description="Name of the external tool or script (e.g. 'custom_scraper')")
+    content: str = Field(default="", description="Raw text or JSON dump discovered")
+    metadata: dict = Field(default_factory=dict, description="Optional tracking tags and OSINT parameters")
 
 
-@router.post("/ingest/webhook", status_code=202)
+@router.post(
+    "/ingest/webhook",
+    status_code=202,
+    # The handler takes the raw Request rather than a body parameter, so FastAPI
+    # cannot infer a request body and the route shipped with none in the schema
+    # -- undocumented despite being the documented way in. Derived from the
+    # model rather than hand-written, so the two cannot drift apart.
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": WebhookPayload.model_json_schema()}},
+        }
+    },
+)
 @limiter.limit("60/minute")
 async def unified_ingestion_webhook(request: Request, current_user=Depends(get_current_user)):
-    """
-    ZERO-ALLOCATION WEBHOOK INGESTION (SOTA)
-    Reads raw bytes stream via orjson and directly writes to RabbitMQ
-    Celery Queue via aio_pika, bypassing heap allocation buffering.
+    """Accept one externally discovered leak and hand it to the Celery pipeline.
+
+    Parses the body with orjson, validates it against WebhookPayload, and
+    publishes a Celery v2 envelope to RabbitMQ through a pooled aio_pika
+    channel. The API does no processing: the worker is the expensive end.
+
+    (The heading here used to read "ZERO-ALLOCATION WEBHOOK INGESTION (SOTA)"
+    and claim it bypassed "heap allocation buffering". It does not and never
+    did -- `await request.body()` materialises the whole body in memory before
+    orjson sees a byte of it. orjson is a genuinely fast parser and the channel
+    pool genuinely avoids a TCP connection per request; neither is zero-copy,
+    and the route now validates as well, which the old heading would have had
+    to disown.)
 
     Rate-limited because this is the cheapest way into the Celery pipeline:
     one authenticated POST publishes one task, and the workers are the expensive
@@ -83,9 +125,32 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
     except orjson.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON stream format")
 
-    source = payload.get("source", "webhook")
-    content = payload.get("content", "")
-    metadata = payload.get("metadata", {})
+    # Parsing and validating are two different things, and this route used to do
+    # only the first. orjson answers "is this JSON"; it says nothing about the
+    # shape, so a syntactically perfect `{"metadata": null}` went straight
+    # through to `metadata["tenant_id"] = ...` and raised TypeError. 400 is kept
+    # for unparseable bytes so the existing contract does not move; a body that
+    # parses but does not fit is a different failure and answers 422.
+    try:
+        parsed = WebhookPayload.model_validate(payload)
+    except ValidationError as exc:
+        # include_input=False matters here and is not tidiness. Pydantic v2 puts
+        # the rejected value in an `input` key by default, and `include_url`
+        # does not suppress it -- so `POST` a 10 MB string and the 422 hands all
+        # 10 MB straight back. On a route whose whole job is accepting large
+        # unstructured dumps that is both an amplification primitive and an echo
+        # of caller-controlled bytes. What survives is type, loc and msg, which
+        # is what a client needs to fix its request.
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_url=False, include_input=False, include_context=False),
+        )
+
+    source = parsed.source
+    content = parsed.content
+    # Copied, not aliased: the tenant id is ours to add and has no business
+    # mutating the validated model.
+    metadata = dict(parsed.metadata)
     metadata["tenant_id"] = current_user.tenant_id
 
     # 1. Take a channel from the shared pool (avoids one TCP connection per request)
