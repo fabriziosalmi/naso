@@ -19,7 +19,7 @@
  * to actually look at it. Stills are captured card-free.
  */
 
-import { readFileSync, mkdirSync, renameSync, readdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, renameSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -127,8 +127,9 @@ async function main() {
   await page.goto(BASE);
   await page.getByRole('heading', { name: 'Operator sign-in' }).waitFor({ timeout: 30_000 });
   await chapterCard(page, {
+    kicker: 'OPEN-SOURCE FORENSIC INTELLIGENCE',
     title: 'NASO Forensic Engine',
-    line: 'Open-source breach monitoring, dark-web reconnaissance and identity correlation — with a local AI co-analyst. Nothing leaves your machine.',
+    line: 'Breach monitoring, dark-web reconnaissance and identity correlation — with a local AI co-analyst. Nothing leaves your machine.',
   });
   await shot(page, '01-login');
   await page.locator('input[type="email"]').fill(email);
@@ -205,7 +206,15 @@ async function main() {
   await context.close();
   await browser.close();
 
-  const video = readdirSync(OUT).find((f) => f.endsWith('.webm'));
+  // Playwright names the recording with a page hash. Pick the NEWEST such
+  // file, never `naso-demo.webm` itself: on a re-run the output of the
+  // previous session is already sitting in the directory, and a plain
+  // "first .webm" match renames the stale video onto itself while the fresh
+  // one keeps its hash name — a demo that silently stays outdated.
+  const video = readdirSync(OUT)
+    .filter((f) => f.endsWith('.webm') && f !== 'naso-demo.webm')
+    .map((f) => ({ f, mtime: statSync(join(OUT, f)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime)[0]?.f;
   if (video) {
     renameSync(join(OUT, video), join(OUT, 'naso-demo.webm'));
     console.log('\nvideo: frontend/demo/out/naso-demo.webm');
