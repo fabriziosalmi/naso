@@ -34,8 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable
-from typing import Callable
+from collections.abc import Callable, Iterable
 
 logger = logging.getLogger("naso-darkweb-torctl")
 

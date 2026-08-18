@@ -32,8 +32,6 @@ in a header instead.
 safe behaviour; the development stack opts out in ``.env.example``, visibly.
 """
 
-from typing import Optional
-
 from shared.config import settings
 
 
@@ -62,7 +60,7 @@ def make_es_client():
     return AsyncElasticsearch(es_url(), **kwargs)
 
 
-def make_es_client_if_configured() -> Optional[object]:
+def make_es_client_if_configured() -> object | None:
     """The client, or ``None`` when this deployment has no Elasticsearch.
 
     Elasticsearch is optional. ``ES_PASSWORD`` is the marker the callers

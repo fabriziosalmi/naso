@@ -1,7 +1,7 @@
 import asyncio
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -108,7 +108,7 @@ async def seed_demo():
 
             task3 = progress.add_task(f"[red]Deploying {OPERATION_NAME} Vectors...", total=len(identity_objects))
             leak_count = 0
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
             for ident in identity_objects:
                 num_leaks = random.randint(5, 15) if ident.is_protected else random.randint(1, 5)

@@ -26,15 +26,15 @@ import hmac
 import json
 import secrets
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
 def _utc_iso(dt) -> str:
     """ISO-8601 UTC, second precision, suffix 'Z'."""
     if dt is None:
-        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    dt = dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 

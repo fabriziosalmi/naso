@@ -75,12 +75,31 @@ async def test_fire_soar(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Build the SOAR request for one existing leak + POST it to
-    FABGPTSEC_SOAR_URL. Returns what was sent + the response. For wiring +
-    smoke-test only; the production path will fire on insert (TODO).
+    """Manually fire one existing leak at the configured SOAR endpoint.
+
+    This is the wiring check: it builds the signed SOAR request for a leak the
+    caller's tenant already owns, POSTs it to FABGPTSEC_SOAR_URL, and returns
+    both what was sent and what came back, so an operator can confirm the URL,
+    the HMAC secret and the receiving end agree before relying on any of it.
+
+    **It is operator-triggered and nothing else.** Nothing fires this signed
+    envelope automatically: no pipeline stage builds a NASO finding or posts it
+    to FABGPTSEC_SOAR_URL, and this route is the only code path in the
+    repository that does. Firing it on insert is intended but not implemented,
+    so the presence of this route is not evidence of a running integration.
+
+    Do not confuse it with the generic SOAR webhook, which is a different
+    mechanism and *does* run automatically: `shared/tasks/pipeline.py` posts an
+    unsigned `{"alert_type": "CRITICAL_OSINT_LEAK", ...}` body to
+    SOAR_WEBHOOK_URL for any leak scoring 90 or above. Different destination,
+    different payload, different env var, and no HMAC. See
+    docs/guide/soar-and-cti.md.
+
+    Scoped to the caller's tenant, and answers 404 for a leak belonging to
+    anyone else, so it cannot be used to probe for foreign leak ids.
 
     Required env:
-      FABGPTSEC_SOAR_URL   — full URL to sec's /api/soar/inbound
+      FABGPTSEC_SOAR_URL    — full URL to sec's /api/soar/inbound
       NASO_SOAR_HMAC_SECRET — shared secret with sec
     """
     soar_url = os.environ.get("FABGPTSEC_SOAR_URL", "")

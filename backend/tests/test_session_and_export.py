@@ -18,7 +18,7 @@ fixed:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -104,7 +104,7 @@ async def test_csv_export_neutralises_formulas(client, db, operator, payload):
             severity_score=91,
             status="new",
             content_snippet="synthetic",
-            discovered_at=datetime.now(timezone.utc),
+            discovered_at=datetime.now(UTC),
         )
     )
     await db.commit()
@@ -131,7 +131,7 @@ async def test_csv_export_leaves_ordinary_values_alone(client, db, operator):
             severity_score=42,
             status="reviewing",
             content_snippet="synthetic",
-            discovered_at=datetime.now(timezone.utc),
+            discovered_at=datetime.now(UTC),
         )
     )
     await db.commit()
@@ -158,7 +158,7 @@ async def test_audit_log_is_pageable(client, db, operator):
                 action=f"ACTION_{i}",
                 resource_type="leak",
                 resource_id=str(i),
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         )
     await db.commit()

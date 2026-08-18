@@ -1,5 +1,3 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import bindparam as sa_bindparam
@@ -553,10 +551,10 @@ async def trigger_auto_merge(db: AsyncSession = Depends(get_db), current_user=De
 
 @router.get("/")
 async def search_identities(
-    identifier: Optional[str] = None,
-    type: Optional[str] = None,
-    min_risk: Optional[int] = None,
-    max_risk: Optional[int] = None,
+    identifier: str | None = None,
+    type: str | None = None,
+    min_risk: int | None = None,
+    max_risk: int | None = None,
     only_masters: bool = True,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),

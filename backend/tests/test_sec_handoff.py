@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -36,7 +36,7 @@ def _leak(
         id=leak_id,
         source=source,
         severity_score=severity,
-        discovered_at=discovered_at or datetime(2026, 6, 16, 8, 30, 0, tzinfo=timezone.utc),
+        discovered_at=discovered_at or datetime(2026, 6, 16, 8, 30, 0, tzinfo=UTC),
         content_snippet=content_snippet,
         normalized_content=content_snippet.lower(),
     )

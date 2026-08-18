@@ -1,5 +1,5 @@
 import os
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -82,9 +82,9 @@ async def logout(request: Request, response: Response, token: str = Depends(oaut
         exp = payload.get("exp")
 
         if jti and exp:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
-            now = datetime.now(timezone.utc).timestamp()
+            now = datetime.now(UTC).timestamp()
             ttl = int(exp - now)
             if ttl > 0:
                 await jwt_blacklist.blacklist_token(jti, ttl)

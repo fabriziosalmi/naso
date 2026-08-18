@@ -20,7 +20,7 @@ Contracts:
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -316,7 +316,7 @@ async def test_an_unhashed_row_inside_the_chain_is_still_a_break(db):
             tenant_id=tenant.id,
             action="SNEAKY",
             details={},
-            timestamp=datetime.now(timezone.utc) + timedelta(minutes=5),
+            timestamp=datetime.now(UTC) + timedelta(minutes=5),
             prev_hash=None,
             self_hash=None,
         )
@@ -339,12 +339,12 @@ def test_hash_is_stable_across_naive_and_aware_utc():
     verification in production while passing on SQLite (which round-trips naive
     as naive). The hash must not depend on which one it is handed.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from shared.utils.audit_chain import _canonical_payload
 
     naive = datetime(2026, 8, 17, 21, 24, 29, 994748)
-    aware = datetime(2026, 8, 17, 21, 24, 29, 994748, tzinfo=timezone.utc)
+    aware = datetime(2026, 8, 17, 21, 24, 29, 994748, tzinfo=UTC)
 
     fields = dict(
         prev_hash=None,

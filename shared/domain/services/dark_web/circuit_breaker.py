@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable
-from enum import Enum
-from typing import Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from enum import StrEnum
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -37,7 +37,12 @@ class CircuitBreakerOpen(Exception):
     """Raised when a request is rejected because the breaker is open."""
 
 
-class _State(str, Enum):
+class _State(StrEnum):
+    # StrEnum rather than (str, Enum): the two differ in __str__ -- the old form
+    # renders as "_State.OPEN", StrEnum as "open". Safe here because nothing
+    # interpolates a member. Every comparison in this file is `is`, and the one
+    # value that escapes the class is `.value` via the `state` property, which
+    # is the same string under either base.
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"

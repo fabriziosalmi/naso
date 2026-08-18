@@ -29,7 +29,7 @@ Contract (full detail in ``backend/tests/test_identity_upsert.py``):
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -80,7 +80,7 @@ async def upsert_identity(
     # a naive value on write, both backends return a naive value on read, and
     # downstream comparisons across objects that stayed in the identity map
     # versus those reloaded from DB stay consistent.
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     stripped = str(raw_identifier).strip()
 
     # ── 1. INSERT ... ON CONFLICT DO NOTHING ──────────────────────────────

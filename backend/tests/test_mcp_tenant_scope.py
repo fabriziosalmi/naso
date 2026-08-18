@@ -20,7 +20,7 @@ filters all three on the caller's tenant.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -69,7 +69,7 @@ def bound(mcp, db, monkeypatch):
                 severity_score=95,
                 status="new",
                 content_snippet=f"{label} snippet",
-                discovered_at=datetime.now(timezone.utc),
+                discovered_at=datetime.now(UTC),
             )
             db.add_all([identity, leak])
             await db.commit()

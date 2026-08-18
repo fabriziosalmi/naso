@@ -2,7 +2,6 @@ import contextlib
 import ipaddress
 import logging
 import uuid
-from typing import Optional
 
 import aio_pika
 import orjson
@@ -57,7 +56,7 @@ def _csv_safe(value):
 class WebhookPayload(BaseModel):
     source: str = Field(..., description="Name of the external tool or script (e.g. 'custom_scraper')")
     content: str = Field(..., description="Raw text or JSON dump discovered")
-    metadata: Optional[dict] = Field(default={}, description="Optional tracking tags and OSINT parameters")
+    metadata: dict | None = Field(default={}, description="Optional tracking tags and OSINT parameters")
 
 
 @router.post("/ingest/webhook", status_code=202)
@@ -360,10 +359,10 @@ async def acknowledge_all_critical(
 
 @router.get("/")
 async def get_leaks(
-    source: Optional[str] = None,
-    status: Optional[str] = None,
-    min_severity: Optional[int] = None,
-    max_severity: Optional[int] = None,
+    source: str | None = None,
+    status: str | None = None,
+    min_severity: int | None = None,
+    max_severity: int | None = None,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
