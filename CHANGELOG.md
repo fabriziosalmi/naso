@@ -20,6 +20,112 @@ that NASO is pre-1.0 and the public API may change in a minor release.
 > stability nobody here is in a position to keep. The version rises to `1.0.0`
 > when the HTTP API stops changing shape, not when the code feels finished.
 
+## [0.2.0] — 2026-08-18
+
+A minor rather than a patch, on this file's own rule: *"the public API may
+change in a minor release"*. Three changes below alter what the API does for
+inputs that previously reached it — cross-tenant co-analyst calls that used to
+succeed now do not, malformed ingest bodies answer `422` instead of `500`, and
+two collectors now reject inputs they used to interpolate. Every one of them is
+a fix, and nobody should have been depending on the old behaviour, but the
+version number is a claim about observable behaviour and `0.1.3` would have
+claimed nothing moved.
+
+**If you are running 0.1.2, this release matters.** Two defects in it stop work
+silently rather than loudly: the audit chain reported its own healthy log as
+forged on Postgres, and Celery workers stopped indexing, alerting and erasing
+after their first task.
+
+### Security
+
+- **Four AI Co-Analyst tools reached across tenants.** `get_identity_insights`,
+  `flag_critical`, `toggle_identity_vip` and `create_task` looked identities,
+  leaks and merges up by id with no tenant filter, on a chat endpoint gated only
+  by `get_current_user`. A non-admin analyst of one tenant could, by naming an
+  id in conversation, read another tenant's identity and its full leak history,
+  rewrite another tenant's leak status, flip its VIP protection, or inject a
+  task into its investigation plan. The module docstring claimed "every tool is
+  tenant-scoped"; it was not. This is the AI-channel counterpart of the REST
+  cross-tenant write closed in 0.1.0. `_tenant_scope(model)` now scopes every
+  by-id lookup for non-admins, matching the sibling REST endpoints. Admins cross
+  tenants by design, as documented.
+- **Two collectors interpolated unvalidated input into a request path.**
+  `telegram_search` built `t.me/s/<name>` after stripping only a few prefixes,
+  so a value containing `/`, `?` or `#` reshaped the request; it now validates
+  against Telegram's handle grammar. `shodan_search` interpolated the IP with no
+  validation on the MCP path — the HTTP endpoint checked it, the MCP tool
+  reached the service directly and skipped the check. Both checks now live in
+  the service layer, so every caller gets them.
+- **The ingest webhook crashed on eight malformed bodies.**
+  `POST /leaks/ingest/webhook` parsed with orjson and then reached into the
+  result with `.get()`, which answers "is this JSON" and nothing about the
+  shape. `{"metadata": null}` is the instructive case: `.get("metadata", {})`
+  reads as defensive, but an explicit null *finds* the key, so the fallback
+  never applied. Authenticated only, and no exception text ever reached the
+  caller, so nothing leaked — but an ingest boundary should not answer 500 to
+  anything that is not a JSON object.
+
+### Fixed
+
+- **The audit hash chain never verified on Postgres.** The most serious defect
+  in the pre-launch sweep, and the exact shape this project keeps finding: a
+  compliance feature that passed its tests and did not work. `write_audit`
+  hashed a naive UTC datetime into a `DateTime(timezone=True)` column, so
+  Postgres returned the same instant as *aware* on the next read and
+  `isoformat()` produced two different strings. Every genuinely hashed row
+  failed re-verification as `row content tampered` — the chain the UI and the
+  docs present as the product's tamper-evidence guarantee reported its own
+  healthy log as forged. It was green in CI because the suite runs on SQLite,
+  the one backend where the bug does not exist.
+  `test_hash_is_stable_across_naive_and_aware_utc` now pins the invariant at the
+  canonical-payload level, so it does not depend on which database runs it.
+- **Three async-lifecycle bugs that silently disabled work after the first
+  task.** All the same shape: a resource created once and reused across the
+  fresh event loop every Celery task opens, so it works on the first task in a
+  worker process and fails silently on every one after — invisible to a test
+  that runs a single task. Tenant deletion (right-to-erasure) failed after the
+  first erasure per worker; Elasticsearch indexing stopped after the first leak,
+  swallowed by the circuit breaker; SOAR webhooks stopped firing after the first
+  critical hit.
+- **The product fabricated and mis-parsed its own evidence.** The screenshot
+  viewer printed `SHA256:` followed by the leak's uppercased UUID prefix when no
+  hash existed — a random id dressed as a digest — under a badge reading
+  `UNMODIFIED`, an integrity assertion reflecting only that the row was
+  unacknowledged. The AI triage verdict was always `YES`, because
+  `is_valid = "valid" in answer.lower()` matches both `VALID: YES` and
+  `VALID: NO`. The PDF dossier crashed on real data. The leak intelligence
+  endpoint always returned a null thought.
+- **The inference gate.** Release was not cancellation-safe, so an SSE
+  disconnect stalled every AI caller for the full TTL; a scheme-less `REDIS_HOST`
+  raised `ValueError` rather than the documented fail-open; a black-holed Redis
+  hung the hot path for ~130s in TCP connect; and the TTL did not actually bound
+  the holder, because httpx timeouts are per-phase rather than wall-clock. The
+  gate now enforces the wall-clock bound itself.
+- **The co-analyst asked for an identity type that does not exist.** Three
+  vocabularies described one column — the UI wrote `person`, ingestion wrote
+  `email`, and the tool schema listed a third set — so the model filtered on
+  `person`, got nothing, and burned its five iterations guessing. The `type`
+  parameter is an enum of what the system stores, and an empty result now
+  reports which types the tenant actually has.
+- Documentation that described a system other than this one: a route that does
+  not exist in `identity-hub.md`, a 503-with-audit-entry promise in
+  `dark-recon.md` that the code does not keep, `v1.1.0` in the in-app footer,
+  and an operation count off by one in the API reference.
+
+### Changed
+
+- Malformed ingest bodies answer `422` with `type`/`loc`/`msg` and nothing else.
+  The rejected value is deliberately **not** echoed: Pydantic carries it under
+  `input` by default, which on a route built to accept large dumps would hand a
+  10 MB body straight back to whoever sent it.
+- `POST /leaks/ingest/webhook` now carries a `requestBody` in the OpenAPI
+  schema, derived from the model. It previously shipped with none, so the
+  documented way in was itself undocumented.
+- `GET /api/v1/sec/test-fire` documents that it is operator-triggered and is not
+  evidence of a running integration, and distinguishes itself from the generic
+  SOAR webhook, which *does* fire automatically above severity 90.
+- ruff now targets py311, matching the runtime both Dockerfiles use.
+
 ## [0.1.2] — 2026-08-18
 
 ### Fixed
