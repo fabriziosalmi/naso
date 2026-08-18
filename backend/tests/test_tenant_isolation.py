@@ -275,9 +275,18 @@ async def test_ai_health_requires_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_ai_health_never_leaks_the_exception_text(client, two_tenants):
-    # Nothing is listening on AI_ENDPOINT during the suite, so this exercises
-    # the failure path — which is the one that used to echo str(e) back.
+async def test_ai_health_never_leaks_the_exception_text(client, two_tenants, monkeypatch):
+    # Force the failure path deterministically. This used to rely on "nothing is
+    # listening on AI_ENDPOINT during the suite", which quietly made the test's
+    # result depend on the developer's machine: with LM Studio or Ollama running
+    # locally the probe succeeds, the endpoint returns "online", and the assert
+    # flips — a green-or-red that tracks the environment, not the code. Point it
+    # at a closed port (TCP/1 is reserved and never listening) so the probe fails
+    # the same way everywhere.
+    from shared.config import settings
+
+    monkeypatch.setattr(settings, "AI_ENDPOINT", "http://127.0.0.1:1/v1")
+
     token = await _login(client, two_tenants["victim"].email)
     r = await client.get("/ai/health", headers=_bearer(client, token))
     assert r.status_code == 200
