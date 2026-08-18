@@ -36,6 +36,7 @@ from shared.database import AsyncSessionLocal, get_db
 from shared.domain.services.ai_agent import DEFAULT_MAX_ITERATIONS, run_agent_loop
 from shared.domain.services.ai_toolkit import NASO_TOOLS
 from shared.models import InvestigationPlan, InvestigationTask
+from shared.utils.ai_gate import ai_inference_gate
 from shared.utils.audit import AuditLogger
 
 from ..deps import get_current_user
@@ -178,20 +179,24 @@ async def ai_chat(
 
             async def llm_call(msgs: list[dict]) -> dict:
                 try:
-                    resp = await client.post(
-                        f"{settings.AI_ENDPOINT}/chat/completions",
-                        json={
-                            "model": settings.AI_MODEL,
-                            "messages": msgs,
-                            "tools": NASO_TOOLS,
-                            "tool_choice": "auto",
-                            "temperature": 0.3,
-                            "stream": False,
-                        },
-                        headers={"Content-Type": "application/json"},
-                    )
-                    resp.raise_for_status()
-                    return resp.json()
+                    # Gate acquired per iteration, not per chat: between the
+                    # agent loop's rounds the triage workers get their turn at
+                    # the (single-request) local LLM. See shared/utils/ai_gate.
+                    async with ai_inference_gate():
+                        resp = await client.post(
+                            f"{settings.AI_ENDPOINT}/chat/completions",
+                            json={
+                                "model": settings.AI_MODEL,
+                                "messages": msgs,
+                                "tools": NASO_TOOLS,
+                                "tool_choice": "auto",
+                                "temperature": 0.3,
+                                "stream": False,
+                            },
+                            headers={"Content-Type": "application/json"},
+                        )
+                        resp.raise_for_status()
+                        return resp.json()
                 except httpx.ConnectError as exc:
                     raise RuntimeError(f"AI engine offline — check LM Studio at {settings.AI_ENDPOINT}") from exc
 

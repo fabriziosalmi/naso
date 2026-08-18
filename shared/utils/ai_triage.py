@@ -5,6 +5,8 @@ import re
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
 
+from shared.utils.ai_gate import ai_inference_gate
+
 logger = logging.getLogger("naso-ai")
 
 AI_URL = os.getenv("AI_ENDPOINT", "http://host.docker.internal:1234/v1")
@@ -57,11 +59,20 @@ async def analyze_leak_with_gemma_thinking(content_snippet):
     messages = [{"role": "user", "content": prompt}]
 
     try:
-        response = await ai_client.post(
-            f"{AI_URL}/chat/completions",
-            json={"model": MODEL, "messages": messages, "extra_body": {"enable_thinking": True}, "temperature": 0.1},
-        )
-        response.raise_for_status()
+        # One inference at a time system-wide: LM Studio shares the host's
+        # memory, and the 4 pipeline workers racing here (plus any open
+        # co-analyst chat) have taken the whole machine down before.
+        async with ai_inference_gate():
+            response = await ai_client.post(
+                f"{AI_URL}/chat/completions",
+                json={
+                    "model": MODEL,
+                    "messages": messages,
+                    "extra_body": {"enable_thinking": True},
+                    "temperature": 0.1,
+                },
+            )
+            response.raise_for_status()
 
         full_response = response.json()["choices"][0]["message"]["content"]
         thought = ""
