@@ -1,6 +1,6 @@
 {
   "name": "docs",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "NASO documentation site (VitePress)",
   "main": "index.js",
   "scripts": {
