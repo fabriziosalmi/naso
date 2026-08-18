@@ -59,9 +59,11 @@ class WebhookPayload(BaseModel):
     This class existed before and was never instantiated -- the handler read
     the raw body and reached into the resulting object with `.get()`, so
     nothing between the client and the Celery envelope ever checked a type.
-    Five malformed bodies each produced an unhandled exception and a 500:
-    `{"metadata": null}`, a string or int in `metadata`, and any body that is
-    not a JSON object at all (`[1,2,3]`, `"a string"`). It is wired in now.
+    Eight malformed bodies each produced an unhandled exception and a 500: the
+    four non-dict types in `metadata` (`null`, a string, an int, a list), and
+    any body that is not a JSON object at all (`[1,2,3]`, `"a string"`, `42`,
+    `null`). It is wired in now, and the eight are pinned by
+    `backend/tests/test_ingest_webhook_validation.py`.
 
     The defaults reproduce the handler's previous `.get(key, fallback)`
     behaviour exactly, so a client that omits `source` or `content` keeps
@@ -132,7 +134,17 @@ async def unified_ingestion_webhook(request: Request, current_user=Depends(get_c
     try:
         parsed = WebhookPayload.model_validate(payload)
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors(include_url=False))
+        # include_input=False matters here and is not tidiness. Pydantic v2 puts
+        # the rejected value in an `input` key by default, and `include_url`
+        # does not suppress it -- so `POST` a 10 MB string and the 422 hands all
+        # 10 MB straight back. On a route whose whole job is accepting large
+        # unstructured dumps that is both an amplification primitive and an echo
+        # of caller-controlled bytes. What survives is type, loc and msg, which
+        # is what a client needs to fix its request.
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_url=False, include_input=False, include_context=False),
+        )
 
     source = parsed.source
     content = parsed.content

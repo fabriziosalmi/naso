@@ -2,15 +2,18 @@
 
 SECURITY.md names "the ingest webhook and the Celery task boundary" as in
 scope. The route parsed its body with orjson and then reached into the result
-with `.get()`, which answers "is this JSON" and nothing about the shape. Five
+with `.get()`, which answers "is this JSON" and nothing about the shape. Eight
 syntactically valid bodies each reached `metadata["tenant_id"] = ...` and
 raised, for a 500:
 
     {"metadata": null}       TypeError: 'NoneType' object does not support ...
     {"metadata": "string"}   TypeError: 'str' object does not support ...
     {"metadata": 123}        TypeError: 'int' object does not support ...
+    {"metadata": [1, 2]}     TypeError: 'list' object does not support ...
     [1, 2, 3]                AttributeError: 'list' object has no attribute 'get'
     "a string"               AttributeError: 'str' object has no attribute 'get'
+    42                       AttributeError: 'int' object has no attribute 'get'
+    null                     AttributeError: 'NoneType' object has no attribute 'get'
 
 `{"metadata": null}` is the one worth dwelling on: the handler wrote
 `payload.get("metadata", {})`, which looks defensive but is not — an explicit
@@ -179,3 +182,24 @@ async def test_the_tenant_id_is_the_callers_and_not_the_bodys(client, operator, 
     hit_data = envelope[0][0]
     assert hit_data["metadata_json"]["tenant_id"] == operator.tenant_id
     assert hit_data["tenant_id"] == operator.tenant_id
+
+
+@pytest.mark.asyncio
+async def test_the_422_does_not_echo_the_body_back(client, operator):
+    """A rejection must not hand the caller's own bytes back to them.
+
+    Pydantic v2's `errors()` carries the rejected value under `input`, and
+    `include_url=False` does not suppress it — the first version of this fix
+    passed only `include_url=False` and echoed everything. On a route that
+    exists to accept large unstructured dumps, that is an amplification
+    primitive: post 10 MB of junk, get 10 MB back. Sized well past any
+    plausible error string so a partial echo cannot pass either.
+    """
+    headers = await _auth(client, operator)
+    needle = "CANARY" + ("x" * 20_000)
+
+    r = await client.post("/leaks/ingest/webhook", content=f'"{needle}"', headers=headers)
+
+    assert r.status_code == 422, r.text
+    assert "CANARY" not in r.text, "the rejected body was echoed back to the caller"
+    assert len(r.content) < 1_000, f"422 body is {len(r.content)} bytes; it is carrying the input"
