@@ -126,11 +126,19 @@ def process_potential_leak(self, hit_data, raw_content):
         if "metadata_json" not in hit_data:
             hit_data["metadata_json"] = {}
         hit_data["metadata_json"]["yara_matches"] = yara_matches
+        # Chain of custody: the content digest is already computed as the
+        # idempotency key — persist it so the UI and the PDF report can show a
+        # real hash instead of inventing one.
+        hit_data["metadata_json"]["sha256"] = idempotency_key
 
         # 2. AI reasoning with a circuit breaker and graceful degradation
         try:
             ai_result = await analyze_leak_with_gemma_thinking(raw_content[:2500])  # P-09: truncate at call site
-            hit_data["severity_score"] = 100 if ai_result["is_valid"] else 10
+            # A negative (or unparseable) model verdict must not erase the
+            # rule-based evidence: a leak YARA scored 85 stays 85 even when a
+            # 2B local model says NO on a truncated snippet. The model can
+            # raise severity to the ceiling, never push it below YARA's floor.
+            hit_data["severity_score"] = 100 if ai_result["is_valid"] else max(10, yara_score)
             hit_data["metadata_json"]["ai_analysis"] = ai_result
         except Exception as e:
             logger.warning(

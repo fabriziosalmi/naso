@@ -15,17 +15,29 @@ runs at a time; the rest wait their turn. The `/models` health probe does
 not run inference and is deliberately not gated.
 
 Failure modes, chosen deliberately:
-  * Holder crashes → the lock's TTL (set above the longest client
-    timeout) frees the gate on its own instead of wedging AI forever.
-  * A caller waits longer than ``_ACQUIRE_TIMEOUT_SECONDS`` →
-    ``AIGateTimeout``. Both call sites already degrade gracefully on
-    exception (triage falls back to the YARA score; chat surfaces an SSE
-    error event), and the ceiling stays under Celery's 300s hard task
-    limit so a queued triage degrades instead of being SIGKILLed.
-  * Redis unreachable → the gate fails OPEN with a warning. A missing
-    lock protects nothing, but blocking every AI feature on the cache
-    being up would be the worse failure — and it keeps dev setups and
-    unit tests (no Redis) working unchanged.
+  * Holder crashes (SIGKILL, power loss) → the lock's TTL frees the gate
+    on its own instead of wedging AI forever.
+  * Holder is *cancelled* (SSE client disconnect under anyio's
+    level-triggered cancel scopes, where every await re-raises) → the
+    release runs in a shielded task so the gate is freed immediately,
+    not after the TTL.
+  * A slow-but-alive holder cannot outlive the TTL either: httpx
+    timeouts are per-phase, not wall-clock, so the gate itself bounds
+    the body with ``asyncio.timeout`` just under the TTL. The double
+    inference that a silently-expired lock would allow becomes a loud
+    ``TimeoutError`` that both call sites already degrade on.
+  * A caller queues past its acquire budget → ``AIGateTimeout``. Both
+    call sites degrade gracefully (triage falls back to the YARA score;
+    chat surfaces an SSE error event). The default budget lives in
+    Settings; the triage worker passes a tighter one so gate wait plus
+    its 90s HTTP timeout stays well inside Celery's 300s hard kill.
+  * Redis unreachable or misconfigured → the gate fails OPEN with a
+    warning. A missing lock protects nothing, but blocking every AI
+    feature on the cache being up would be the worse failure — and it
+    keeps dev setups and unit tests (no Redis) working unchanged. The
+    client carries explicit socket timeouts so a black-holed Redis
+    (paused container, dropped packets) fails open in seconds instead
+    of hanging the hot path in TCP connect.
 
 The Redis client is created and closed inside the context manager on
 purpose: Celery tasks each run ``asyncio.new_event_loop()``, so a cached
@@ -36,12 +48,13 @@ inference itself takes.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncGenerator
 
 import redis.asyncio as redis
-from redis.exceptions import LockError, RedisError
+from redis.exceptions import LockNotOwnedError, RedisError
 
 from shared.config import settings
 
@@ -49,16 +62,31 @@ logger = logging.getLogger("naso-ai")
 
 AI_GATE_KEY = "ai:inference_gate"
 
-# How long one holder may keep the gate. Above the longest client timeout
-# (chat 120s, triage 90s) so the TTL only ever fires for a crashed holder,
-# never a slow-but-alive one.
-_HOLD_TTL_SECONDS = 150.0
-
-# How long a caller queues for its turn before giving up with AIGateTimeout.
-# Kept under Celery's task_time_limit (300s): degrade, don't get SIGKILLed.
-_ACQUIRE_TIMEOUT_SECONDS = 180.0
-
 _POLL_SECONDS = 0.5
+
+# Test seam: unit tests patch this attribute instead of mutating the global
+# redis.asyncio module (which would leak the patch into every other consumer
+# sharing the process — jwt_blacklist, the rate limiter).
+_redis_from_url = redis.from_url
+
+
+async def _release_and_close(lock, client) -> None:
+    """Free the gate and drop the connection; never raise."""
+    try:
+        if lock is not None:
+            await lock.release()
+    except LockNotOwnedError:
+        # The TTL expired under a live holder: serialization was voided
+        # for this request. Loud, because the whole point of the gate is
+        # that this never happens silently.
+        logger.warning("AI inference gate TTL expired under a live holder — hold TTL is too low")
+    except Exception:
+        # Releasing a never-acquired candidate raises LockError; a dropped
+        # connection raises RedisError/OSError. None of them may mask the
+        # body's own outcome.
+        pass
+    with contextlib.suppress(Exception):
+        await client.aclose()
 
 
 class AIGateTimeout(Exception):
@@ -66,30 +94,59 @@ class AIGateTimeout(Exception):
 
 
 @contextlib.asynccontextmanager
-async def ai_inference_gate() -> AsyncGenerator[None, None]:
-    """Admit exactly one local-LLM inference at a time, system-wide."""
-    client = redis.from_url(settings.REDIS_HOST)
+async def ai_inference_gate(acquire_timeout: float | None = None) -> AsyncGenerator[None, None]:
+    """Admit exactly one local-LLM inference at a time, system-wide.
+
+    ``acquire_timeout`` overrides the Settings default for call sites with a
+    tighter deadline (Celery task limits, interactive chat).
+    """
+    hold_ttl = settings.AI_GATE_HOLD_TTL_SECONDS
+    budget = acquire_timeout if acquire_timeout is not None else settings.AI_GATE_ACQUIRE_TIMEOUT_SECONDS
+    client = None
     lock = None
+    candidate = None
     try:
         try:
+            client = _redis_from_url(
+                settings.REDIS_HOST,
+                socket_connect_timeout=2.0,
+                socket_timeout=5.0,
+            )
             candidate = client.lock(
                 AI_GATE_KEY,
-                timeout=_HOLD_TTL_SECONDS,
+                timeout=hold_ttl,
                 sleep=_POLL_SECONDS,
-                blocking_timeout=_ACQUIRE_TIMEOUT_SECONDS,
+                blocking_timeout=budget,
             )
             if await candidate.acquire():
                 lock = candidate
             else:
-                raise AIGateTimeout(
-                    f"local LLM busy — gave up after {_ACQUIRE_TIMEOUT_SECONDS:.0f}s in the inference queue"
-                )
-        except RedisError as exc:
+                raise AIGateTimeout(f"local LLM busy — gave up after {budget:.0f}s in the inference queue")
+        except (RedisError, OSError, ValueError) as exc:
+            # ValueError covers a malformed REDIS_HOST (redis.from_url raises
+            # it, not a RedisError): a cache misconfiguration must degrade to
+            # "unserialized", never to "AI is down".
             logger.warning("AI inference gate unavailable (%s) — proceeding ungated", exc)
-        yield
+        # Bound the holder's WALL CLOCK just under the lock TTL. httpx
+        # timeouts are per-phase (connect/read/write each get the full
+        # budget), so without this a slow-but-alive completion could outlive
+        # the TTL and let a second inference start concurrently.
+        async with asyncio.timeout(max(hold_ttl - 5.0, 1.0)):
+            yield
     finally:
-        if lock is not None:
-            with contextlib.suppress(LockError, RedisError):
-                await lock.release()
-        with contextlib.suppress(Exception):
-            await client.aclose()
+        if client is not None:
+            # Shielded: on SSE client disconnect anyio cancels the task with a
+            # level-triggered scope where every await re-raises CancelledError,
+            # so an inline `await lock.release()` would never complete and the
+            # gate would stay wedged for the full TTL. The shielded task keeps
+            # running on the loop and frees it immediately. `candidate` (not
+            # `lock`) so a cancel landing inside acquire() — after the SET NX
+            # succeeded but before acquire returned — is released too; an
+            # unlocked candidate raises LockError, which _release_and_close
+            # swallows.
+            cleanup = asyncio.ensure_future(_release_and_close(candidate if lock is None else lock, client))
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                # We are being cancelled; cleanup continues in the background.
+                raise

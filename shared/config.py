@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     AI_MODEL: str = "gemma-4-e2b-it"
     AI_ENABLE_THINKING: bool = False
 
+    # Inference gate (shared/utils/ai_gate.py) — one local-LLM completion at a
+    # time, system-wide. The hold TTL must stay above the WALL-CLOCK time of a
+    # completion (httpx timeouts are per-phase, not total; the gate enforces
+    # the wall-clock bound itself with asyncio.timeout against this value).
+    # The acquire budget is the default queueing time; call sites with a
+    # tighter deadline (Celery's 300s task_time_limit, an interactive chat)
+    # pass their own shorter value.
+    AI_GATE_HOLD_TTL_SECONDS: float = 150.0
+    AI_GATE_ACQUIRE_TIMEOUT_SECONDS: float = 180.0
+
     # SMTP / Notifications (#9)
     SMTP_HOST: str = "smtp.naso.local"
     SMTP_PORT: int = 587
