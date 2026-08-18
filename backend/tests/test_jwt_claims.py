@@ -13,7 +13,7 @@ deployment. These tests pin the four properties that fixes:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -24,7 +24,7 @@ from shared.core.security import create_access_token, decode_access_token
 
 def _mint(**overrides) -> str:
     """Sign a token directly, bypassing create_access_token's claim set."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": "claims@naso.example.com",
         "jti": str(uuid.uuid4()),
@@ -65,7 +65,7 @@ def test_missing_claim_is_rejected():
     # through — `require` is what makes iss/aud non-optional rather than
     # "checked only if present".
     token = jwt.encode(
-        {"sub": "x@naso.example.com", "exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
+        {"sub": "x@naso.example.com", "exp": datetime.now(UTC) + timedelta(minutes=5)},
         settings.JWT_PRIVATE_KEY,
         algorithm=settings.ALGORITHM,
     )
@@ -74,7 +74,7 @@ def test_missing_claim_is_rejected():
 
 
 def test_not_yet_valid_token_is_rejected_beyond_the_leeway():
-    future = datetime.now(timezone.utc) + timedelta(seconds=settings.JWT_LEEWAY_SECONDS + 60)
+    future = datetime.now(UTC) + timedelta(seconds=settings.JWT_LEEWAY_SECONDS + 60)
     with pytest.raises(jwt.ImmatureSignatureError):
         decode_access_token(_mint(nbf=future, iat=future))
 
@@ -83,11 +83,11 @@ def test_small_clock_skew_is_tolerated():
     # A token from a host a few seconds ahead must still work; that is the
     # whole point of the leeway, and without it a fleet with imperfect NTP
     # produces intermittent 401s that look like an auth bug.
-    skewed = datetime.now(timezone.utc) + timedelta(seconds=settings.JWT_LEEWAY_SECONDS - 5)
+    skewed = datetime.now(UTC) + timedelta(seconds=settings.JWT_LEEWAY_SECONDS - 5)
     assert decode_access_token(_mint(nbf=skewed, iat=skewed))["sub"] == "claims@naso.example.com"
 
 
 def test_expired_token_is_rejected():
-    past = datetime.now(timezone.utc) - timedelta(hours=2)
+    past = datetime.now(UTC) - timedelta(hours=2)
     with pytest.raises(jwt.ExpiredSignatureError):
         decode_access_token(_mint(iat=past, nbf=past, exp=past + timedelta(minutes=5)))

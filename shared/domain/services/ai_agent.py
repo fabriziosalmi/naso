@@ -50,8 +50,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from collections.abc import AsyncGenerator, Awaitable
-from typing import Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

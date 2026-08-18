@@ -37,11 +37,22 @@ exclude = [
 # Set line length to 120
 line-length = 120
 
-# The runtime is python:3.11-slim (both Dockerfiles). Raising this to py311
-# is worthwhile but is a code-modernization change of its own: it surfaces
-# 60 UP findings, some of which alter semantics (datetime.utcnow is naive,
-# datetime.now(UTC) is not). Tracked separately.
-target-version = "py39"
+# Matches the runtime: python:3.11-slim in both Dockerfiles. This used to say
+# py39 with a note that raising it would surface UP findings "some of which
+# alter semantics (datetime.utcnow is naive, datetime.now(UTC) is not)".
+# That reasoning did not survive being checked:
+#
+#   - `datetime.utcnow` appears nowhere in this repository, and
+#   - DTZ (flake8-datetimez), the rule family that would flag it, is not in
+#     lint.select below, so no rule here could have rewritten it anyway.
+#
+# What the bump actually surfaced was 73 findings: 41 UP045 (`Optional[X]` ->
+# `X | None`), 27 UP017 (`timezone.utc` -> `UTC`, which is the same object --
+# `datetime.UTC is datetime.timezone.utc` is True), 3 UP035, 1 UP041
+# (`socket.timeout` -> `TimeoutError`, an alias since 3.10) and 1 UP042.
+# All mechanical. The UP042 case is the only one with a real behavioural
+# difference and is handled at its site.
+target-version = "py311"
 
 [tool.ruff.format]
 quote-style = "double"

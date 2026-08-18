@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
@@ -209,7 +209,7 @@ async def merge_identities(
 
     # Naive UTC for consistent round-tripping across SQLite (text storage
     # with no tz) and Postgres. See identity_upsert for the same rationale.
-    performed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    performed_at = datetime.now(UTC).replace(tzinfo=None)
     event_id = str(uuid.uuid4())
     self_hash = _sha256_hex(
         _canonical_payload(
@@ -274,7 +274,7 @@ async def reverse_merge(
     if master is not None:
         master.risk_score_dirty = True
 
-    event.reversed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    event.reversed_at = datetime.now(UTC).replace(tzinfo=None)
     event.reversed_by = reversed_by
     event.reverse_reason = reason
 
