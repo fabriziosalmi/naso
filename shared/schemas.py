@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 # Tenant Schemas
@@ -131,7 +131,7 @@ class LeakHitBase(BaseModel):
     source: str
     severity_score: int
     status: str = "new"
-    metadata_json: dict = {}
+    metadata_json: dict = Field(default_factory=dict)
 
 
 # Mitre ATT&CK Schemas (CC)
