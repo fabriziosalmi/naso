@@ -13,7 +13,7 @@ python-dotenv>=1.2.2
 # which is built into passlib — there is no extra to request for it. The
 # previous `passlib[pbkdf2_sha256]` spelling was not a real extra and pip
 # warned about it on every build.
-PyJWT[crypto]>=2.8.0
+PyJWT[crypto]>=2.13.0
 passlib==1.7.4
 
 minio==7.2.20
