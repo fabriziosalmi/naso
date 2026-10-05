@@ -37,7 +37,7 @@ export const StatCard = ({ title, value, icon: Icon, description, series, invert
   const TrendIcon = trend.direction === 'up' ? TrendingUp : trend.direction === 'down' ? TrendingDown : Minus;
 
   return (
-    <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] shadow-sm relative overflow-hidden rounded-2xl transition-all duration-300 hover:bg-[#1C1C1E]/80 group">
+    <Card className="bg-[#1C1C1E]/50 backdrop-blur-xl border-white/[0.08] shadow-sm relative overflow-hidden rounded-2xl transition-all [transition-duration:300ms] hover:bg-[#1C1C1E]/80 group">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-[13px] font-medium text-zinc-400">
           {title}

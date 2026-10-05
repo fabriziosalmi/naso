@@ -78,15 +78,15 @@ const LeakRow = ({ leak, onInspect }) => (
 const OnboardingCard = ({ icon: Icon, title, desc, onClick }) => (
   <div
     onClick={onClick}
-    className="group relative cursor-pointer flex flex-col p-8 bg-[#111111]/80 backdrop-blur-xl border border-white/[0.05] hover:border-[#0A84FF]/50 rounded-[24px] overflow-hidden transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_20px_40px_-20px_rgba(10,132,255,0.3)]"
+    className="group relative cursor-pointer flex flex-col p-8 bg-[#111111]/80 backdrop-blur-xl border border-white/[0.05] hover:border-[#0A84FF]/50 rounded-[24px] overflow-hidden transition-all [transition-duration:500ms] hover:-translate-y-1 hover:shadow-[0_20px_40px_-20px_rgba(10,132,255,0.3)]"
   >
-    <div className="absolute inset-0 bg-gradient-to-b from-[#0A84FF]/0 to-[#0A84FF]/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-    <div className="w-12 h-12 bg-white/[0.04] rounded-2xl flex items-center justify-center mb-6 group-hover:bg-[#0A84FF]/10 transition-colors duration-500">
-      <Icon size={24} className="text-zinc-400 group-hover:text-[#0A84FF] transition-colors duration-500" strokeWidth={1.5} />
+    <div className="absolute inset-0 bg-gradient-to-b from-[#0A84FF]/0 to-[#0A84FF]/[0.02] opacity-0 group-hover:opacity-100 transition-opacity [transition-duration:500ms]" />
+    <div className="w-12 h-12 bg-white/[0.04] rounded-2xl flex items-center justify-center mb-6 group-hover:bg-[#0A84FF]/10 transition-colors [transition-duration:500ms]">
+      <Icon size={24} className="text-zinc-400 group-hover:text-[#0A84FF] transition-colors [transition-duration:500ms]" strokeWidth={1.5} />
     </div>
     <h3 className="text-[17px] font-semibold text-zinc-100 mb-2">{title}</h3>
     <p className="text-[14px] text-zinc-500 leading-relaxed mb-6 flex-1">{desc}</p>
-    <div className="flex items-center text-[#0A84FF] text-[13px] font-medium opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+    <div className="flex items-center text-[#0A84FF] text-[13px] font-medium opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all [transition-duration:300ms]">
       Initialize sequence <ChevronRight size={14} className="ml-1" />
     </div>
   </div>

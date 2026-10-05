@@ -122,7 +122,7 @@ export default function Login() {
               return (
                 <div
                   key={h.label}
-                  className={`absolute inset-0 flex items-center gap-4 p-4 rounded-2xl border backdrop-blur-xl transition-all duration-500 ${
+                  className={`absolute inset-0 flex items-center gap-4 p-4 rounded-2xl border backdrop-blur-xl transition-all [transition-duration:500ms] ${
                     active
                       ? 'opacity-100 translate-y-0 bg-white/[0.04] border-white/[0.10]'
                       : 'opacity-0 translate-y-2 bg-transparent border-transparent pointer-events-none'
@@ -235,7 +235,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading || !email || !password}
-              className="group w-full h-11 bg-[#0A84FF] hover:bg-[#007AFF] disabled:bg-[#0A84FF]/50 disabled:cursor-not-allowed text-white text-[14px] font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 mt-2 shadow-lg shadow-[#0A84FF]/20"
+              className="group w-full h-11 bg-[#0A84FF] hover:bg-[#007AFF] disabled:bg-[#0A84FF]/50 disabled:cursor-not-allowed text-white text-[14px] font-semibold rounded-xl transition-all [transition-duration:200ms] flex items-center justify-center gap-2 mt-2 shadow-lg shadow-[#0A84FF]/20"
             >
               {isLoading ? (
                 <Loader2 size={16} className="animate-spin" />

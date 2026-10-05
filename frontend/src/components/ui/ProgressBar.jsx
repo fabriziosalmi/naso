@@ -54,7 +54,7 @@ export default function ProgressBar() {
       aria-valuemax={100}
     >
       <div
-        className="h-full bg-gradient-to-r from-[#0A84FF] via-[#5E5CE6] to-[#0A84FF] shadow-[0_0_10px_rgba(10,132,255,0.7)] transition-all duration-[180ms] ease-out"
+        className="h-full bg-gradient-to-r from-[#0A84FF] via-[#5E5CE6] to-[#0A84FF] shadow-[0_0_10px_rgba(10,132,255,0.7)] transition-all [transition-duration:180ms] [transition-timing-function:cubic-bezier(0,0,0.2,1)]"
         style={{
           width: `${progress}%`,
           opacity: progress >= 100 ? 0 : 1,
