@@ -103,5 +103,11 @@ export default {
   },
   plugins: [
     require('@tailwindcss/typography'),
+    // Era installato ma non registrato, e quindi inerte: nel CSS costruito non
+    // c'era nessuna regola animate-in, animate-out, fade-in-0, zoom-in-95 o
+    // slide-in-from-*, mentre le classi erano usate 29 volte in dialog.jsx,
+    // sheet.jsx, ShortcutsOverlay.jsx, CommandMenu.jsx e Sidebar.jsx. Le
+    // animazioni di quei componenti non esistevano.
+    require('tailwindcss-animate'),
   ],
 }

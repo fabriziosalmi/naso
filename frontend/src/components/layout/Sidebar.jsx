@@ -125,7 +125,7 @@ export default function Sidebar({ onEditProfile, open, onClose }) {
       <div
         onClick={onClose}
         aria-hidden="true"
-        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden transition-opacity duration-300 ${
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden transition-opacity [transition-duration:300ms] ${
           open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       />
@@ -133,7 +133,7 @@ export default function Sidebar({ onEditProfile, open, onClose }) {
       <aside
         aria-label="Primary navigation"
         className={`w-[260px] glass-panel border-r flex flex-col z-40 shrink-0 overflow-hidden
-          fixed lg:static top-0 left-0 h-full transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
+          fixed lg:static top-0 left-0 h-full transition-transform [transition-duration:300ms] [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]
           ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
       >
           <div className="ambient-glow opacity-30"></div>
