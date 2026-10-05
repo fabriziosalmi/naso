@@ -77,8 +77,29 @@ jobs:
 
       # --audit-level=high, not the default: a moderate advisory in a build
       # tool is worth knowing about but is not worth blocking a merge on.
-      - name: Audit frontend
+      #
+      # --omit=dev, e come per i docs qui sotto non e' un modo di schivare un
+      # job rosso. Il frontend ha dipendenze di produzione vere (React, Radix,
+      # axios), e con questa riga il loro albero e' a zero vulnerabilita' di
+      # qualunque gravita'. Quello che restava a bloccare erano cinque high
+      # dell'albero di Tailwind 3 (braces, chokidar, fast-glob, micromatch e
+      # tailwindcss stesso), che girano al momento della build e non arrivano a
+      # nessun browser: si chiuderebbero solo con Tailwind 4, cioe' riscrivendo
+      # il tema e rivedendo 943 attributi className su 46 file.
+      #
+      # Comparivano fra le dipendenze di produzione per un errore di
+      # classificazione, corretto nello stesso commit: tailwindcss-animate, un
+      # plugin di Tailwind, stava fra le `dependencies` ed era l'unica cosa che
+      # tirava dentro tailwindcss.
+      - name: Audit frontend (what actually ships)
         working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      # Non blocca, ma tiene visibile il debito degli strumenti di build: senza
+      # questo passo la riga sopra lo nasconderebbe invece di delimitarlo.
+      - name: Audit frontend build toolchain (informational)
+        working-directory: frontend
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       # --omit=dev for the docs site specifically, and it is not a way of

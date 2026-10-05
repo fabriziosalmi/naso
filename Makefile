@@ -29,6 +29,10 @@ bootstrap:
 
 up:
 	docker compose up -d
+# Garage non si autoconfigura: senza questo passo il bucket e la chiave
+# dell'applicazione non esistono, e lo storage resta muto. Il comando e'
+# idempotente, si puo' rieseguire.
+	set -a; . ./.env; set +a; ./cli/garage-bootstrap.sh
 
 down:
 	docker compose down

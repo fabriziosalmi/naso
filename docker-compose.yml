@@ -125,22 +125,29 @@ services:
       timeout: 10s
       retries: 5
 
-  minio:
-    image: quay.io/minio/minio
+  # Era MinIO, che non e' piu' scaricabile: `quay.io/minio/minio` e
+  # `docker.io/minio/minio` rispondono 401 a un pull senza credenziali, a
+  # qualunque tag, e docker-matrix-tests falliva con "unauthorized: access to
+  # the requested resource is not authorized". Garage parla la stessa API S3:
+  # il client `minio` di Python che usa il backend non cambia.
+  #
+  # Il provisioning (layout, bucket, chiave) non e' un container di init perche'
+  # l'immagine di Garage non contiene una shell: lo fa cli/garage-bootstrap.sh
+  # con `docker compose exec`, chiamato da `make up` e dalla CI.
+  garage:
+    image: dxflrs/garage:v2.1.0
     container_name: naso-storage
     restart: always
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: naso_storage_admin
-      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_password
-    secrets:
-      - minio_password
+      GARAGE_RPC_SECRET: "${GARAGE_RPC_SECRET:?manca GARAGE_RPC_SECRET, esegui make bootstrap}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     volumes:
-      - ./data/minio:/data
+      - ./infrastructure/garage/garage.toml:/etc/garage.toml:ro
+      - ./data/garage/meta:/var/lib/garage/meta
+      - ./data/garage/data:/var/lib/garage/data
     networks:
       - naso-net
 
@@ -370,5 +377,3 @@ secrets:
     file: .secrets-mock/db_password.txt
   rabbit_password:
     file: .secrets-mock/rabbit_password.txt
-  minio_password:
-    file: .secrets-mock/minio_password.txt

@@ -139,15 +139,19 @@ def main():
     # instead -- rendered below from the same generated value. A file nothing
     # reads would be worse than absent: in a secrets directory, dead entries
     # are what an operator mistakes for the live ones.
+    #
+    # Garage ha lo stesso vincolo e per la stessa ragione sta anch'esso in .env:
+    # rifiuta di partire se il file del segreto RPC e' leggibile da tutti
+    # ("expected 0600"). Non c'e' piu' minio_password.txt: MinIO e' stato
+    # sostituito da Garage, che non prende una password di root ma una coppia
+    # chiave/segreto in formato S3.
     passwords = {
         "db": secrets.token_urlsafe(24),
         "rabbit": secrets.token_urlsafe(24),
-        "minio": secrets.token_urlsafe(24),
         "elastic": secrets.token_urlsafe(24),
     }
     create_secret("db_password.txt", passwords["db"])
     create_secret("rabbit_password.txt", passwords["rabbit"])
-    create_secret("minio_password.txt", passwords["minio"])
 
     print(f"Development secrets generated in {SECRETS_DIR}/ (dir 0755, files 0444).")
     rendered = write_env(passwords)
@@ -197,8 +201,14 @@ def write_env(passwords):
         "ES_PASSWORD": passwords["elastic"],
         "RABBIT_PASSWORD": passwords["rabbit"],
         "RABBITMQ_PASS": passwords["rabbit"],
-        "MINIO_ROOT_PASSWORD": passwords["minio"],
-        "MINIO_SECRET_KEY": passwords["minio"],
+        # Garage pretende un access key id "GK" + 12 byte esadecimali: un valore
+        # libero viene rifiutato con "not a valid Garage key ID". Vanno anche
+        # elencati qui esplicitamente, perche' il ramo CHANGE_ME piu' sotto
+        # sostituirebbe altrimenti il loro segnaposto con la password del
+        # database, e l'applicazione non riuscirebbe ad autenticarsi.
+        "MINIO_ACCESS_KEY": "GK" + secrets.token_hex(12),
+        "MINIO_SECRET_KEY": secrets.token_hex(32),
+        "GARAGE_RPC_SECRET": secrets.token_hex(32),
         "NASO_WEBHOOK_SIGNING_SECRET": secrets.token_hex(32),
         "NASO_ADMIN_PASSWORD": secrets.token_urlsafe(18),
     }
