@@ -24,7 +24,13 @@ rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "garage:3901"
 
 [s3_api]
-s3_region = "garage"
+# Deve restare "us-east-1", e non e' una preferenza: il backend costruisce il
+# client senza passare `region` (backend/app/api/endpoints/system.py, e lo
+# stesso in shared/tasks/), quindi firma le richieste per us-east-1. Con una
+# regione diversa qui, Garage risponde "AuthorizationHeaderMalformed" e
+# /system/health riporta minio=degraded per sempre: e' quello che faceva
+# fallire cli/validate.sh con "Composite health never cleared within 180s".
+s3_region = "us-east-1"
 api_bind_addr = "[::]:3900"
 root_domain = ".s3.garage"
 
