@@ -1,0 +1,32 @@
+# Garage, l'object storage S3 dello stack mock di naso.
+#
+# Sostituisce MinIO, che non e' piu' scaricabile: `quay.io/minio/minio` e
+# `docker.io/minio/minio` rispondono entrambi 401 a un pull senza credenziali,
+# a qualunque tag, e per questo `docker-matrix-tests` falliva con
+# "unauthorized: access to the requested resource is not authorized".
+#
+# Il segreto RPC NON sta qui: arriva dalla variabile GARAGE_RPC_SECRET, resa in
+# .env da cli/generate_secrets.py. Garage supporta anche `rpc_secret_file`, ma
+# rifiuta di partire se il file e' leggibile da tutti ("expected 0600") e i
+# secret di docker compose fuori da swarm sono montati 0444, lo stesso modo che
+# usa create_secret(). E' lo stesso vincolo che tiene Elasticsearch su .env.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+# Un nodo solo: nessuna replica da distribuire.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+# Il nome del servizio nella rete del compose: lo usa anche la CLI quando il
+# bootstrap gira con `docker compose exec`.
+rpc_public_addr = "garage:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage"
+
+[admin]
+api_bind_addr = "[::]:3903"
