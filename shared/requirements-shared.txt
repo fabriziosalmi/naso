@@ -1,7 +1,7 @@
 # Dependencies shared by the API image and the worker images.
 # Anything imported from `shared/` belongs here, not in one of the callers.
 
-sqlalchemy[asyncio]==2.0.52
+sqlalchemy[asyncio]==2.1.2
 asyncpg==0.31.0
 pydantic[email]>=2.13.5
 pydantic-settings>=2.5.2
