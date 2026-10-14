@@ -1,8 +1,8 @@
 # Dependencies shared by the API image and the worker images.
 # Anything imported from `shared/` belongs here, not in one of the callers.
 
-sqlalchemy[asyncio]==2.0.52
-asyncpg==0.31.0
+sqlalchemy[asyncio]==2.1.4
+asyncpg==0.32.0
 pydantic[email]>=2.13.5
 pydantic-settings>=2.5.2
 # python-dotenv is not optional: shared/config.py sets env_file=".env", and
