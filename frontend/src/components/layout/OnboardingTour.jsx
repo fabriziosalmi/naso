@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Joyride, { STATUS, EVENTS } from 'react-joyride';
+import { Joyride, STATUS, EVENTS } from 'react-joyride';
 
 // Bump when we meaningfully change the tour — users who already finished the
 // old one will see the refresher on first load.
@@ -10,7 +10,7 @@ const STEPS = [
   {
     target: 'body',
     placement: 'center',
-    disableBeacon: true,
+    skipBeacon: true,
     title: 'Welcome, Operator',
     content:
       'NASO is your forensic intelligence cockpit — Tor reconnaissance, breach correlation, and a local AI co-analyst under one audit-grade ledger. Quick tour?',
@@ -116,22 +116,23 @@ export default function OnboardingTour() {
       run={run}
       stepIndex={stepIndex}
       continuous
-      showProgress
-      showSkipButton
       scrollToFirstStep
-      disableOverlayClose
-      callback={handleJoyrideCallback}
+      onEvent={handleJoyrideCallback}
       locale={{ back: 'Back', close: 'Close', last: 'Finish', next: 'Next', skip: 'Skip' }}
+      options={{
+        buttons: ['back', 'close', 'primary', 'skip'],
+        overlayClickAction: false,
+        showProgress: true,
+        spotlightRadius: 12,
+        arrowColor: '#1C1C1E',
+        backgroundColor: '#1C1C1E',
+        overlayColor: 'rgba(0, 0, 0, 0.72)',
+        primaryColor: '#0A84FF',
+        textColor: '#e4e4e7',
+        zIndex: 1000,
+        width: 360,
+      }}
       styles={{
-        options: {
-          arrowColor: '#1C1C1E',
-          backgroundColor: '#1C1C1E',
-          overlayColor: 'rgba(0, 0, 0, 0.72)',
-          primaryColor: '#0A84FF',
-          textColor: '#e4e4e7',
-          zIndex: 1000,
-          width: 360,
-        },
         tooltip: {
           borderRadius: 16,
           padding: 20,
@@ -153,7 +154,7 @@ export default function OnboardingTour() {
         tooltipFooter: {
           marginTop: 12,
         },
-        buttonNext: {
+        buttonPrimary: {
           backgroundColor: '#0A84FF',
           borderRadius: 999,
           color: '#ffffff',
@@ -171,9 +172,10 @@ export default function OnboardingTour() {
           color: '#71717a',
           fontSize: 12,
         },
+        // v3 draws the spotlight as an SVG path: the ring is a stroke.
         spotlight: {
-          borderRadius: 12,
-          boxShadow: '0 0 0 4px rgba(10,132,255,0.25)',
+          stroke: 'rgba(10,132,255,0.25)',
+          strokeWidth: 4,
         },
       }}
     />
