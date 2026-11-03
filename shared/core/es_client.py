@@ -24,7 +24,7 @@ document silently failing to index.
 
 **The password was in the URL.** ``https://elastic:<pw>@host:9200`` puts a live
 credential in the netloc, which is the part that reaches logs, exception
-messages and — with ``ElasticsearchInstrumentor`` active in
+messages and — with the client's native OpenTelemetry tracing under
 ``shared/utils/worker_tracing.py`` — span attributes. ``basic_auth=`` carries it
 in a header instead.
 

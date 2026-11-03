@@ -21,6 +21,12 @@ elasticsearch[async]==8.19.3
 httpx>=0.28.1
 tenacity==8.5.0
 
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-exporter-otlp
+# Floors, because the resolver used to settle on 1.43.0 (GHSA-xcq7-p3pf-p88h,
+# fixed in 1.45.1): opentelemetry-instrumentation-elasticsearch was dropped
+# upstream at 0.64b0 and its last release pins opentelemetry-api==1.43.0, so
+# while it was installed nothing newer could resolve. elasticsearch-py emits
+# its own OpenTelemetry spans since 8.13, which is why that package is gone
+# from the callers' requirements rather than pinned around.
+opentelemetry-api>=1.45.1
+opentelemetry-sdk>=1.45.1
+opentelemetry-exporter-otlp>=1.45.1

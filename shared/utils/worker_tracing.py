@@ -3,7 +3,6 @@ import os
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
-from opentelemetry.instrumentation.elasticsearch import ElasticsearchInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -38,7 +37,9 @@ def setup_worker_tracing(engine=None):
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
     CeleryInstrumentor().instrument()
-    ElasticsearchInstrumentor().instrument()
+    # No ElasticsearchInstrumentor: elasticsearch-py (>= 8.13) emits its own
+    # spans through the provider set above, and the contrib instrumentor
+    # already stood aside whenever that native tracing was on.
     if engine:
         SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
     print("[NASO TRACING] Worker instrumentation complete.")

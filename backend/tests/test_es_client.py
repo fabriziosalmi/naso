@@ -12,8 +12,8 @@ Both assertions below fail against that code:
 
   * ``test_scheme_follows_the_setting`` — the URL was never http.
   * ``test_password_is_not_in_the_url`` — the password was always in the netloc,
-    which is the part that reaches logs and, with ``ElasticsearchInstrumentor``
-    active, span attributes.
+    which is the part that reaches logs and, with the client's native
+    OpenTelemetry tracing active, span attributes.
 """
 
 import pytest
