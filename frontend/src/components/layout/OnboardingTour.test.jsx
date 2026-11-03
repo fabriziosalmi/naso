@@ -15,8 +15,8 @@ describe('OnboardingTour', () => {
     });
 
     expect(await screen.findByText('Welcome, Operator')).toBeTruthy();
-    // showProgress: the primary button carries "(current of total)".
-    expect(screen.getByRole('button', { name: /Next \(1 of 9\)/ })).toBeTruthy();
+    // showProgress: the primary button keeps the v2 wording "(Step current of total)".
+    expect(screen.getByRole('button', { name: /Next \(Step 1 of 9\)/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 
