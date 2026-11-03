@@ -118,12 +118,24 @@ export default function OnboardingTour() {
       continuous
       scrollToFirstStep
       onEvent={handleJoyrideCallback}
-      locale={{ back: 'Back', close: 'Close', last: 'Finish', next: 'Next', skip: 'Skip' }}
+      locale={{
+        back: 'Back',
+        close: 'Close',
+        last: 'Finish',
+        next: 'Next',
+        // v3 changed the default to "Next (1 of 9)"; keep the v2 wording.
+        nextWithProgress: 'Next (Step {current} of {total})',
+        skip: 'Skip',
+      }}
       options={{
         buttons: ['back', 'close', 'primary', 'skip'],
         overlayClickAction: false,
         showProgress: true,
         spotlightRadius: 12,
+        // A new operator has no leaks yet, so the insights and stat-cards
+        // targets are absent. v2 skipped them at once; v3 waits 1 s per
+        // missing target behind a loader. Skip at once, as before.
+        targetWaitTimeout: 0,
         arrowColor: '#1C1C1E',
         backgroundColor: '#1C1C1E',
         overlayColor: 'rgba(0, 0, 0, 0.72)',
