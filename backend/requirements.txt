@@ -27,7 +27,10 @@ aio-pika>=9.3.0
 
 # ── Reporting and CLI output ─────────────────────────────────────────────────
 # rich is used by seed_demo_data.py, which runs inside this container.
-fpdf2==2.7.7
+# 2.8.8 fixes GHSA-wqw6-wpr3-45rh and GHSA-rw7v-4hrq-x6r9. Ceiling for the
+# same reason as mcp's below: a major release can move the API under
+# shared/utils/reporting.py, and only backend/tests/test_reporting.py covers it.
+fpdf2>=2.8.8,<3
 rich
 
 # ── Integrations ─────────────────────────────────────────────────────────────
@@ -44,11 +47,14 @@ beautifulsoup4>=4.12
 stem>=1.8.2
 
 # ── Observability ────────────────────────────────────────────────────────────
-# Only the four instrumentors that shared/utils/*_tracing.py actually
-# activates. Nothing bootstraps auto-instrumentation, so an installed but
-# unregistered instrumentor is dead weight.
+# Only the instrumentors that shared/utils/*_tracing.py actually activates.
+# Nothing bootstraps auto-instrumentation, so an installed but unregistered
+# instrumentor is dead weight. Elasticsearch is not among them: the client
+# traces itself natively (elasticsearch-py >= 8.13), and the contrib
+# instrumentor was dropped upstream with a pin that held opentelemetry-api at
+# a version with a known advisory. The 0.66b1 floors keep the instrumentation
+# packages in step with the 1.45.1 floor in shared/requirements-shared.txt.
 sentry-sdk[fastapi]>=1.40.4
-opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-sqlalchemy
-opentelemetry-instrumentation-celery>=0.63b1
-opentelemetry-instrumentation-elasticsearch
+opentelemetry-instrumentation-fastapi>=0.66b1
+opentelemetry-instrumentation-sqlalchemy>=0.66b1
+opentelemetry-instrumentation-celery>=0.66b1

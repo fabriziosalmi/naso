@@ -19,6 +19,6 @@ yara-python
 # Dark web / messaging sources
 telethon
 
-opentelemetry-instrumentation-celery
-opentelemetry-instrumentation-elasticsearch
-opentelemetry-instrumentation-sqlalchemy
+# No opentelemetry-instrumentation-elasticsearch: see backend/requirements.txt.
+opentelemetry-instrumentation-celery>=0.66b1
+opentelemetry-instrumentation-sqlalchemy>=0.66b1
