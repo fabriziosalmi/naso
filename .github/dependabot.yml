@@ -16,41 +16,16 @@ version: 2
 
 updates:
   # ── Python ──────────────────────────────────────────────────────────────────
-  - package-ecosystem: pip
-    directory: /backend
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 3
-    labels: ["dependencies", "python"]
-    commit-message:
-      prefix: "chore(deps)"
-      prefix-development: "chore(deps-dev)"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    groups:
-      python-minor-and-patch:
-        update-types: ["minor", "patch"]
-
+  # Only /shared is watched. backend/requirements.txt and
+  # workers/requirements.txt start with `-r shared/requirements-shared.txt`,
+  # a path that exists only inside the images (the Dockerfiles COPY shared/
+  # next to the requirements). Dependabot resolves it against the repository,
+  # looks for /backend/shared/requirements-shared.txt and /workers/shared/...,
+  # and every update job for those two directories failed with
+  # dependency_file_not_found. pip-audit in security-scan.yml stages the image
+  # layout and still covers both services for advisories.
   - package-ecosystem: pip
     directory: /shared
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 2
-    labels: ["dependencies", "python"]
-    commit-message:
-      prefix: "chore(deps)"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    groups:
-      python-minor-and-patch:
-        update-types: ["minor", "patch"]
-
-  - package-ecosystem: pip
-    directory: /workers
     schedule:
       interval: weekly
       day: monday
