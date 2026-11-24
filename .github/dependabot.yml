@@ -25,6 +25,8 @@ updates:
   # dependency_file_not_found. pip-audit in security-scan.yml stages the image
   # layout and still covers both services for advisories.
   - package-ecosystem: pip
+    cooldown:
+      default-days: 7
     directory: /shared
     schedule:
       interval: weekly
@@ -42,6 +44,8 @@ updates:
 
   # ── JavaScript ──────────────────────────────────────────────────────────────
   - package-ecosystem: npm
+    cooldown:
+      default-days: 7
     directory: /frontend
     schedule:
       interval: weekly
@@ -59,6 +63,8 @@ updates:
         update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
+    cooldown:
+      default-days: 7
     directory: /docs
     schedule:
       interval: monthly
@@ -80,6 +86,8 @@ updates:
   # Monthly and grouped: action majors arrive in bursts and are cheap to take
   # together once the pipeline is green.
   - package-ecosystem: github-actions
+    cooldown:
+      default-days: 7
     directory: /
     schedule:
       interval: monthly
@@ -92,6 +100,8 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
+    cooldown:
+      default-days: 7
     directories:
       - /
       - /infrastructure/tor
