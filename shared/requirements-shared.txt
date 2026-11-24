@@ -27,6 +27,6 @@ tenacity==8.5.0
 # while it was installed nothing newer could resolve. elasticsearch-py emits
 # its own OpenTelemetry spans since 8.13, which is why that package is gone
 # from the callers' requirements rather than pinned around.
-opentelemetry-api>=1.45.1
+opentelemetry-api>=1.45.2
 opentelemetry-sdk>=1.45.1
 opentelemetry-exporter-otlp>=1.45.1
